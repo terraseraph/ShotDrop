@@ -49,7 +49,7 @@ export function Dock({ status, activity, onSettings, toast }: Props) {
             </header>
             {!cameras.length && <p className="muted small">No camera logins yet.</p>}
             {cameras.map((c) => {
-              const receiving = c.connected && c.lastAt !== null && now - c.lastAt < RECEIVING_MS
+              const receiving = c.lastAt !== null && now - c.lastAt < RECEIVING_MS
               const state = receiving ? 'receiving' : c.connected ? 'connected' : 'idle'
               return (
                 <div className="camrow" key={c.username}>
