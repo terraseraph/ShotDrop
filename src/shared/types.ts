@@ -84,13 +84,32 @@ export interface TunnelState {
   installable: boolean // we can download cloudflared for this OS
 }
 
+export interface CameraStatus {
+  username: string
+  label: string
+  connected: boolean
+  lastAt: number | null // epoch ms of the newest shot from this user
+  today: number
+}
+
+export interface DestStatus {
+  id: string
+  done: number
+  total: number
+  running: number
+  errors: number
+  bps: number // bytes/s over the last 10 s
+}
+
 export interface Status {
   version: string
   ftp: { running: boolean; port: number; addresses: string[]; error: string | null; activeConnections: number }
   api: { port: number; urls: string[]; remote: boolean }
-  library: { dir: string; shots: number }
+  library: { dir: string; shots: number; free: number | null; total: number | null }
   sync: { pending: number; running: number; errors: number; rcloneAvailable: boolean }
   tunnel: TunnelState
+  cameras: CameraStatus[]
+  destinations: DestStatus[]
 }
 
 export interface Session {

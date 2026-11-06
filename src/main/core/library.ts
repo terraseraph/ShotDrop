@@ -244,6 +244,32 @@ export class Library {
     return { pending: get('pending'), running: get('running'), errors: get('error') }
   }
 
+  /** Per-destination job totals, for progress rings. */
+  destProgress(): Record<string, { done: number; total: number; running: number; errors: number }> {
+    const rows = this.db.prepare(`SELECT dest_id, status, COUNT(*) AS n FROM sync_jobs GROUP BY dest_id, status`).all() as {
+      dest_id: string
+      status: SyncStatus
+      n: number
+    }[]
+    const out: Record<string, { done: number; total: number; running: number; errors: number }> = {}
+    for (const r of rows) {
+      const d = (out[r.dest_id] ??= { done: 0, total: 0, running: 0, errors: 0 })
+      d.total += r.n
+      if (r.status === 'done') d.done = r.n
+      else if (r.status === 'running') d.running = r.n
+      else if (r.status === 'error') d.errors = r.n
+    }
+    return out
+  }
+
+  /** Shots imported since `since` and the newest import time, per source (ftp user). */
+  sourceStats(since: number): Record<string, { today: number; lastAt: number }> {
+    const rows = this.db
+      .prepare(`SELECT source, SUM(imported_at >= ?) AS today, MAX(imported_at) AS lastAt FROM shots WHERE source IS NOT NULL GROUP BY source`)
+      .all(since) as { source: string; today: number; lastAt: number }[]
+    return Object.fromEntries(rows.map((r) => [r.source, { today: r.today, lastAt: r.lastAt }]))
+  }
+
   syncJobs(status?: SyncStatus, limit = 200): unknown[] {
     return this.db
       .prepare(

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, statfsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import type { Settings, ShotPatch, Status } from '@shared/types'
 import { ConfigStore } from './config'
@@ -56,6 +56,9 @@ export class Core {
       (path, user) => this.ingest.enqueue(path, { mode: 'move', source: user }),
       () => this.emitStatus()
     )
+    this.bus.on((e) => {
+      if (e.type === 'shot:added') this.emitStatus()
+    })
     this.tunnel = new TunnelService(join(opts.dataDir, 'bin'), () => this.settings.tunnel.cloudflaredPath, () => this.emitStatus())
   }
 
@@ -88,6 +91,19 @@ export class Core {
   status(): Status {
     const s = this.settings
     const addrs = lanAddresses()
+    const midnight = new Date().setHours(0, 0, 0, 0)
+    const stats = this.lib.sourceStats(midnight)
+    const prog = this.lib.destProgress()
+    const bps = this.sync.throughput()
+    let free: number | null = null
+    let total: number | null = null
+    try {
+      const f = statfsSync(s.libraryDir)
+      free = f.bavail * f.bsize
+      total = f.blocks * f.bsize
+    } catch {
+      /* folder missing or unsupported fs: leave the gauge empty */
+    }
     return {
       version: this.opts.version,
       ftp: { ...this.ftp.state, port: s.ftp.port, addresses: addrs },
@@ -96,9 +112,24 @@ export class Core {
         remote: this.apiState.remote,
         urls: this.apiState.remote ? addrs.map((a) => `http://${a}:${this.apiState.port}`) : [`http://127.0.0.1:${this.apiState.port}`]
       },
-      library: { dir: s.libraryDir, shots: this.lib.count() },
+      library: { dir: s.libraryDir, shots: this.lib.count(), free, total },
       sync: { ...this.lib.syncCounts(), rcloneAvailable: this.sync.rcloneAvailable },
-      tunnel: this.tunnel.state
+      tunnel: this.tunnel.state,
+      cameras: s.ftp.users.map((u) => ({
+        username: u.username,
+        label: u.label,
+        connected: this.ftp.isConnected(u.username),
+        lastAt: stats[u.username]?.lastAt ?? null,
+        today: stats[u.username]?.today ?? 0
+      })),
+      destinations: s.destinations.map((d) => ({
+        id: d.id,
+        done: prog[d.id]?.done ?? 0,
+        total: prog[d.id]?.total ?? 0,
+        running: prog[d.id]?.running ?? 0,
+        errors: prog[d.id]?.errors ?? 0,
+        bps: bps[d.id] ?? 0
+      }))
     }
   }
 

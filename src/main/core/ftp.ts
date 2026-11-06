@@ -23,6 +23,8 @@ export interface FtpState {
  */
 export class FtpService {
   private server: FtpSrv | null = null
+  /** username -> open connections */
+  private conns = new Map<string, number>()
   state: FtpState = { running: false, error: null, activeConnections: 0 }
 
   constructor(
@@ -57,10 +59,16 @@ export class FtpService {
       if (!user) return reject(new Error('Invalid username or password'))
       const root = join(this.incomingDir(), user.username)
       mkdirSync(root, { recursive: true })
+      this.conns.set(user.username, (this.conns.get(user.username) ?? 0) + 1)
+      connection.commandSocket.on('close', () => {
+        this.conns.set(user.username, Math.max(0, (this.conns.get(user.username) ?? 1) - 1))
+        this.onState()
+      })
       connection.on('STOR', (err: Error | null, filePath: string) => {
         if (err || !filePath) return
         this.onUploaded(isAbsolute(filePath) ? filePath : join(root, filePath), user.username)
       })
+      this.onState()
       resolve({ root })
     })
     // The bundled .d.ts lags the runtime: these events exist but aren't typed.
@@ -93,7 +101,12 @@ export class FtpService {
     this.onState()
   }
 
+  isConnected(username: string): boolean {
+    return (this.conns.get(username) ?? 0) > 0
+  }
+
   async stop(): Promise<void> {
+    this.conns.clear()
     if (!this.server) return
     const s = this.server
     this.server = null

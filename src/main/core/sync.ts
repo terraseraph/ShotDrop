@@ -24,6 +24,7 @@ export class SyncService {
   private active = 0
   private timer: NodeJS.Timeout | null = null
   rcloneAvailable = false
+  private recent: { t: number; dest: string; size: number }[] = []
 
   constructor(
     private lib: Library,
@@ -91,7 +92,10 @@ export class SyncService {
       this.lib.setSyncStatus(job.id, 'running')
       this.changed(file.shot_id)
       this.transfer(dest, file)
-        .then(() => this.lib.setSyncStatus(job.id, 'done'))
+        .then(() => {
+          this.lib.setSyncStatus(job.id, 'done')
+          this.recent.push({ t: Date.now(), dest: dest.id, size: file.size })
+        })
         .catch((e: Error) => {
           // Keep retrying on the next pump until MAX_ATTEMPTS, then leave it in 'error' for the user.
           this.lib.setSyncStatus(job.id, 'error', e.message)
@@ -103,6 +107,15 @@ export class SyncService {
           this.pump()
         })
     }
+  }
+
+  /** Bytes per second per destination over the last 10 s. */
+  throughput(): Record<string, number> {
+    const cutoff = Date.now() - 10_000
+    this.recent = this.recent.filter((r) => r.t >= cutoff)
+    const out: Record<string, number> = {}
+    for (const r of this.recent) out[r.dest] = (out[r.dest] ?? 0) + r.size / 10
+    return out
   }
 
   private async transfer(dest: Destination, file: FileRow): Promise<void> {
