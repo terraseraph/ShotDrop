@@ -249,6 +249,10 @@ export class Library {
     this.db.prepare(`DELETE FROM shots WHERE id = ?`).run(id)
   }
 
+  removeFile(fileId: number): void {
+    this.db.prepare(`DELETE FROM files WHERE id = ?`).run(fileId)
+  }
+
   // ---- sync jobs ----
 
   enqueueSync(fileId: number, destId: string): void {

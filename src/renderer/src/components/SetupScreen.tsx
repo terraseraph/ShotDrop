@@ -256,6 +256,24 @@ export function SetupScreen({ status, shots, onBack, onGallery, dialog }: Props)
           {desktop && <NetworkCheck compact watch={`${ftp?.running}-${ftp?.port}`} />}
           {ftp && <AddressPicker ftp={ftp} />}
 
+          {settings && (
+            <div className="setup-folder">
+              <span className="k">Photos are saved to</span>
+              <span className="v sm mono" title={settings.libraryDir}>{settings.libraryDir}</span>
+              {desktop && (
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    const p = await desktop!.pickFolder()
+                    if (p && p !== settings.libraryDir) setSettings(await api.patchSettings({ libraryDir: p }))
+                  }}
+                >
+                  <Icon name="folder" /> Change folder
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="setup-guide">
             <header>
               Where it is on a {brand === 'Other' ? 'camera' : brand} <span className="muted">{guide.where}</span>

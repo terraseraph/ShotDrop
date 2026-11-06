@@ -641,3 +641,9 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--panel-3); bor
 .share-msg { font-size: 12px; color: var(--live); overflow-wrap: anywhere; }
 .share-msg.bad { color: var(--reject); }
 .share-msg a { color: var(--focus); }
+
+/* setup screen: where photos are saved */
+.setup-folder { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; margin: 10px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.setup-folder .k { color: var(--muted); font-size: 12px; }
+.setup-folder .v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) { .setup-folder { grid-template-columns: 1fr; } }

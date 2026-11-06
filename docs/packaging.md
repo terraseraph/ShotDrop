@@ -23,8 +23,10 @@ dropped because the goal is no installer.
 
 **Where data goes (portable mode).** `src/main/index.ts` checks for a `data` folder next to the exe. For
 the single exe it looks next to the launched file (`PORTABLE_EXECUTABLE_DIR`), not in the temp copy.
-- `data\` present: `data\app\` holds settings, `library.db`, the preview cache and Chromium state, and
-  `data\ShotDrop\` is the default photo library. Nothing is written to `%APPDATA%` or Pictures (verified).
+- `data\` present: `data\app\` holds settings, `library.db`, the preview cache and Chromium state; nothing is
+  written to `%APPDATA%`. Photos still default to `Pictures\ShotDrop` so they're easy to find, and the user can
+  choose any folder on the setup screen or in Settings → Library. Libraries already set up under `data\ShotDrop\`
+  keep working, because the saved path wins.
 - No `data\` folder: `%APPDATA%\ShotDrop` and `Pictures\ShotDrop`, as before.
 
 The zip ships with a `data\` folder (and a README), so it is portable out of the box. The single exe ships

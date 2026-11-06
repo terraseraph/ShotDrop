@@ -84,7 +84,8 @@ ipcMain.on('drag-shot', (e, id: number) => {
   if (file) e.sender.startDrag({ file, icon: nativeImage.createFromPath(core.previews.thumbPath(id)).resize({ width: 96 }) })
 })
 
-// Portable mode: a `data` folder beside the exe holds settings, DB, cache and the library instead of %APPDATA%/Pictures.
+// Portable mode: a `data` folder beside the exe holds settings, DB and cache instead of %APPDATA%.
+// Photos still default to Pictures\ShotDrop (the user can pick any folder); a portable app shouldn't bury them next to the exe.
 // The portable .exe unpacks to %TEMP%, so look beside the launched file, not the unpacked one.
 const exeDir = process.env.PORTABLE_EXECUTABLE_DIR ?? dirname(process.execPath)
 const portableDir = app.isPackaged && existsSync(join(exeDir, 'data')) ? join(exeDir, 'data') : null
@@ -108,7 +109,7 @@ app.whenReady().then(async () => {
   blink = new BlinkDetector(join(dataDir, 'blink'))
   core = new Core({
     dataDir,
-    picturesDir: devHome ?? portableDir ?? app.getPath('pictures'),
+    picturesDir: devHome ?? app.getPath('pictures'),
     version: app.getVersion(),
     trash: (p) => shell.trashItem(p),
     detectFaces: (p) => blink!.detect(p)

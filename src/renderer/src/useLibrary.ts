@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ServerEvent, Shot, ShotPatch, Status } from '@shared/types'
-import { api, AuthError } from './api'
+import { api, AuthError, DeleteError } from './api'
 import { fmtSize } from './format'
 
 export interface Toast {
@@ -155,12 +155,25 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
     }
   }, [toast])
 
+  const [deleteFailure, setDeleteFailure] = useState<DeleteError['failed'] | null>(null)
+
   const remove = useCallback(async (id: number) => {
-    setShots((s) => s.filter((x) => x.id !== id))
-    await api.deleteShot(id).catch((e: Error) => toast(`Couldn't delete: ${e.message}`, 'error'))
+    let removed: Shot | undefined
+    setShots((s) => {
+      removed = s.find((x) => x.id === id)
+      return s.filter((x) => x.id !== id)
+    })
+    try {
+      await api.deleteShot(id)
+    } catch (e) {
+      // Put it back: the files are still on disk, so the shot must stay visible.
+      if (removed) setShots((s) => (s.some((x) => x.id === id) ? s : insertSorted(s, removed!)))
+      if (e instanceof DeleteError && e.failed.length) setDeleteFailure(e.failed)
+      else toast(`Couldn't delete: ${(e as Error).message}`, 'error')
+    }
   }, [toast])
 
-  return { shots, status, activity, loaded, needsPin, connected, toasts, toast, patch, remove, reload: () => setLoadKey((k) => k + 1) }
+  return { shots, status, activity, loaded, needsPin, connected, toasts, toast, patch, remove, deleteFailure, clearDeleteFailure: () => setDeleteFailure(null), reload: () => setLoadKey((k) => k + 1) }
 }
 
 function insertSorted(list: Shot[], shot: Shot): Shot[] {

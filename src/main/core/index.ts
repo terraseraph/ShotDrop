@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { mkdirSync, statfsSync } from 'node:fs'
+import { existsSync, mkdirSync, statfsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import type { Settings, ShotPatch, Status } from '@shared/types'
 import { ConfigStore } from './config'
@@ -244,19 +244,62 @@ export class Core {
     return shot
   }
 
-  async deleteShot(id: number): Promise<boolean> {
+  /**
+   * Removes a shot's files from disk (recycle bin first; a permanent delete if the bin refuses) and then from the library.
+   * Windows can hold a file briefly (antivirus, preview decoder), so each file gets a few tries. A file that still can't
+   * be removed is reported back, and its shot stays in the library, so nothing is left on disk with nothing pointing to it.
+   */
+  async deleteShot(id: number): Promise<DeleteResult | null> {
     this.xmp.cancel(id)
     const files = this.lib.files(id)
-    if (!files.length && !this.lib.get(id)) return false
+    if (!files.length && !this.lib.get(id)) return null
+    const failed: DeleteResult['failed'] = []
     for (const f of files) {
-      if (this.opts.trash) await this.opts.trash(f.path).catch(() => undefined)
-      else await rm(f.path, { force: true })
+      const error = await removeFromDisk(f.path, this.opts.trash)
+      if (error) failed.push({ name: f.name, path: f.path, error })
+      else {
+        this.lib.removeFile(f.id)
+        this.meta.clear(f.id)
+      }
+    }
+    if (failed.length) {
+      const shot = this.lib.get(id)
+      if (shot) this.bus.emit({ type: 'shot:updated', shot })
+      return { deleted: false, failed }
     }
     this.lib.remove(id)
     this.previews.clear(id)
-    for (const f of files) this.meta.clear(f.id)
     this.bus.emit({ type: 'shot:removed', id })
     this.emitStatus()
-    return true
+    return { deleted: true, failed: [] }
   }
+}
+
+export interface DeleteResult {
+  deleted: boolean
+  failed: { name: string; path: string; error: string }[]
+}
+
+const pause = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/** Recycle bin, retried; then a permanent delete, retried. Returns null once the file is gone, else the last error. */
+async function removeFromDisk(path: string, trash?: (p: string) => Promise<void>): Promise<string | null> {
+  const steps: (() => Promise<unknown>)[] = [
+    ...(trash ? [() => trash(path), () => trash(path)] : []),
+    () => rm(path, { force: true }),
+    () => rm(path, { force: true })
+  ]
+  let error = 'still on disk after deleting'
+  for (let i = 0; i < steps.length; i++) {
+    if (!existsSync(path)) return null
+    try {
+      await steps[i]()
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      error = err.code === 'EBUSY' || err.code === 'EPERM' ? 'the file is open in another program' : err.message
+    }
+    if (!existsSync(path)) return null
+    await pause(250 * (i + 1))
+  }
+  return existsSync(path) ? error : null
 }

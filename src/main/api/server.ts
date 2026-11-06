@@ -141,8 +141,10 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   )
 
   app.delete('/api/shots/:id', async (req, reply) => {
-    const ok = await core.deleteShot(shotId(req))
-    return ok ? reply.code(204).send() : reply.code(404).send({ error: 'Not found' })
+    const r = await core.deleteShot(shotId(req))
+    if (!r) return reply.code(404).send({ error: 'Not found' })
+    if (!r.deleted) return reply.code(409).send({ error: "Some files couldn't be deleted from disk", failed: r.failed })
+    return reply.code(204).send()
   })
 
   const sendImage = (path: string, reply: import('fastify').FastifyReply, type = 'image/jpeg') => {

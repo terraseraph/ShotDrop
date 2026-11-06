@@ -46,6 +46,13 @@ export function setKey(k: string): void {
 
 export class AuthError extends Error {}
 
+/** A delete that left files on disk (locked by another program, permissions). The shot stays in the library. */
+export class DeleteError extends Error {
+  constructor(message: string, readonly failed: { name: string; path: string; error: string }[]) {
+    super(message)
+  }
+}
+
 const ver = (s: Shot): string => `${s.importedAt}.${s.files.length}`
 const withKey = (url: string): string => (key && !desktop ? `${url}${url.includes('?') ? '&' : '?'}key=${encodeURIComponent(key)}` : url)
 
@@ -70,7 +77,13 @@ export const api = {
   changes: (after: number) =>
     req<{ seq: number; events: ServerEvent[]; reset: boolean; status: Status }>('GET', `/api/changes?after=${after}`),
   patchShot: (id: number, patch: ShotPatch) => req<Shot>('PATCH', `/api/shots/${id}`, patch),
-  deleteShot: (id: number) => req<void>('DELETE', `/api/shots/${id}`),
+  deleteShot: async (id: number): Promise<void> => {
+    const res = await fetch(`${base}/api/shots/${id}`, { method: 'DELETE', headers: key && !desktop ? { 'x-shotdrop-key': key } : {} })
+    if (res.status === 401) throw new AuthError('PIN required')
+    if (res.ok || res.status === 404) return
+    const body = (await res.json().catch(() => null)) as { error?: string; failed?: DeleteError['failed'] } | null
+    throw new DeleteError(body?.error ?? `${res.status} ${res.statusText}`, body?.failed ?? [])
+  },
   settings: () => req<Settings>('GET', '/api/settings'),
   patchSettings: (patch: Partial<Settings>) => req<Settings>('PATCH', '/api/settings', patch),
   addDestination: (d: Omit<Destination, 'id'>) => req<Destination>('POST', '/api/destinations', d),

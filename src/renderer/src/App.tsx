@@ -17,6 +17,7 @@ import { Dock } from './components/Dock'
 import { type Tab } from './components/SettingsDrawer'
 import { PinGate } from './components/PinGate'
 import { Shortcuts } from './components/Shortcuts'
+import { DeleteWarning } from './components/DeleteWarning'
 import { MobileLoupe } from './components/MobileLoupe'
 import { ActionBar } from './components/ActionBar'
 import { ViewOnPhone } from './components/ViewOnPhone'
@@ -279,6 +280,7 @@ export default function App() {
       )}
       {phoneOpen && !isRemote && <ViewOnPhone status={lib.status} onClose={() => setPhoneOpen(false)} />}
       {helpOpen && <Shortcuts onClose={() => setHelpOpen(false)} />}
+      {lib.deleteFailure && <DeleteWarning failed={lib.deleteFailure} onClose={lib.clearDeleteFailure} />}
 
       <div className="toasts" aria-live="polite">
         {lib.toasts.map((t) => (
