@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell, Menu, dialog, ipcMain } from 'electron'
-import { join } from 'node:path'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { Core } from './core'
 import { startApi } from './api/server'
 
@@ -38,6 +39,12 @@ ipcMain.handle('pick-folder', async () => {
 ipcMain.handle('reveal', (_e, path: string) => shell.showItemInFolder(path))
 ipcMain.handle('open-path', (_e, path: string) => shell.openPath(path))
 
+// Portable mode: a `data` folder beside the exe holds settings, DB, cache and the library instead of %APPDATA%/Pictures.
+// The portable .exe unpacks to %TEMP%, so look beside the launched file, not the unpacked one.
+const exeDir = process.env.PORTABLE_EXECUTABLE_DIR ?? dirname(process.execPath)
+const portableDir = app.isPackaged && existsSync(join(exeDir, 'data')) ? join(exeDir, 'data') : null
+if (portableDir) app.setPath('userData', join(portableDir, 'app')) // must precede the single-instance lock
+
 if (!app.requestSingleInstanceLock()) app.quit()
 app.on('second-instance', () => {
   if (win) {
@@ -52,7 +59,7 @@ app.whenReady().then(async () => {
   const devHome = process.env.ELECTRON_RENDERER_URL ? join(app.getAppPath(), '.dev-data') : null
   core = new Core({
     dataDir: devHome ? join(devHome, 'app') : app.getPath('userData'),
-    picturesDir: devHome ?? app.getPath('pictures'),
+    picturesDir: devHome ?? portableDir ?? app.getPath('pictures'),
     version: app.getVersion(),
     trash: (p) => shell.trashItem(p)
   })

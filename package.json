@@ -10,13 +10,23 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps",
-    "dist": "electron-vite build && electron-builder"
+    "fetch-binaries": "node scripts/fetch-binaries.mjs",
+    "dist:portable": "node scripts/fetch-binaries.mjs && electron-vite build && electron-builder --win --x64"
   },
   "build": {
     "appId": "au.com.oztechinnovations.shotdrop",
     "productName": "ShotDrop",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "!**/node_modules/better-sqlite3/{deps,src}/**",
+      "!**/node_modules/better-sqlite3/binding.gyp",
+      "!**/node_modules/better-sqlite3/prebuilds/{darwin,linux,linuxmusl}-*.node",
+      "!**/node_modules/better-sqlite3/prebuilds/win32-arm64.node",
+      "!**/node_modules/@img/sharp-wasm32/**"
     ],
     "asarUnpack": [
       "**/node_modules/sharp/**",
@@ -24,8 +34,30 @@
       "**/node_modules/exiftool-vendored*/**",
       "**/node_modules/better-sqlite3/**"
     ],
+    "electronLanguages": [
+      "en-US"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/bin/win-x64",
+        "to": "bin"
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "resources/portable",
+        "to": "."
+      }
+    ],
     "win": {
-      "target": "nsis"
+      "target": [
+        "zip",
+        "portable"
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.exe"
     }
   },
   "dependencies": {

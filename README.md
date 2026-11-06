@@ -30,10 +30,10 @@ It runs on your own machine with your own storage. There's no hosted service, so
 npm install
 npm run dev        # Electron app + Vite renderer with hot reload
 npm run typecheck
-npm run dist       # Windows installer via electron-builder
+npm run dist:portable  # portable Windows build in release/ (see docs/packaging.md)
 ```
 
-In dev mode, all data (settings, DB, previews, library) goes into a gitignored `.dev-data/` folder in the repo, so test shots never touch your real Pictures folder. A packaged build uses `%APPDATA%/shotdrop` and `Pictures/ShotDrop`.
+In dev mode, all data (settings, DB, previews, library) goes into a gitignored `.dev-data/` folder in the repo, so test shots never touch your real Pictures folder. A packaged build uses a `data` folder next to `ShotDrop.exe` when one exists (the zip ships with one), else `%APPDATA%/ShotDrop` and `Pictures/ShotDrop`.
 
 To fake a camera, upload over FTP with the user and password shown in the app:
 

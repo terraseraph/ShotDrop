@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { TunnelState } from '@shared/types'
+import { bundledBin } from './bundled'
 
 const RELEASES = 'https://github.com/cloudflare/cloudflared/releases/latest/download/'
 
@@ -39,10 +40,12 @@ export class TunnelService {
     return join(this.binDir, process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared')
   }
 
-  /** Settings path wins, then our downloaded copy, then whatever is on PATH. */
+  /** Settings path wins, then the copy shipped in the package, then our downloaded copy, then whatever is on PATH. */
   private resolveBinary(): string | null {
     const configured = this.configuredPath().trim()
     if (configured && configured !== 'cloudflared') return existsSync(configured) ? configured : null
+    const shipped = bundledBin('cloudflared')
+    if (shipped) return shipped
     if (existsSync(this.bundledPath)) return this.bundledPath
     return onPath() ? 'cloudflared' : null
   }
