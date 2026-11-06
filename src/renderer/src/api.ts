@@ -43,6 +43,7 @@ export function setKey(k: string): void {
 
 export class AuthError extends Error {}
 
+const ver = (s: Shot): string => `${s.importedAt}.${s.files.length}`
 const withKey = (url: string): string => (key && !desktop ? `${url}${url.includes('?') ? '&' : '?'}key=${encodeURIComponent(key)}` : url)
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -78,9 +79,12 @@ export const api = {
   tunnelStart: () => req<TunnelState>('POST', '/api/tunnel/start'),
   tunnelStop: () => req<TunnelState>('POST', '/api/tunnel/stop'),
 
-  thumbUrl: (id: number) => withKey(`${base}/api/shots/${id}/thumb`),
-  previewUrl: (id: number) => withKey(`${base}/api/shots/${id}/preview`),
-  originalUrl: (id: number, fileId?: number) => withKey(`${base}/api/shots/${id}/original${fileId ? `?file=${fileId}` : ''}`),
+  // Images are served `immutable` and ids restart at 1 per library, so the URL carries a version.
+  // File count changes when a better source (JPEG after RAW) re-renders the preview.
+  thumbUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/thumb?v=${ver(s)}`),
+  previewUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/preview?v=${ver(s)}`),
+  originalUrl: (s: Shot, fileId?: number) =>
+    withKey(`${base}/api/shots/${s.id}/original?v=${ver(s)}${fileId ? `&file=${fileId}` : ''}`),
 
   events(onEvent: (e: ServerEvent) => void, onError: () => void): () => void {
     const es = new EventSource(withKey(`${base}/api/events`))

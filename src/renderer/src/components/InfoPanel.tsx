@@ -79,7 +79,7 @@ export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
           <div className="compare">
             {compare.map((c) => (
               <motion.button key={c.id} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', bounce: 0.3, visualDuration: 0.45 }} className={c.id === shot.id ? 'sel' : ''} onClick={() => onSelect(c.id)} title={c.name}>
-                <img src={api.thumbUrl(c.id)} alt={c.name} draggable={false} />
+                <img src={api.thumbUrl(c)} alt={c.name} draggable={false} />
               </motion.button>
             ))}
           </div>
@@ -105,7 +105,7 @@ export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
         <ul className="files">
           {shot.files.map((f) => (
             <li key={f.id}>
-              <a href={api.originalUrl(shot.id, f.id)} target="_blank" rel="noreferrer" className="mono">
+              <a href={api.originalUrl(shot, f.id)} target="_blank" rel="noreferrer" className="mono">
                 {f.name}
               </a>
               <span className="muted">{fmtSize(f.size)}</span>

@@ -43,7 +43,7 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
 
   const jpeg = shot.files.find((f) => f.kind === 'jpeg')
   // Full-res zoom straight from the camera JPEG when there is one; otherwise the 2560px embedded preview.
-  const zoomSrc = jpeg ? api.originalUrl(shot.id, jpeg.id) : api.previewUrl(shot.id)
+  const zoomSrc = jpeg ? api.originalUrl(shot, jpeg.id) : api.previewUrl(shot)
 
   const track = (e: React.MouseEvent): void => {
     const r = box.current!.getBoundingClientRect()
@@ -68,11 +68,11 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
             <div className="zoom-layer" style={{ backgroundImage: `url("${zoomSrc}")`, backgroundPosition: `${origin.x}% ${origin.y}%` }} />
           ) : (
             <>
-              <img className="loupe-thumb" src={api.thumbUrl(shot.id)} alt="" aria-hidden />
+              <img className="loupe-thumb" src={api.thumbUrl(shot)} alt="" aria-hidden />
               <img
                 key={shot.id}
                 className={`loupe-img ${loaded ? 'ready' : ''}`}
-                src={api.previewUrl(shot.id)}
+                src={api.previewUrl(shot)}
                 alt={shot.name}
                 onLoad={() => setLoaded(true)}
                 draggable={false}

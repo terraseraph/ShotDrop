@@ -32,7 +32,7 @@ export function Grid({ shots, selectedId, freshIds, onSelect, onOpen }: Props) {
             onDoubleClick={() => onOpen(s.id)}
           >
             <span className="cell-img">
-              {s.hasPreview ? <img src={api.thumbUrl(s.id)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
+              {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
             <SyncDots sync={s.sync} />
             </span>
             <span className="cell-meta">

@@ -260,7 +260,7 @@ export function SetupScreen({ status, shots, onBack, onGallery }: Props) {
             <AnimatePresence>
               {first && (
                 <motion.div className="setup-testshot" initial={{ opacity: 0, x: 18, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 20 }}>
-                  <img src={api.thumbUrl(first.id)} alt="" />
+                  <img src={api.thumbUrl(first)} alt="" />
                   <div>
                     <b className="mono">{first.files.map((f) => f.name).join(' + ')}</b>
                     <span>{received} · camera is set up</span>

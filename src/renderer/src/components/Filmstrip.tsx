@@ -44,7 +44,7 @@ export function Filmstrip({ shots, selectedId, freshIds, onSelect }: Props) {
           onClick={() => onSelect(s.id)}
           title={s.name}
         >
-          {s.hasPreview ? <img src={api.thumbUrl(s.id)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
+          {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
           <SyncDots sync={s.sync} />
           <span className="frame-badges">
             <Badges shot={s} />
