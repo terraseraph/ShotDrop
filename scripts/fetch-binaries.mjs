@@ -1,4 +1,4 @@
-// Downloads the pinned rclone + cloudflared + ffmpeg Windows builds (and their licences) into resources/bin/win-x64,
+// Downloads the pinned rclone + cloudflared + ffmpeg + LibRaw Windows builds (and their licences) into resources/bin/win-x64,
 // which electron-builder ships as <resources>/bin. Checksums are pinned, so a tampered download fails the build.
 // Bump a version: change it here, then copy the new sha256 from the release's SHA256SUMS / asset digest.
 import { createHash } from 'node:crypto'
@@ -12,19 +12,21 @@ const OUT = join(import.meta.dirname, '..', 'resources', 'bin', 'win-x64')
 const RCLONE = '1.75.2'
 const CLOUDFLARED = '2026.10.7'
 const FFMPEG = '2026-11-05-git-0893feba65' // gyan.dev "essentials" GPL build; only used to grab a frame for video thumbnails
-// LibRaw's own Windows build: dcraw_emu.exe (RAW decode for "Develop RAW") + libraw.dll. LGPL-2.1 / CDDL-1.0, shipped unmodified.
-const LIBRAW = '0.21.4'
-const LIBRAW_ZIP = {
-  url: `https://www.libraw.org/data/LibRaw-${LIBRAW}-Win64.zip`,
-  sha256: '400e288c9e2c0878483750a8cd8086f4123a05dadfad72e54ec003016b6f50a3'
-}
-const LIBRAW_FILES = {
-  [`LibRaw-${LIBRAW}/bin/dcraw_emu.exe`]: 'dcraw_emu.exe',
-  [`LibRaw-${LIBRAW}/bin/libraw.dll`]: 'libraw.dll',
-  [`LibRaw-${LIBRAW}/COPYRIGHT`]: 'LICENSE-libraw-COPYRIGHT.txt',
-  [`LibRaw-${LIBRAW}/LICENSE.LGPL`]: 'LICENSE-libraw-LGPL.txt',
-  [`LibRaw-${LIBRAW}/LICENSE.CDDL`]: 'LICENSE-libraw-CDDL.txt'
-}
+// LibRaw for "Develop RAW": MSYS2's UCRT64 build (dcraw_emu.exe + libraw-25.dll) and the runtime DLLs it loads.
+// Unlike LibRaw's own MSVC zip it needs no Visual C++ redistributable, only the UCRT that ships with Windows 10+.
+// LibRaw is LGPL-2.1/CDDL (separate, replaceable DLL); GCC runtimes are GPL-3 + runtime exception; the rest MIT/BSD/zlib.
+const LIBRAW = '0.22.3-1'
+const MSYS = 'https://repo.msys2.org/mingw/ucrt64/'
+const LIBRAW_PKGS = [
+  { pkg: 'mingw-w64-ucrt-x86_64-libraw-0.22.3-1-any.pkg.tar.zst', sha256: '4c61c19f59e10d2a625bd042074c113f7b4454bf82b7353dee74daecd7035fdb', bin: ['dcraw_emu.exe', 'libraw-25.dll'] },
+  { pkg: 'mingw-w64-ucrt-x86_64-libgcc-16.2.0-6-any.pkg.tar.zst', sha256: '80b2497f019977dd9528b1abc8621b1328a0115ab1f724047ccbb56bf323f11d', bin: ['libgcc_s_seh-1.dll'] },
+  { pkg: 'mingw-w64-ucrt-x86_64-libstdc++-16.2.0-6-any.pkg.tar.zst', sha256: '33c5e58a85a538cf843a8672991cce591f0231d66da3b66a57629712d64be17f', bin: ['libstdc++-6.dll'] },
+  { pkg: 'mingw-w64-ucrt-x86_64-libgomp-16.2.0-6-any.pkg.tar.zst', sha256: '809b95086d8d3ba145e041bb36d5756b4407d1d97c0524ef731d3b94548faa69', bin: ['libgomp-1.dll'] },
+  { pkg: 'mingw-w64-ucrt-x86_64-libwinpthread-14.0.0.r598.ge3d18511f-1-any.pkg.tar.zst', sha256: 'c35d6be83d141c8cfbb61f1637dd4b53aac8f5562d766aa26d0741c40bad4e4d', bin: ['libwinpthread-1.dll'] },
+  { pkg: 'mingw-w64-ucrt-x86_64-libjpeg-turbo-3.2.1-1-any.pkg.tar.zst', sha256: '8eed77c1e0d6de7f8822687f7b1dfa32cda09394806ef67b23399e63de1a92a6', bin: ['libjpeg-8.dll'] },
+  { pkg: 'mingw-w64-ucrt-x86_64-lcms2-2.20-1-any.pkg.tar.zst', sha256: '4e1d12047e72c63832f2b50c2fc87c7ec9d2e5a8bd40ce6e820ccbeedf2e7b8f', bin: ['liblcms2-2.dll'] },
+  { pkg: 'mingw-w64-ucrt-x86_64-zlib-1.3.2-3-any.pkg.tar.zst', sha256: '130e6ef04c654fc2150a177600aa5ed0035087665a893479d2c85ba7485d5704', bin: ['zlib1.dll'] }
+]
 const ITEMS = [
   {
     file: 'ffmpeg.exe',
@@ -85,22 +87,33 @@ for (const it of ITEMS) {
   writeFileSync(join(OUT, it.license.file), await get(it.license.url))
   console.log(`ok      ${it.file}`)
 }
-if (have === want && Object.values(LIBRAW_FILES).every((f) => existsSync(join(OUT, f)))) {
-  console.log('ok      dcraw_emu.exe (cached)')
+const libFiles = LIBRAW_PKGS.flatMap((p) => p.bin)
+if (have === want && libFiles.every((f) => existsSync(join(OUT, f)))) {
+  console.log('ok      dcraw_emu.exe + LibRaw DLLs (cached)')
 } else {
-  console.log(`fetch   ${LIBRAW_ZIP.url}`)
-  const buf = await get(LIBRAW_ZIP.url)
-  const sum = createHash('sha256').update(buf).digest('hex')
-  if (sum !== LIBRAW_ZIP.sha256) throw new Error(`LibRaw zip: sha256 mismatch (got ${sum})`)
-  const tmp = mkdtempSync(join(tmpdir(), 'shotdrop-bin-'))
-  try {
-    writeFileSync(join(tmp, 'a.zip'), buf)
-    execFileSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', 'a.zip', ...Object.keys(LIBRAW_FILES)], { cwd: tmp })
-    for (const [entry, out] of Object.entries(LIBRAW_FILES)) copyFileSync(join(tmp, entry), join(OUT, out))
-    // Note: LibRaw's MSVC build needs the VC++ 2015-2022 runtime on the target PC; we don't ship it (see docs/packaging.md).
-  } finally {
-    rmSync(tmp, { recursive: true, force: true })
+  // Old MSVC build's files: no longer used.
+  for (const f of ['libraw.dll', 'LICENSE-libraw-COPYRIGHT.txt', 'LICENSE-libraw-LGPL.txt', 'LICENSE-libraw-CDDL.txt']) rmSync(join(OUT, f), { force: true })
+  const tar = join(process.env.SystemRoot ?? 'C:\Windows', 'System32', 'tar.exe') // Windows bsdtar reads .zst
+  for (const p of LIBRAW_PKGS) {
+    console.log(`fetch   ${MSYS}${p.pkg}`)
+    const buf = await get(MSYS + p.pkg)
+    const sum = createHash('sha256').update(buf).digest('hex')
+    if (sum !== p.sha256) throw new Error(`${p.pkg}: sha256 mismatch (got ${sum})`)
+    const tmp = mkdtempSync(join(tmpdir(), 'shotdrop-bin-'))
+    try {
+      writeFileSync(join(tmp, 'a.tar.zst'), buf)
+      const entries = execFileSync(tar, ['-tf', 'a.tar.zst'], { cwd: tmp, encoding: 'utf8' }).split(/\r?\n/)
+      const licences = entries.filter((e) => /^ucrt64\/share\/licenses\/[^/]+\/[^/]+$/.test(e))
+      execFileSync(tar, ['-xf', 'a.tar.zst', ...p.bin.map((b) => `ucrt64/bin/${b}`), ...licences], { cwd: tmp })
+      for (const b of p.bin) copyFileSync(join(tmp, 'ucrt64', 'bin', b), join(OUT, b))
+      for (const l of licences) {
+        const [, , , name, file] = l.split('/')
+        copyFileSync(join(tmp, l), join(OUT, `LICENSE-${name}-${file.replace(/\.(txt|md)$/i, '')}.txt`))
+      }
+    } finally {
+      rmSync(tmp, { recursive: true, force: true })
+    }
   }
-  console.log('ok      dcraw_emu.exe')
+  console.log('ok      dcraw_emu.exe + LibRaw DLLs')
 }
 writeFileSync(stamp, want)

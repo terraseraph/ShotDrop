@@ -332,9 +332,9 @@ function decodeRaw(rawPath: string): Promise<Buffer> {
     p.on('close', (code) => {
       const buf = Buffer.concat(out)
       if (buf.length) resolve(buf)
-      // 0xC0000135 = STATUS_DLL_NOT_FOUND: the Microsoft VC++ runtime that LibRaw's build links against is missing.
+      // 0xC0000135 = STATUS_DLL_NOT_FOUND: one of the LibRaw DLLs shipped next to dcraw_emu.exe is missing.
       else if (code === 0xc0000135 || code === -1073741515)
-        reject(new Error('Develop RAW needs the Microsoft Visual C++ Redistributable (x64). Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe and try again.'))
+        reject(new Error("The RAW decoder's files are incomplete (a DLL next to dcraw_emu.exe is missing). Re-extract ShotDrop, or run npm run fetch-binaries in a dev checkout."))
       else reject(new Error(`RAW decode failed (exit ${code}): ${err.trim().slice(0, 200)}`))
     })
   })

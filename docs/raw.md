@@ -72,15 +72,14 @@ is a separate `dcraw_emu.exe` plus `libraw.dll`).
 
 ## Packaging
 
-`npm run fetch-binaries` now also downloads `LibRaw-0.21.4-Win64.zip` (sha256 pinned in the script), and copies
-`dcraw_emu.exe`, `libraw.dll` and the licence texts into `resources/bin/win-x64/`, which electron-builder already ships
-as `resources\bin`. `src/main/core/media.ts` finds it with `bundledBin('dcraw_emu')`, falling back to
-`resources/bin/win-x64` in dev and to `dcraw_emu` on `PATH` elsewhere. If none exists the Develop button is disabled.
+`npm run fetch-binaries` also downloads LibRaw 0.22.3 as MSYS2's UCRT64 packages (eight `.pkg.tar.zst` files, each
+SHA-256 pinned in the script) and copies `dcraw_emu.exe`, `libraw-25.dll`, its runtime DLLs and the licence texts into
+`resources/bin/win-x64/`, which electron-builder ships as `resources\bin`. `src/main/core/media.ts` finds it with
+`bundledBin('dcraw_emu')`, falling back to `resources/bin/win-x64` in dev and to `dcraw_emu` on `PATH` elsewhere. If none
+exists the Develop button is disabled.
 
-LibRaw's MSVC build imports the VC++ 2015–2022 runtime (`MSVCP140`, `VCRUNTIME140`, `VCRUNTIME140_1`), which the other
-bundled tools do not, and a clean Windows install may not have it. We do not ship the runtime (see `docs/packaging.md`
-for why); if it is missing, Develop reports "needs the Microsoft Visual C++ Redistributable (x64)" with the download
-link. Added to the package: about 1.1 MB unpacked.
+This build needs no Visual C++ redistributable (only the Universal CRT built into Windows 10+), so Develop works on a
+clean PC. Tested: NEF 2.1 s, ARW 1.1 s, RAF 3.1 s to full-resolution TIFF. About 5.8 MB added to the package.
 
 ## Not done
 

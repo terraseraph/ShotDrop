@@ -50,15 +50,14 @@ each against a pinned SHA-256, and fetches the licence texts. electron-builder c
 | rclone | 1.75.2 | MIT (`LICENSE-rclone.txt`) | 85.5 MB | ~29 MB |
 | cloudflared | 2026.10.7 | Apache-2.0 (`LICENSE-cloudflared.txt`) | 55.4 MB | ~19 MB |
 
-**LibRaw (`dcraw_emu.exe` 0.21.4) also ships**, for "Develop RAW" (see `docs/raw.md`): `dcraw_emu.exe`, `libraw.dll`
-(LGPL-2.1 / CDDL-1.0, unmodified; texts in `LICENSE-libraw-*.txt`). About 1.1 MB unpacked, zip from libraw.org with a
-pinned SHA-256. **Known gap:** unlike the other tools, LibRaw's MSVC build imports the VC++ 2015-2022 runtime
-(`MSVCP140`, `VCRUNTIME140`, `VCRUNTIME140_1`), which a clean Windows install may lack. We do not ship those DLLs: no
-static-CRT LibRaw build from a trustworthy source exists, and Microsoft's redistributable cannot be pinned by hash (the
-download is a moving permalink and an installer, not loose DLLs). If Develop finds the runtime missing (exit
-`0xC0000135`) it shows "needs the Microsoft Visual C++ Redistributable (x64)" with the download link. Everything else
-(preview, metadata, export) works without it. To remove the gap later: build LibRaw with `/MT`, or bundle the
-redistributable's app-local DLLs from a pinned Visual Studio redist package.
+**LibRaw (`dcraw_emu.exe` 0.22.3) also ships**, for "Develop RAW" (see `docs/raw.md`). It's MSYS2's UCRT64 build:
+`dcraw_emu.exe`, `libraw-25.dll` and the DLLs it loads (`libgcc_s_seh-1`, `libstdc++-6`, `libgomp-1`, `libwinpthread-1`,
+`libjpeg-8`, `liblcms2-2`, `zlib1`), about 5.8 MB, from eight `repo.msys2.org` packages pinned by SHA-256. It needs no
+Visual C++ redistributable: the only system imports are `KERNEL32`, `WS2_32` and the Universal CRT that ships with
+Windows 10+. Verified by decoding NEF, ARW and RAF samples with `PATH` stripped to `System32`. Licences: LibRaw
+LGPL-2.1/CDDL-1.0 (a separate, replaceable DLL, which satisfies LGPL relinking); GCC runtimes GPL-3 with the GCC Runtime
+Library Exception; libjpeg-turbo IJG/BSD-3; lcms2 MIT; zlib; winpthreads MIT/BSD. Texts in `LICENSE-<package>-*.txt`.
+Note: extracting `.pkg.tar.zst` relies on Windows' own `tar.exe` (bsdtar); confirm the CI runner's handles zstd.
 
 The alternative was to keep cloudflared on demand (the old in-app download into `<data>\bin`) and bundle
 only rclone. That saves about 19 MB of download, but the public link would then need internet access to
@@ -81,7 +80,7 @@ To bump a version, edit the version and sha256 in the fetch script.
   compile better-sqlite3 from source, which needs MSVC and leaves a half-built `build/` folder behind.
 
 **Runtime dependencies checked.**
-- VC++ redistributable: not needed by rclone, cloudflared or libvips (LibRaw's `dcraw_emu` does need it and we do not ship it, see above). No other shipped DLL, `.node` or exe imports `VCRUNTIME140`/`MSVCP140`. libvips
+- VC++ redistributable: not needed by anything we ship (rclone, cloudflared, libvips, or the MSYS2 LibRaw build). No other shipped DLL, `.node` or exe imports `VCRUNTIME140`/`MSVCP140`. libvips
   and cloudflared import only the Universal CRT (`api-ms-win-crt-*`), which is part of Windows 10 and 11.
 - Network fetches at runtime: none. (The only one was the cloudflared download, now skipped because
   the tool is bundled.) The connection check uses built-in PowerShell and netstat.
