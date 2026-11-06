@@ -10,9 +10,10 @@ interface Props {
   freshIds: Set<number>
   onSelect: (id: number) => void
   onOpen: (id: number) => void
+  tapOpens?: boolean // touch: no double-click, a tap opens the loupe
 }
 
-export function Grid({ shots, selectedId, freshIds, onSelect, onOpen }: Props) {
+export function Grid({ shots, selectedId, freshIds, onSelect, onOpen, tapOpens }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export function Grid({ shots, selectedId, freshIds, onSelect, onOpen }: Props) {
           <button
             key={s.id}
             className={`cell ${s.id === selectedId ? 'selected' : ''} ${s.flag === -1 ? 'rejected' : ''} ${freshIds.has(s.id) ? 'fresh' : ''}`}
-            onClick={() => onSelect(s.id)}
+            onClick={() => (tapOpens ? onOpen(s.id) : onSelect(s.id))}
             onDoubleClick={() => onOpen(s.id)}
           >
             <span className="cell-img">

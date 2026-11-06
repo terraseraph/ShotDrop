@@ -516,3 +516,70 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--panel-3); bor
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- phone view (remote browsers at phone width; <html class="mobile">) ---------- */
+.mobile, .mobile body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; }
+.mobile .app { height: 100dvh; }
+.mobile .topbar {
+  height: auto; min-height: var(--topbar); flex-wrap: nowrap;
+  padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
+}
+.mobile .topbar .select, .mobile .toggle, .mobile .seg.icons button, .mobile .icon-btn { min-height: 40px; min-width: 40px; }
+.mobile .topbar-group { flex: 1; }
+.mobile .topbar-group.right { flex: none; }
+.mobile .topbar .select { flex: 1; min-width: 0; font-size: 16px; }
+.mobile .toggle .lbl, .mobile .icon-btn.help { display: none; } /* 16px stops iOS zooming on focus */
+.mobile .chip.online, .mobile .chip.ftp, .mobile .count { display: none; }
+.mobile .toggle { padding: 0 10px; }
+.mobile .sesshead { padding: 8px 12px 0; }
+.mobile .cams { display: none; }
+.mobile .m-loupe { display: flex; flex-direction: column; min-height: 0; }
+.mobile .m-canvas { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; display: grid; place-items: center; }
+.mobile .m-img { width: 100%; height: 100%; object-fit: contain; will-change: transform; -webkit-touch-callout: none; pointer-events: none; }
+.mobile .grid-scroll { padding: 8px max(8px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+.mobile .grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+@media (min-width: 480px) { .mobile .grid { grid-template-columns: repeat(3, 1fr); } }
+.mobile .cell-meta .muted { display: none; }
+.mobile .toasts { bottom: calc(150px + env(safe-area-inset-bottom)); }
+
+.action-bar {
+  flex: none; display: grid; gap: 6px; background: var(--panel); border-top: 1px solid var(--line);
+  padding: 8px max(10px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+}
+.ab-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ab-btn { width: 56px; height: 52px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--panel-2); display: grid; place-items: center; color: var(--muted); touch-action: manipulation; }
+.ab-btn.pick.on { border-color: var(--pick); color: var(--pick); background: rgba(51, 209, 122, 0.12); }
+.ab-btn.reject.on { border-color: var(--reject); color: var(--reject); background: rgba(239, 75, 75, 0.12); }
+.ab-btn.info b { font: italic 700 20px Georgia, serif; }
+.ab-stars { display: flex; flex: 1; justify-content: center; }
+.ab-stars button { flex: 1; max-width: 52px; height: 52px; font-size: 28px; color: var(--line-2); touch-action: manipulation; }
+.ab-stars button.on { color: var(--star); }
+.ab-labels { display: flex; flex: 1; gap: 6px; }
+.ab-label { flex: 1; height: 44px; border-radius: 10px; display: grid; place-items: center; border: 1px solid transparent; touch-action: manipulation; }
+.ab-label .label-dot { width: 22px; height: 22px; opacity: 0.5; }
+.ab-label.on { border-color: var(--line-2); background: var(--panel-3); }
+.ab-label.on .label-dot { opacity: 1; }
+
+.sheet-backdrop { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.55); display: flex; align-items: flex-end; animation: fade 0.15s; }
+.sheet { width: 100%; max-height: 75dvh; overflow-y: auto; background: var(--panel); border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); animation: rise 0.2s; }
+.sheet-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line-2); margin: 8px auto 0; }
+.sheet .info { display: block; border: 0; overflow: visible; }
+.sheet .stars-input button { width: 44px; height: 44px; font-size: 26px; }
+.sheet .flag-input button { height: 44px; }
+.sheet .label-input .label-dot { width: 28px; height: 28px; }
+.sheet .info kbd, .sheet .info .hint { display: none; }
+
+/* PIN login */
+.pin-page { min-height: 100dvh; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); }
+.pin-mark { width: 56px; height: 56px; border-radius: 14px; background: conic-gradient(from 210deg, var(--tally), #ffb03a, var(--tally)); }
+.pin-page .input.big { height: 56px; font-size: 24px; }
+.pin-page .btn { justify-content: center; width: 100%; height: 48px; font-size: 16px; }
+
+/* desktop: phone QR */
+.phone-link { display: grid; gap: 12px; justify-items: center; }
+.phone-qr { border-radius: 12px; background: #fff; image-rendering: pixelated; max-width: 100%; height: auto; }
+.phone-pin { display: flex; align-items: baseline; gap: 10px; }
+.phone-pin .mono { font-size: 28px; letter-spacing: 0.2em; font-weight: 600; }
+.phone-link .conn-field { justify-self: stretch; }
+.phone-modal { width: min(380px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow-y: auto; }
+.remote-qr { display: grid; gap: 8px; justify-items: center; text-align: center; }
