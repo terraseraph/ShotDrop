@@ -10,8 +10,8 @@ has to be installed or downloaded at runtime.
 
 | File | Size | Start-up (measured, warm disk) | Use it for |
 |---|---|---|---|
-| `ShotDrop-<ver>-win-x64.zip` | 203 MiB (526 MB unzipped) | ~3 s to API ready | **Recommended.** Unzip anywhere, including a USB stick, and run `ShotDrop.exe`. |
-| `ShotDrop-<ver>-portable.exe` | 145 MiB | ~12 s on every launch | One file to hand to someone. It unpacks 526 MB to `%TEMP%` on each start and deletes it on exit. |
+| `ShotDrop-win-x64.zip` | 203 MiB (526 MB unzipped) | ~3 s to API ready | **Recommended.** Unzip anywhere, including a USB stick, and run `ShotDrop.exe`. |
+| `ShotDrop-portable.exe` | 145 MiB | ~12 s on every launch | One file to hand to someone. It unpacks 526 MB to `%TEMP%` on each start and deletes it on exit. |
 
 ## Decisions
 

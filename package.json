@@ -1,6 +1,7 @@
 {
   "name": "shotdrop",
   "version": "0.1.0",
+  "repository": "github:terraseraph/ShotDrop",
   "description": "Wireless camera-to-screen gallery: built-in FTP ingest, live culling, sync to your own storage.",
   "main": "./out/main/index.js",
   "private": true,
@@ -11,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "electron-builder install-app-deps",
     "fetch-binaries": "node scripts/fetch-binaries.mjs",
-    "dist:portable": "node scripts/fetch-binaries.mjs && electron-vite build && electron-builder --win --x64"
+    "dist:portable": "node scripts/fetch-binaries.mjs && electron-vite build && electron-builder --win --x64 --publish never"
   },
   "build": {
     "appId": "au.com.oztechinnovations.shotdrop",
@@ -55,10 +56,10 @@
         "zip",
         "portable"
       ],
-      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+      "artifactName": "${productName}-win-${arch}.${ext}"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable.exe"
+      "artifactName": "${productName}-portable.exe"
     }
   },
   "dependencies": {

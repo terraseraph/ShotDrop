@@ -102,9 +102,17 @@ if (have === want && libFiles.every((f) => existsSync(join(OUT, f)))) {
     const tmp = mkdtempSync(join(tmpdir(), 'shotdrop-bin-'))
     try {
       writeFileSync(join(tmp, 'a.tar.zst'), buf)
-      const entries = execFileSync(tar, ['-tf', 'a.tar.zst'], { cwd: tmp, encoding: 'utf8' }).split(/\r?\n/)
+      // Windows' bsdtar reads .zst on current Windows 10/11; if this one can't, decompress with zstd (ships with Git for Windows).
+      let archive = 'a.tar.zst'
+      try {
+        execFileSync(tar, ['-tf', archive], { cwd: tmp, stdio: 'ignore' })
+      } catch {
+        execFileSync('zstd', ['-q', '-d', 'a.tar.zst', '-o', 'a.tar'], { cwd: tmp })
+        archive = 'a.tar'
+      }
+      const entries = execFileSync(tar, ['-tf', archive], { cwd: tmp, encoding: 'utf8' }).split(/\r?\n/)
       const licences = entries.filter((e) => /^ucrt64\/share\/licenses\/[^/]+\/[^/]+$/.test(e))
-      execFileSync(tar, ['-xf', 'a.tar.zst', ...p.bin.map((b) => `ucrt64/bin/${b}`), ...licences], { cwd: tmp })
+      execFileSync(tar, ['-xf', archive, ...p.bin.map((b) => `ucrt64/bin/${b}`), ...licences], { cwd: tmp })
       for (const b of p.bin) copyFileSync(join(tmp, 'ucrt64', 'bin', b), join(OUT, b))
       for (const l of licences) {
         const [, , , name, file] = l.split('/')
