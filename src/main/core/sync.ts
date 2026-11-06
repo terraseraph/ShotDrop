@@ -6,6 +6,7 @@ import type { Destination, FileKind, Settings } from '@shared/types'
 import type { FileRow, Library } from './library'
 import type { Bus } from './events'
 import { toolPath } from './bundled'
+import type { CloudAccounts } from './cloud'
 
 const CONCURRENCY = 2
 const MAX_ATTEMPTS = 5
@@ -31,7 +32,8 @@ export class SyncService {
     private lib: Library,
     private bus: Bus,
     private settings: () => Settings,
-    private onState: () => void
+    private onState: () => void,
+    private cloud: CloudAccounts
   ) {}
 
   async start(): Promise<void> {
@@ -149,7 +151,9 @@ export class SyncService {
     }
     if (!this.rcloneAvailable) throw new Error('rclone not found. Install it or set its path in Settings.')
     const remote = `${dest.target.replace(/\/+$/, '')}/${file.rel_path}`
-    await run(toolPath(this.settings().rclonePath, 'rclone'), ['copyto', file.path, remote, '--retries', '2'])
+    // Remotes linked in the app live in ShotDrop's own rclone.conf; anything else (Advanced) uses the user's.
+    const cfg = this.cloud.has(dest.target.split(':')[0]) ? this.cloud.cfgArgs() : []
+    await run(toolPath(this.settings().rclonePath, 'rclone'), ['copyto', file.path, remote, '--retries', '2', ...cfg])
   }
 
   private changed(shotId: number): void {
