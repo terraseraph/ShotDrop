@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { Shot, Status } from '@shared/types'
 import { fmtDate } from '../format'
+import { isRemote } from '../api'
 import { Icon } from './Icon'
 
 export type Filter = 'all' | 'unrejected' | 'picks' | 'rated' | 'rejects'
@@ -77,6 +78,13 @@ export function TopBar(p: Props) {
           </span>
         )}
 
+        {p.status?.tunnel.status === 'running' && (
+          <button className="chip online" onClick={p.onSettings} title={p.status.tunnel.url ?? 'Public link is on'}>
+            <Icon name="cloud" />
+            Online
+          </button>
+        )}
+
         <button className="chip ftp" onClick={p.onSettings} title="Camera connection">
           <span className={`tally ${live ? (receiving ? 'receiving' : 'live') : 'off'}`} />
           {!p.connected ? 'Disconnected' : ftp?.running ? `${ftp.addresses[0] ?? '…'}:${ftp.port}` : ftp?.error ? 'FTP error' : 'FTP off'}
@@ -99,9 +107,11 @@ export function TopBar(p: Props) {
         <button className="icon-btn" onClick={p.onHelp} title="Keyboard shortcuts (?)">
           <Icon name="keyboard" />
         </button>
-        <button className="icon-btn" onClick={p.onSettings} title="Settings">
-          <Icon name="settings" />
-        </button>
+        {!isRemote && (
+          <button className="icon-btn" onClick={p.onSettings} title="Settings">
+            <Icon name="settings" />
+          </button>
+        )}
       </div>
     </header>
   )

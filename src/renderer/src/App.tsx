@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Label, Shot } from '@shared/types'
 import { useLibrary } from './useLibrary'
+import { isRemote } from './api'
 import { TopBar, type Filter } from './components/TopBar'
 import { Loupe } from './components/Loupe'
 import { Filmstrip } from './components/Filmstrip'
@@ -128,6 +129,8 @@ export default function App() {
   }, [selected, visible, view, move, lib, settingsOpen])
 
   if (lib.needsPin) return <PinGate onUnlocked={lib.reload} />
+  // Nothing until the first load settles, so remote visitors don't see the empty state flash before the PIN prompt.
+  if (!lib.loaded) return <div className="app" />
 
   const empty = lib.shots.length === 0
 
@@ -168,7 +171,7 @@ export default function App() {
         </div>
       )}
 
-      {settingsOpen && <SettingsDrawer status={lib.status} onClose={() => setSettingsOpen(false)} toast={lib.toast} />}
+      {settingsOpen && !isRemote && <SettingsDrawer status={lib.status} onClose={() => setSettingsOpen(false)} toast={lib.toast} />}
       {helpOpen && <Shortcuts onClose={() => setHelpOpen(false)} />}
 
       <div className="toasts" aria-live="polite">

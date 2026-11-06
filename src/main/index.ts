@@ -59,6 +59,7 @@ app.whenReady().then(async () => {
   await core.start()
   api = await startApi(core, { rendererDir: join(__dirname, '../renderer') })
   createWindow(`http://127.0.0.1:${core.settings.api.port}`)
+  if (core.settings.tunnel.autoStart) void core.startTunnel().catch((e) => console.error('[tunnel]', e))
 })
 
 let quitting = false

@@ -3,7 +3,7 @@ import type { Settings, Status } from '@shared/types'
 import { api } from '../api'
 import { Icon } from './Icon'
 
-function CopyField({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
+export function CopyField({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
   const [copied, setCopied] = useState(false)
   return (
     <div className="conn-field">

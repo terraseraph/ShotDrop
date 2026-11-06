@@ -65,7 +65,7 @@ src/
 
 ## REST API
 
-The desktop window uses the same HTTP API a remote browser or script would. It listens on `127.0.0.1:8787`, or on all interfaces when remote access is on. Requests that don't come from this machine, including anything through a tunnel, need the PIN as an `x-shotdrop-key` header or a `?key=` parameter.
+The desktop window uses the same HTTP API a remote browser or script would. It listens on `127.0.0.1:8787`, or on all interfaces when remote access is on. Requests that don't come from this machine, including anything through a tunnel, need the PIN as an `x-shotdrop-key` header or a `?key=` parameter. Remote clients can only view and cull: the endpoints marked **local** return 403 to them, even with the PIN, because they change configuration, run programs or send photos elsewhere.
 
 | Method | Path | |
 |---|---|---|
@@ -78,13 +78,17 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 | PATCH | `/api/shots` | Bulk: `{ ids: [], patch: {...} }` |
 | DELETE | `/api/shots/:id` | Sends the files to the recycle bin |
 | GET | `/api/shots/:id/thumb` · `/preview` · `/original?file=` | Images |
-| GET / PATCH | `/api/settings` | Changing FTP, library or watch settings restarts those services live |
-| POST | `/api/ftp/start` · `/api/ftp/stop` | |
-| GET / POST | `/api/destinations` | `{ name, type: folder\|rclone, target, filter: all\|jpeg\|raw\|picks }`. Adding one backfills existing shots. |
-| PATCH / DELETE | `/api/destinations/:id` | |
-| POST | `/api/destinations/:id/resync` | Queue everything again |
-| GET | `/api/sync/jobs?status=` | Recent sync jobs |
-| POST | `/api/sync/retry` | Retry failed jobs |
+| GET / PATCH | `/api/settings` (local) | Changing FTP, library or watch settings restarts those services live |
+| POST | `/api/ftp/start` · `/api/ftp/stop` (local) | |
+| GET / POST | `/api/destinations` (local) | `{ name, type: folder\|rclone, target, filter: all\|jpeg\|raw\|picks }`. Adding one backfills existing shots. |
+| PATCH / DELETE | `/api/destinations/:id` (local) | |
+| POST | `/api/destinations/:id/resync` (local) | Queue everything again |
+| GET | `/api/sync/jobs?status=` (local) | Recent sync jobs |
+| POST | `/api/sync/retry` (local) | Retry failed jobs |
+| GET | `/api/changes?after=<seq>` | Polling alternative to `/api/events`: events since `seq` plus current status. `reset: true` means reload `/api/shots` (which returns its own `seq`). |
+| GET | `/api/tunnel` | Public link state: `off`, `installing`, `starting`, `running` or `error`, plus the URL |
+| POST | `/api/tunnel/install` (local) | Download cloudflared from Cloudflare's GitHub releases into the app data folder |
+| POST | `/api/tunnel/start` · `/api/tunnel/stop` (local) | Start or stop a Cloudflare quick tunnel to the API/gallery |
 
 ---
 
@@ -136,7 +140,8 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 
 ### Remote access
 - [x] **Remote gallery:** view and cull from a phone or another PC through a browser, served by the app's built-in web server
-- [ ] One-click **Cloudflare Tunnel** to expose the remote gallery over HTTPS without port forwarding (free; needs the user's Cloudflare account, or a quick tunnel for temporary URLs)
+- [x] One-click **Cloudflare quick tunnel**: public HTTPS link to the remote gallery, QR code, no account or port forwarding; cloudflared installs from the app
+- [ ] Named Cloudflare Tunnel on the user's own account (stable URL, live SSE instead of polling)
 - [x] Password or PIN on the remote gallery
 - [ ] **Remote camera uploads** (advanced, see notes below): accept camera uploads from outside the LAN
 
@@ -193,7 +198,10 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 
 ## Remote access notes
 
-**Remote gallery (easy).** The app serves the React gallery over HTTP. A Cloudflare Tunnel (`cloudflared`) gives it a public HTTPS URL with no router changes. This covers viewing and culling from your phone while away from the PC.
+**Remote gallery (done).** The app serves the React gallery over HTTP. Settings → Remote → *Create public link* starts a Cloudflare quick tunnel (`cloudflared`, installed by the app on Windows and Linux) and shows the HTTPS URL and a QR code. Visitors enter the PIN, then view and cull; configuration stays on the desktop. Things to know:
+- The URL is random and changes every time the tunnel starts. "Start the link when ShotDrop opens" brings it back after a restart, but with a new URL.
+- [Quick tunnels don't support Server-Sent Events](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/), so the gallery polls `/api/changes` every 2.5 s through them. It also falls back to polling if no live event arrives within 6 s through any other proxy.
+- Quick tunnels are meant for testing (no uptime guarantee, 200 in-flight requests). A named tunnel on the user's own Cloudflare account is the upgrade path for a permanent address.
 
 **Remote camera uploads (harder).** Cameras speak FTP, which a Cloudflare Tunnel can't carry: the camera can't run `cloudflared`, and FTP uses multiple ports. Options, best first:
 1. **Same-network field kit:** camera, phone hotspot and laptop running ShotDrop, all on one Wi-Fi. No internet needed for ingest; the laptop syncs when it has a connection.
@@ -227,7 +235,7 @@ Entry-level bodies usually only support the brand's phone app, which ShotDrop ca
 
 **v0.2**
 - Multiple destinations and filters, XMP ratings, RAW+JPEG pairing, sessions
-- Remote web gallery with Cloudflare quick tunnel
+- Remote web gallery with Cloudflare quick tunnel ✅
 
 **v0.3**
 - Multi-camera, per-brand wizards, notifications, disk guard, auto-update

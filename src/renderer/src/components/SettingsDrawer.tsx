@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Destination, DestinationFilter, DestinationType, Settings, Status } from '@shared/types'
 import { api, desktop } from '../api'
 import { ConnectionCard } from './ConnectionCard'
+import { TunnelPanel } from './TunnelPanel'
 import { Icon } from './Icon'
 
 type Tab = 'camera' | 'sync' | 'library' | 'remote'
@@ -122,7 +123,7 @@ export function SettingsDrawer({ status, onClose, toast }: Props) {
           ) : tab === 'library' ? (
             <LibraryTab s={s} edit={edit} />
           ) : (
-            <RemoteTab s={s} status={status} edit={edit} />
+            <RemoteTab s={s} status={status} edit={edit} toast={toast} />
           )}
         </div>
 
@@ -392,7 +393,7 @@ function LibraryTab({ s, edit }: { s: Settings; edit: (p: Partial<Settings>) => 
   )
 }
 
-function RemoteTab({ s, status, edit }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void }) {
+function RemoteTab({ s, status, edit, toast }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void; toast: Props['toast'] }) {
   return (
     <>
       <section className="panel">
@@ -401,7 +402,7 @@ function RemoteTab({ s, status, edit }: { s: Settings; status: Status | null; ed
           <Switch checked={s.remote.enabled} onChange={(v) => edit({ remote: { ...s.remote, enabled: v } })} label={s.remote.enabled ? 'On' : 'Off'} />
         </div>
         <p className="muted small">
-          View and cull from a phone or another computer's browser. When on, the API listens on your network and asks for this PIN.
+          View and cull from a phone or another computer on the same network. When on, the API listens on your network and asks for this PIN. The public link below uses the same PIN.
         </p>
         <Field label="PIN">
           <input className="input mono big" value={s.remote.pin} onChange={(e) => edit({ remote: { ...s.remote, pin: e.target.value.replace(/\D/g, '').slice(0, 12) } })} />
@@ -425,13 +426,7 @@ function RemoteTab({ s, status, edit }: { s: Settings; status: Status | null; ed
         </Field>
       </section>
 
-      <section className="panel">
-        <h3>Over the internet</h3>
-        <p className="muted small">
-          Coming next: one-click Cloudflare Tunnel for an HTTPS link to the remote gallery without router changes. For now you can run{' '}
-          <code>cloudflared tunnel --url http://localhost:{s.api.port}</code> yourself with remote access on.
-        </p>
-      </section>
+      <TunnelPanel s={s} status={status} edit={edit} toast={toast} />
     </>
   )
 }

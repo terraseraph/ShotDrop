@@ -11,6 +11,7 @@ import { FtpService } from './ftp'
 import { SyncService } from './sync'
 import { Bus } from './events'
 import { lanAddresses } from './net'
+import { TunnelService } from './tunnel'
 
 export interface CoreOptions {
   dataDir: string // settings, DB, preview cache
@@ -33,6 +34,7 @@ export class Core {
   readonly ingest: Ingestor
   readonly ftp: FtpService
   readonly sync: SyncService
+  readonly tunnel: TunnelService
   apiState = { port: 0, remote: false }
 
   constructor(private opts: CoreOptions) {
@@ -54,6 +56,7 @@ export class Core {
       (path, user) => this.ingest.enqueue(path, { mode: 'move', source: user }),
       () => this.emitStatus()
     )
+    this.tunnel = new TunnelService(join(opts.dataDir, 'bin'), () => this.settings.tunnel.cloudflaredPath, () => this.emitStatus())
   }
 
   get settings(): Settings {
@@ -65,10 +68,17 @@ export class Core {
     await this.ingest.start(this.settings.watchFolders)
     if (this.settings.ftp.enabled) await this.ftp.start(this.settings.ftp)
     await this.sync.start()
+    await this.tunnel.refreshInstalled()
+  }
+
+  /** Call once the API is listening. */
+  async startTunnel(): Promise<void> {
+    await this.tunnel.start(this.settings.api.port)
   }
 
   async stop(): Promise<void> {
     this.sync.stop()
+    await this.tunnel.stop()
     await this.ftp.stop()
     await this.ingest.stop()
     await shutdownMedia()
@@ -87,7 +97,8 @@ export class Core {
         urls: this.apiState.remote ? addrs.map((a) => `http://${a}:${this.apiState.port}`) : [`http://127.0.0.1:${this.apiState.port}`]
       },
       library: { dir: s.libraryDir, shots: this.lib.count() },
-      sync: { ...this.lib.syncCounts(), rcloneAvailable: this.sync.rcloneAvailable }
+      sync: { ...this.lib.syncCounts(), rcloneAvailable: this.sync.rcloneAvailable },
+      tunnel: this.tunnel.state
     }
   }
 
@@ -110,6 +121,7 @@ export class Core {
       await this.ingest.start(after.watchFolders)
     }
     if (changed('rclonePath')) await this.sync.start()
+    if (changed('tunnel')) await this.tunnel.refreshInstalled()
     if (changed('destinations')) {
       for (const d of after.destinations) if (!before.destinations.some((b) => b.id === d.id)) this.sync.backfill(d)
       for (const b of before.destinations) if (!after.destinations.some((d) => d.id === b.id)) this.lib.dropSyncForDest(b.id)

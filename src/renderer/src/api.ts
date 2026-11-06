@@ -1,4 +1,4 @@
-import type { Destination, ServerEvent, Session, Settings, Shot, ShotPatch, Status } from '@shared/types'
+import type { Destination, ServerEvent, Session, Settings, Shot, ShotPatch, Status, TunnelState } from '@shared/types'
 
 interface DesktopBridge {
   apiBase: string
@@ -15,6 +15,9 @@ declare global {
 }
 
 export const desktop = window.shotdrop ?? null
+
+/** A browser on another device (LAN or tunnel). It can view and cull, but configuration is desktop-only. */
+export const isRemote = !desktop && !import.meta.env.DEV
 
 /** In the Electron window the API base comes from preload; in a remote browser it's the page's own origin. */
 const base = desktop?.apiBase ?? (import.meta.env.DEV ? 'http://127.0.0.1:8787' : location.origin)
@@ -58,7 +61,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 export const api = {
   status: () => req<Status>('GET', '/api/status'),
   sessions: () => req<Session[]>('GET', '/api/sessions'),
-  shots: () => req<{ items: Shot[]; total: number }>('GET', '/api/shots?order=asc&limit=10000'),
+  shots: () => req<{ items: Shot[]; total: number; seq: number }>('GET', '/api/shots?order=asc&limit=10000'),
+  changes: (after: number) =>
+    req<{ seq: number; events: ServerEvent[]; reset: boolean; status: Status }>('GET', `/api/changes?after=${after}`),
   patchShot: (id: number, patch: ShotPatch) => req<Shot>('PATCH', `/api/shots/${id}`, patch),
   deleteShot: (id: number) => req<void>('DELETE', `/api/shots/${id}`),
   settings: () => req<Settings>('GET', '/api/settings'),
@@ -68,6 +73,9 @@ export const api = {
   deleteDestination: (id: string) => req<void>('DELETE', `/api/destinations/${id}`),
   resync: (id: string) => req<{ queued: number }>('POST', `/api/destinations/${id}/resync`),
   retrySync: () => req<{ retried: number }>('POST', '/api/sync/retry'),
+  tunnelInstall: () => req<TunnelState>('POST', '/api/tunnel/install'),
+  tunnelStart: () => req<TunnelState>('POST', '/api/tunnel/start'),
+  tunnelStop: () => req<TunnelState>('POST', '/api/tunnel/stop'),
 
   thumbUrl: (id: number) => withKey(`${base}/api/shots/${id}/thumb`),
   previewUrl: (id: number) => withKey(`${base}/api/shots/${id}/preview`),

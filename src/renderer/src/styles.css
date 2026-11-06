@@ -110,6 +110,8 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 }
 .chip.ftp { color: var(--text); font-family: var(--mono); font-size: 12px; }
 .chip.ftp:hover, .toggle:hover { border-color: var(--line-2); }
+.chip.online { color: var(--live); border-color: rgba(51, 209, 122, 0.4); background: rgba(51, 209, 122, 0.08); }
+.chip.online:hover { border-color: var(--live); }
 .chip.warn { color: #ffb4a6; border-color: rgba(255, 84, 54, 0.4); }
 .toggle.on { color: var(--text); border-color: rgba(51, 209, 122, 0.45); background: rgba(51, 209, 122, 0.08); }
 .toggle.on svg { color: var(--live); }
@@ -334,6 +336,14 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .dest-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .dest-main .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .warn-box { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(255, 84, 54, 0.08); border: 1px solid rgba(255, 84, 54, 0.3); color: #ffc2b6; }
+.tunnel-state { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.tunnel-state.running { color: var(--live); }
+.tunnel-state.error { color: var(--reject); }
+.tunnel-state.starting .tally, .tunnel-state.installing .tally { background: var(--star); animation: pulse 1s ease-in-out infinite; }
+.tunnel-live { display: grid; grid-template-columns: 148px 1fr; gap: 12px; align-items: start; }
+.tunnel-qr { width: 148px; height: 148px; border-radius: var(--radius); display: block; image-rendering: pixelated; }
+.tunnel-live .conn-value { font-size: 13px; }
+@media (max-width: 520px) { .tunnel-live { grid-template-columns: 1fr; } }
 .brands { display: grid; gap: 6px; }
 .brand-guide { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .brand-head { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; font-weight: 600; }

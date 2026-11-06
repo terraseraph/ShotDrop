@@ -73,6 +73,15 @@ export interface Settings {
   watchFolders: string[]
   destinations: Destination[]
   rclonePath: string
+  tunnel: { autoStart: boolean; cloudflaredPath: string }
+}
+
+export interface TunnelState {
+  status: 'off' | 'installing' | 'starting' | 'running' | 'error'
+  url: string | null
+  error: string | null
+  installed: boolean
+  installable: boolean // we can download cloudflared for this OS
 }
 
 export interface Status {
@@ -81,6 +90,7 @@ export interface Status {
   api: { port: number; urls: string[]; remote: boolean }
   library: { dir: string; shots: number }
   sync: { pending: number; running: number; errors: number; rcloneAvailable: boolean }
+  tunnel: TunnelState
 }
 
 export interface Session {

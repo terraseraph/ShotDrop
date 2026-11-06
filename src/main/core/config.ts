@@ -19,7 +19,8 @@ export function defaultSettings(picturesDir: string): Settings {
     remote: { enabled: false, pin: String(Math.floor(100000 + Math.random() * 900000)) },
     watchFolders: [],
     destinations: [],
-    rclonePath: 'rclone'
+    rclonePath: 'rclone',
+    tunnel: { autoStart: false, cloudflaredPath: 'cloudflared' }
   }
 }
 
@@ -39,7 +40,8 @@ export class ConfigStore {
         ...saved,
         ftp: { ...defaults.ftp, ...saved.ftp },
         api: { ...defaults.api, ...saved.api },
-        remote: { ...defaults.remote, ...saved.remote }
+        remote: { ...defaults.remote, ...saved.remote },
+        tunnel: { ...defaults.tunnel, ...saved.tunnel }
       }
     } else {
       this.value = defaults
@@ -57,7 +59,8 @@ export class ConfigStore {
       ...patch,
       ftp: { ...this.value.ftp, ...patch.ftp },
       api: { ...this.value.api, ...patch.api },
-      remote: { ...this.value.remote, ...patch.remote }
+      remote: { ...this.value.remote, ...patch.remote },
+      tunnel: { ...this.value.tunnel, ...patch.tunnel }
     }
     this.save()
     return this.get()

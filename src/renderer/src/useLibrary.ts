@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Shot, ShotPatch, Status } from '@shared/types'
+import type { ServerEvent, Shot, ShotPatch, Status } from '@shared/types'
 import { api, AuthError } from './api'
 
 export interface Toast {
@@ -13,6 +13,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
   const [shots, setShots] = useState<Shot[]>([])
   const [status, setStatus] = useState<Status | null>(null)
   const [needsPin, setNeedsPin] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [connected, setConnected] = useState(true)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [loadKey, setLoadKey] = useState(0)
@@ -26,48 +27,93 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
   }, [])
 
   useEffect(() => {
-    let off = (): void => undefined
     let cancelled = false
+    let closeStream = (): void => undefined
+    let pollTimer: ReturnType<typeof setTimeout> | null = null
+    let watchdog: ReturnType<typeof setTimeout> | null = null
+    let seq = 0
+
+    const apply = (e: ServerEvent): void => {
+      switch (e.type) {
+        case 'shot:added':
+          setShots((s) => (s.some((x) => x.id === e.shot.id) ? s : insertSorted(s, e.shot)))
+          arrival.current(e.shot)
+          break
+        case 'shot:updated':
+          setShots((s) => (s.some((x) => x.id === e.shot.id) ? s.map((x) => (x.id === e.shot.id ? e.shot : x)) : insertSorted(s, e.shot)))
+          break
+        case 'shot:removed':
+          setShots((s) => s.filter((x) => x.id !== e.id))
+          break
+        case 'status':
+          setStatus(e.status)
+          break
+        case 'ingest:error':
+          toast(`Couldn't import ${e.file.split(/[\\/]/).pop()}: ${e.error}`, 'error')
+          break
+      }
+    }
+
+    // Fallback when SSE can't get through (Cloudflare quick tunnels don't support it): poll the change log.
+    const poll = async (): Promise<void> => {
+      if (cancelled) return
+      try {
+        const c = await api.changes(seq)
+        if (cancelled) return
+        setConnected(true)
+        if (c.reset) {
+          const { items, seq: s } = await api.shots()
+          setShots(items)
+          seq = s
+        } else {
+          c.events.forEach(apply)
+          seq = c.seq
+        }
+        setStatus(c.status)
+      } catch {
+        setConnected(false)
+      }
+      pollTimer = setTimeout(() => void poll(), 2500)
+    }
+    const startPolling = (): void => {
+      if (pollTimer || cancelled) return
+      closeStream()
+      pollTimer = setTimeout(() => void poll(), 0)
+    }
+
     ;(async () => {
       try {
-        const [{ items }, st] = await Promise.all([api.shots(), api.status()])
+        const [{ items, seq: s }, st] = await Promise.all([api.shots(), api.status()])
         if (cancelled) return
+        seq = s
         setShots(items)
         setStatus(st)
         setNeedsPin(false)
+        setLoaded(true)
       } catch (e) {
         if (e instanceof AuthError) setNeedsPin(true)
         else setConnected(false)
+        setLoaded(true)
         return
       }
-      off = api.events(
+      if (location.hostname.endsWith('.trycloudflare.com')) return startPolling()
+      // The server sends a status event the moment a stream opens; if none arrives, something in between is buffering.
+      watchdog = setTimeout(startPolling, 6000)
+      closeStream = api.events(
         (e) => {
+          if (watchdog) clearTimeout(watchdog)
+          watchdog = null
           setConnected(true)
-          switch (e.type) {
-            case 'shot:added':
-              setShots((s) => (s.some((x) => x.id === e.shot.id) ? s : insertSorted(s, e.shot)))
-              arrival.current(e.shot)
-              break
-            case 'shot:updated':
-              setShots((s) => (s.some((x) => x.id === e.shot.id) ? s.map((x) => (x.id === e.shot.id ? e.shot : x)) : insertSorted(s, e.shot)))
-              break
-            case 'shot:removed':
-              setShots((s) => s.filter((x) => x.id !== e.id))
-              break
-            case 'status':
-              setStatus(e.status)
-              break
-            case 'ingest:error':
-              toast(`Couldn't import ${e.file.split(/[\\/]/).pop()}: ${e.error}`, 'error')
-              break
-          }
+          apply(e)
         },
         () => setConnected(false)
       )
     })()
     return () => {
       cancelled = true
-      off()
+      closeStream()
+      if (pollTimer) clearTimeout(pollTimer)
+      if (watchdog) clearTimeout(watchdog)
     }
   }, [loadKey, toast])
 
@@ -86,7 +132,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
     await api.deleteShot(id).catch((e: Error) => toast(`Couldn't delete: ${e.message}`, 'error'))
   }, [toast])
 
-  return { shots, status, needsPin, connected, toasts, toast, patch, remove, reload: () => setLoadKey((k) => k + 1) }
+  return { shots, status, loaded, needsPin, connected, toasts, toast, patch, remove, reload: () => setLoadKey((k) => k + 1) }
 }
 
 function insertSorted(list: Shot[], shot: Shot): Shot[] {
