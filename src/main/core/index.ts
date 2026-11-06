@@ -8,7 +8,7 @@ import { Library } from './library'
 import { Previewer, lumaStats, shutdownMedia } from './media'
 import { MetadataStore } from './metadata'
 import { Ingestor } from './ingest'
-import { FtpService } from './ftp'
+import { FtpService, ftpLog, setFtpLogFile } from './ftp'
 import { SyncService } from './sync'
 import { CloudAccounts } from './cloud'
 import { toolPath } from './bundled'
@@ -16,6 +16,7 @@ import { Bus } from './events'
 import { listInterfaces } from './net'
 import { TunnelService } from './tunnel'
 import { XmpService } from './xmp'
+import { PtpService } from '../ptp/service'
 
 export interface CoreOptions {
   dataDir: string // settings, DB, preview cache
@@ -44,6 +45,7 @@ export class Core {
   readonly cloud: CloudAccounts
   readonly xmp: XmpService
   readonly tunnel: TunnelService
+  readonly ptp: PtpService
   apiState = { port: 0, remote: false }
 
   constructor(private opts: CoreOptions) {
@@ -75,13 +77,16 @@ export class Core {
       (path, user) => this.ingest.enqueue(path, { mode: 'move', source: user }),
       () => this.emitStatus()
     )
+    setFtpLogFile(join(opts.dataDir, 'ftp.log'))
     this.bus.on((e) => {
+      if (e.type === 'ingest:error') ftpLog('ingest-error', e.file, e.error)
       if (e.type === 'shot:added') {
         this.emitStatus()
         void this.faceScan()
       }
     })
     this.tunnel = new TunnelService(join(opts.dataDir, 'bin'), () => this.settings.tunnel.cloudflaredPath, () => this.emitStatus())
+    this.ptp = new PtpService(() => this.ingest.incomingDir, () => this.emitStatus())
   }
 
   get settings(): Settings {
@@ -95,6 +100,7 @@ export class Core {
     if (this.settings.ftp.enabled) await this.ftp.start(this.settings.ftp)
     await this.sync.start()
     await this.tunnel.refreshInstalled()
+    this.ptp.start(this.settings.ptp)
     void this.scoreBackfill().then(() => this.faceScan())
   }
 
@@ -142,6 +148,7 @@ export class Core {
 
   async stop(): Promise<void> {
     this.sync.stop()
+    this.ptp.stop()
     await this.tunnel.stop()
     await this.ftp.stop()
     await this.ingest.stop()
@@ -160,6 +167,7 @@ export class Core {
     const stats = this.lib.sourceStats(midnight)
     const prog = this.lib.destProgress()
     const bps = this.sync.throughput()
+    const health = this.lib.destHealth()
     let free: number | null = null
     let total: number | null = null
     try {
@@ -180,6 +188,7 @@ export class Core {
       library: { dir: s.libraryDir, shots: this.lib.count(), free, total },
       sync: { ...this.lib.syncCounts(), rcloneAvailable: this.sync.rcloneAvailable },
       tunnel: this.tunnel.state,
+      ptp: this.ptp.state,
       cameras: s.ftp.users.map((u) => ({
         username: u.username,
         label: u.label,
@@ -196,7 +205,11 @@ export class Core {
         total: prog[d.id]?.total ?? 0,
         running: prog[d.id]?.running ?? 0,
         errors: prog[d.id]?.errors ?? 0,
-        bps: bps[d.id] ?? 0
+        bps: bps[d.id] ?? 0,
+        enabled: d.enabled,
+        lastError: health[d.id]?.lastError ?? null,
+        authExpired: AUTH_EXPIRED.test(health[d.id]?.lastError ?? ''),
+        lastDoneAt: health[d.id]?.lastDoneAt ?? null
       }))
     }
   }
@@ -225,6 +238,7 @@ export class Core {
     if (changed('xmpSidecars') && after.xmpSidecars) for (const s of this.lib.list({}).items) this.xmp.schedule(s.id)
     if (changed('rclonePath')) await this.sync.start()
     if (changed('tunnel')) await this.tunnel.refreshInstalled()
+    if (changed('ptp')) this.ptp.start(after.ptp)
     if (changed('destinations')) {
       for (const d of after.destinations) if (!before.destinations.some((b) => b.id === d.id)) this.sync.backfill(d)
       for (const b of before.destinations) if (!after.destinations.some((d) => d.id === b.id)) this.lib.dropSyncForDest(b.id)
@@ -274,6 +288,9 @@ export class Core {
     return { deleted: true, failed: [] }
   }
 }
+
+/** rclone errors that mean the sign-in is gone (revoked, expired, password changed): Retry can't fix these. */
+const AUTH_EXPIRED = /invalid_grant|token (has been )?(expired|revoked)|expired_access_token|unauthorized_client|couldn't fetch token|401 Unauthorized/i
 
 export interface DeleteResult {
   deleted: boolean

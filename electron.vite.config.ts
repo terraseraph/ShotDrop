@@ -9,7 +9,8 @@ export default defineConfig({
   preload: {},
   renderer: {
     resolve: { alias: { '@shared': resolve('src/shared') } },
-    server: { host: '127.0.0.1', port: 5173, strictPort: true },
+    // SHOTDROP_VITE_PORT lets a second dev copy run beside the first (see README, Getting started).
+    server: { host: '127.0.0.1', port: Number(process.env.SHOTDROP_VITE_PORT) || 5173, strictPort: true },
     plugins: [react()]
   }
 })

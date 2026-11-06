@@ -1,14 +1,31 @@
 import FtpSrv from 'ftp-srv'
-import { mkdirSync } from 'node:fs'
+import { appendFileSync, mkdirSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { Settings } from '@shared/types'
 import type { LoginAttempt } from '@shared/diagnostics'
 import { addressFacing } from './net'
 
-// ftp-srv logs through bunyan; keep it quiet and route errors to the console.
+// ftp-srv logs through bunyan. Everything (commands, replies, errors) goes to ftp.log so a flaky
+// camera session can be read afterwards; errors also hit the console.
+let logPath: string | null = null
+export function setFtpLogFile(path: string): void {
+  logPath = path
+}
+export function ftpLog(level: string, ...a: unknown[]): void {
+  if (!logPath) return
+  const text = a.map((x) => (typeof x === 'string' ? x : x instanceof Error ? x.stack : JSON.stringify(x))).join(' ')
+  try {
+    appendFileSync(logPath, `${new Date().toISOString()} ${level} ${text}\n`)
+  } catch {
+    /* logging must never break an upload */
+  }
+}
 const quietLog: Record<string, unknown> = {}
-for (const lvl of ['trace', 'debug', 'info', 'warn']) quietLog[lvl] = () => undefined
-quietLog.error = (...a: unknown[]) => console.error('[ftp]', ...a)
+for (const lvl of ['trace', 'debug', 'info', 'warn']) quietLog[lvl] = (...a: unknown[]) => ftpLog(lvl, ...a)
+quietLog.error = (...a: unknown[]) => {
+  console.error('[ftp]', ...a)
+  ftpLog('error', ...a)
+}
 quietLog.fatal = quietLog.error
 quietLog.child = () => quietLog
 
@@ -72,6 +89,7 @@ export class FtpService {
         this.onState()
       })
       connection.on('STOR', (err: Error | null, filePath: string) => {
+        ftpLog('STOR', filePath, err ? `ERR ${err.message}` : 'ok')
         if (err || !filePath) return
         this.onUploaded(isAbsolute(filePath) ? filePath : join(root, filePath), user.username)
       })
@@ -88,7 +106,9 @@ export class FtpService {
       this.state.activeConnections = newConnectionCount
       this.onState()
     })
+    ev.on('client-error', ({ error, context }: { error: Error; context?: string }) => ftpLog('client-error', context ?? '', error))
     ev.on('server-error', ({ error }: { error: Error }) => {
+      ftpLog('server-error', error)
       this.state.error = String(error?.message ?? error)
       this.onState()
     })

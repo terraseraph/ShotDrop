@@ -19,7 +19,18 @@ const PATHS: Record<string, string> = {
   flag: 'M5 21V4h11l-2 4 2 4H5',
   alert: 'M12 8v5M12 16.5v.01',
   info: 'M12 11v6M12 7.5v.01',
-  phone: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM11 18h2'
+  phone: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM11 18h2',
+  pause: 'M9 5v14M15 5v14',
+  play: 'M7 4l12 8-12 8Z',
+  server: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01',
+  terminal: 'M4 6l5 6-5 6M12 18h8',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6Z',
+  layers: 'M12 3l9 5-9 5-9-5ZM3 13l9 5 9-5',
+  image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01',
+  raw: 'M4 5h16v14H4zM8 9v6M8 9h3a1.5 1.5 0 0 1 0 3H8M11 12l2 3',
+  star: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z',
+  drive: 'M8.5 4h7l6 10.5-3.5 6h-12L2.5 14.5Z M8.5 4l6 10.5M15.5 4l-6 10.5M2.5 14.5h19',
+  dropbox: 'M7 3l5 3.2L7 9.4 2 6.2ZM17 3l5 3.2-5 3.2-5-3.2ZM7 9.4l5 3.2-5 3.2-5-3.2ZM17 9.4l5 3.2-5 3.2-5-3.2ZM7 17l5 3 5-3'
 }
 
 export function Icon({ name, size = 16 }: { name: keyof typeof PATHS | string; size?: number }) {

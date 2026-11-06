@@ -113,6 +113,23 @@ export interface Settings {
   rclonePath: string
   xmpSidecars: boolean // write <name>.xmp next to each shot with rating/flag/label
   tunnel: { autoStart: boolean; cloudflaredPath: string }
+  /** Wi-Fi camera over PTP/IP (live view + downloads). */
+  ptp: PtpSettings
+}
+
+export interface PtpSettings {
+  enabled: boolean
+  host: string
+  /** Our PTP/IP identity, 32 hex chars. Never change it: a paired Nikon only accepts the GUID it paired with. */
+  guid: string
+}
+
+export interface PtpState {
+  status: 'off' | 'connecting' | 'pairing' | 'connected' | 'error'
+  camera: string | null
+  /** Digits the camera is also showing while it waits for the user to confirm pairing. */
+  pairingCode: string | null
+  error: string | null
 }
 
 export interface TunnelState {
@@ -141,6 +158,18 @@ export interface DestStatus {
   running: number
   errors: number
   bps: number // bytes/s over the last 10 s
+  enabled: boolean // false = paused
+  lastError: string | null // newest unresolved error from the sync queue
+  authExpired: boolean // the cloud sign-in was revoked or expired: needs Reconnect, not Retry
+  lastDoneAt: number | null // epoch ms of the newest finished upload
+}
+
+/** What each "what to send" choice would cover in the current library, for the add-destination sheet. */
+export interface LibraryCounts {
+  all: { files: number; bytes: number }
+  jpeg: { files: number; bytes: number }
+  raw: { files: number; bytes: number }
+  picks: { files: number; bytes: number }
 }
 
 export interface NetInterface {
@@ -167,6 +196,7 @@ export interface Status {
   library: { dir: string; shots: number; free: number | null; total: number | null }
   sync: { pending: number; running: number; errors: number; rcloneAvailable: boolean }
   tunnel: TunnelState
+  ptp: PtpState
   cameras: CameraStatus[]
   destinations: DestStatus[]
 }

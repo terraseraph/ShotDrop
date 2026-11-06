@@ -97,7 +97,6 @@ export function Dock({ status, activity, onSettings, toast }: Props) {
                 {urls.map((u) => (
                   <span className="mono" key={u}>{u}</span>
                 ))}
-                <small>PIN {pin || '—'}</small>
               </div>
             ) : (
               <p className="muted small">Off. Turn on to view and cull from a phone on this network.</p>

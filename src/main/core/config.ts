@@ -17,12 +17,13 @@ export function defaultSettings(picturesDir: string): Settings {
       users: [{ username: 'camera', password: randomPassword(), label: 'Camera 1' }]
     },
     api: { port: 8787 },
-    remote: { enabled: false, pin: String(Math.floor(100000 + Math.random() * 900000)) },
+    remote: { enabled: true, pin: String(Math.floor(100000 + Math.random() * 900000)) },
     watchFolders: [],
     destinations: [],
     rclonePath: 'rclone',
     xmpSidecars: true,
-    tunnel: { autoStart: false, cloudflaredPath: 'cloudflared' }
+    tunnel: { autoStart: false, cloudflaredPath: 'cloudflared' },
+    ptp: { enabled: false, host: '', guid: randomBytes(16).toString('hex') }
   }
 }
 
@@ -43,7 +44,8 @@ export class ConfigStore {
         ftp: { ...defaults.ftp, ...saved.ftp },
         api: { ...defaults.api, ...saved.api },
         remote: { ...defaults.remote, ...saved.remote },
-        tunnel: { ...defaults.tunnel, ...saved.tunnel }
+        tunnel: { ...defaults.tunnel, ...saved.tunnel },
+        ptp: { ...defaults.ptp, ...saved.ptp }
       }
     } else {
       this.value = defaults
@@ -62,7 +64,8 @@ export class ConfigStore {
       ftp: { ...this.value.ftp, ...patch.ftp },
       api: { ...this.value.api, ...patch.api },
       remote: { ...this.value.remote, ...patch.remote },
-      tunnel: { ...this.value.tunnel, ...patch.tunnel }
+      tunnel: { ...this.value.tunnel, ...patch.tunnel },
+      ptp: { ...this.value.ptp, ...patch.ptp }
     }
     this.save()
     return this.get()

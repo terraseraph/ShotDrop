@@ -1,4 +1,4 @@
-import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, Destination, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
+import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
 
 interface DesktopBridge {
   apiBase: string
@@ -17,13 +17,28 @@ declare global {
   }
 }
 
+// Dev only: `?desktop` in a browser tab stands in for the Electron window, so desktop-only UI (Settings, setup)
+// can be checked in a browser. Native helpers are no-ops. Never present in a production build.
+if (import.meta.env.DEV && !window.shotdrop && new URLSearchParams(location.search).has('desktop')) {
+  window.shotdrop = {
+    apiBase: import.meta.env.VITE_SHOTDROP_API ?? 'http://127.0.0.1:8787',
+    desktop: true,
+    pickFolder: async () => null,
+    reveal: async () => undefined,
+    openPath: async () => '',
+    editors: async () => [],
+    shotAction: async () => null,
+    dragShot: () => undefined
+  } as unknown as typeof window.shotdrop
+}
+
 export const desktop = window.shotdrop ?? null
 
 /** A browser on another device (LAN or tunnel). It can view and cull, but configuration is desktop-only. */
 export const isRemote = !desktop && !import.meta.env.DEV
 
 /** In the Electron window the API base comes from preload; in a remote browser it's the page's own origin. */
-const base = desktop?.apiBase ?? (import.meta.env.DEV ? 'http://127.0.0.1:8787' : location.origin)
+const base = desktop?.apiBase ?? (import.meta.env.DEV ? (import.meta.env.VITE_SHOTDROP_API ?? 'http://127.0.0.1:8787') : location.origin)
 export const apiBase = base
 
 const KEY_STORAGE = 'shotdrop.key'
@@ -90,6 +105,7 @@ export const api = {
   patchDestination: (id: string, d: Partial<Destination>) => req<Destination>('PATCH', `/api/destinations/${id}`, d),
   deleteDestination: (id: string) => req<void>('DELETE', `/api/destinations/${id}`),
   resync: (id: string) => req<{ queued: number }>('POST', `/api/destinations/${id}/resync`),
+  libraryCounts: () => req<LibraryCounts>('GET', '/api/library/counts'),
   cloudAccounts: () => req<{ accounts: CloudAccount[]; linking: CloudState['linking'] }>('GET', '/api/cloud/accounts'),
   cloudLink: (provider: CloudProvider, o: CloudLinkOptions = {}) => req<CloudAccount>('POST', '/api/cloud/link', { provider, ...o }),
   cloudCancel: () => req<void>('DELETE', '/api/cloud/link'),
@@ -112,6 +128,7 @@ export const api = {
 
   // Images are served `immutable` and ids restart at 1 per library, so the URL carries a version.
   // File count changes when a better source (JPEG after RAW) re-renders the preview.
+  liveUrl: () => withKey(`${base}/api/live`),
   thumbUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/thumb?v=${ver(s)}`),
   previewUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/preview?v=${ver(s)}`),
   proxyUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/proxy?v=${ver(s)}`),

@@ -47,15 +47,15 @@ export function ViewOnPhone({ status, onClose }: { status: Status | null; onClos
           <PhoneLink url={tunnel} pin={s.remote.pin} />
         ) : !remoteOn ? (
           <>
-            <p className="muted small">Remote access is off. Turn it on to open the gallery from a phone on this network. It asks for a PIN.</p>
+            <p className="muted small">Remote access is off. Turn it on to open the gallery from a phone on this network.</p>
             <button className="btn primary" disabled={busy || !s} onClick={() => void enable()}>Turn on remote access</button>
           </>
         ) : !lan ? (
           <p className="muted small">No network address found. Connect this computer to Wi-Fi or Ethernet.</p>
         ) : s ? (
-          <PhoneLink url={lan} pin={s.remote.pin} />
+          <PhoneLink url={lan} />
         ) : null}
-        <p className="muted small">Scan with the phone camera, enter the PIN, then use Share → Add to Home Screen to install it.</p>
+        <p className="muted small">Scan with the phone camera{tab === 'net' && tunnel ? ', enter the PIN,' : ''} then use Share → Add to Home Screen to install it.</p>
         <button className="btn" onClick={onClose}>Close</button>
       </div>
     </div>

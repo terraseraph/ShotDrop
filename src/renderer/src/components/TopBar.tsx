@@ -16,6 +16,9 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: 'soft', label: 'Soft' },
   { id: 'blink', label: 'Eyes closed' }
 ]
+// The grid boxes bursts and tags soft/eyes-closed frames, so only the everyday filters stay as tabs.
+const MAIN: Filter[] = ['all', 'unrejected', 'picks', 'rejects']
+const MORE = FILTERS.filter((f) => !MAIN.includes(f.id))
 
 interface Props {
   status: Status | null
@@ -34,6 +37,7 @@ interface Props {
   onDock: () => void
   onHelp: () => void
   onPhone: () => void
+  onLive: () => void
   mobile: boolean
   visibleCount: number
 }
@@ -76,11 +80,22 @@ export function TopBar(p: Props) {
           </select>
         ) : (
         <div className="seg" role="tablist" aria-label="Filter">
-          {FILTERS.map((f) => (
+          {FILTERS.filter((f) => MAIN.includes(f.id)).map((f) => (
             <button key={f.id} role="tab" aria-selected={p.filter === f.id} className={p.filter === f.id ? 'on' : ''} onClick={() => p.onFilter(f.id)}>
               {f.label}
             </button>
           ))}
+          <select
+            className={`select seg-more ${MAIN.includes(p.filter) ? '' : 'on'}`}
+            value={MAIN.includes(p.filter) ? '' : p.filter}
+            onChange={(e) => e.target.value && p.onFilter(e.target.value as Filter)}
+            aria-label="More filters"
+          >
+            <option value="">More…</option>
+            {MORE.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
         </div>
         )}
         <span className="count">{p.visibleCount}</span>
@@ -113,6 +128,12 @@ export function TopBar(p: Props) {
           </button>
         </div>
 
+        {!isRemote && (
+          <button className={`toggle ${p.status?.ptp.status === 'connected' ? 'on' : ''}`} onClick={p.onLive} title="Live view (Wi-Fi camera)" aria-label="Live view">
+            <Icon name="camera" />
+            <span className="lbl">Live</span>
+          </button>
+        )}
         {!isRemote && (
           <button className="icon-btn" onClick={p.onPhone} title="View on phone" aria-label="View on phone">
             <Icon name="phone" />

@@ -90,7 +90,8 @@ ipcMain.on('drag-shot', (e, id: number) => {
 const exeDir = process.env.PORTABLE_EXECUTABLE_DIR ?? dirname(process.execPath)
 const portableDir = app.isPackaged && existsSync(join(exeDir, 'data')) ? join(exeDir, 'data') : null
 // Dev runs use a throwaway folder in the repo so test shots never touch the real library.
-const devHome = process.env.ELECTRON_RENDERER_URL ? join(app.getAppPath(), '.dev-data') : null
+// SHOTDROP_DEV_HOME points a second dev copy at its own data (and API/FTP ports, set in its settings.json).
+const devHome = process.env.ELECTRON_RENDERER_URL ? (process.env.SHOTDROP_DEV_HOME || join(app.getAppPath(), '.dev-data')) : null
 // Must precede the single-instance lock; in dev it also keeps each checkout's instance independent of others.
 if (devHome) app.setPath('userData', join(devHome, 'electron'))
 else if (portableDir) app.setPath('userData', join(portableDir, 'app'))

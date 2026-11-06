@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify'
 import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
-import { createReadStream, existsSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs'
 import { createHmac, randomUUID } from 'node:crypto'
 import { registerDiagnostics } from './diagnostics'
 import { registerCloud } from './cloud'
@@ -42,6 +42,19 @@ const destinationSchema = {
   }
 } as const
 
+/**
+ * A folder destination the user just chose is created now. Sync itself never creates a missing root, because a missing
+ * root later usually means an unplugged drive or offline NAS, and recreating it would write to the wrong disk.
+ */
+function ensureFolder(d: Destination): void {
+  if (d.type !== 'folder') return
+  try {
+    mkdirSync(d.target, { recursive: true })
+  } catch {
+    /* drive or share not there: the card shows "Can't reach" until it is */
+  }
+}
+
 export interface ApiOptions {
   rendererDir?: string // built UI to serve to remote browsers
 }
@@ -64,7 +77,8 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     if ((isLoopback(req.ip) && !proxied) || !req.url.startsWith('/api/')) return
     const { remote } = core.settings
     const key = (req.headers['x-shotdrop-key'] as string | undefined) ?? (req.query as { key?: string }).key
-    // Outside access is allowed through LAN remote mode or a running tunnel, and always needs the PIN.
+    // LAN remote mode needs no PIN. Tunnel (public internet) requests still do.
+    if (!proxied && remote.enabled) return
     const open = remote.enabled || (proxied && core.tunnel.state.status === 'running')
     const img = /^\/api\/shots\/(\d+)\/preview(?:$|\?)/.exec(req.url)
     const share = (req.query as { share?: string }).share
@@ -89,6 +103,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
 
   // ---- shots ----
   app.get('/api/sessions', async () => core.lib.sessions())
+  app.get('/api/library/counts', async () => core.lib.filterCounts())
 
   app.get('/api/shots', async (req) => {
     const q = req.query as Record<string, string | undefined>
@@ -329,6 +344,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   app.post('/api/destinations', { ...local, schema: { body: destinationSchema } }, async (req, reply) => {
     const body = req.body as Omit<Destination, 'id'>
     const dest: Destination = { ...body, filter: body.filter ?? 'all', enabled: body.enabled ?? true, id: randomUUID().slice(0, 8) }
+    ensureFolder(dest)
     await core.updateSettings({ destinations: [...core.settings.destinations, dest] })
     return reply.code(201).send(dest)
   })
@@ -340,6 +356,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     if (i < 0) return reply.code(404).send({ error: 'Not found' })
     const next = [...list]
     next[i] = { ...list[i], ...(req.body as Partial<Destination>), id }
+    if (next[i].target !== list[i].target) ensureFolder(next[i])
     await core.updateSettings({ destinations: next })
     return next[i]
   })
@@ -392,6 +409,25 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
       off()
       clearInterval(ping)
     })
+  })
+
+  // ---- live view (PTP/IP camera) as MJPEG, so a plain <img> can show it ----
+  app.get('/api/live', (req, reply) => {
+    reply.hijack()
+    const res = reply.raw
+    res.writeHead(200, {
+      'content-type': 'multipart/x-mixed-replace; boundary=frame',
+      'cache-control': 'no-cache, no-store, no-transform',
+      connection: 'keep-alive',
+      'access-control-allow-origin': (req.headers.origin as string) ?? '*'
+    })
+    const off = core.ptp.subscribe((jpeg) => {
+      if (res.writableNeedDrain) return // slow viewer: drop frames rather than queue them
+      res.write(`--frame\r\ncontent-type: image/jpeg\r\ncontent-length: ${jpeg.length}\r\n\r\n`)
+      res.write(jpeg)
+      res.write('\r\n')
+    })
+    req.raw.on('close', off)
   })
 
   // ---- connection check (firewall, ports, self-test) ----

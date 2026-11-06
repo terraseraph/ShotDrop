@@ -35,6 +35,12 @@ npm run dist:portable  # portable Windows build in release/ (see docs/packaging.
 
 In dev mode, all data (settings, DB, previews, library) goes into a gitignored `.dev-data/` folder in the repo, so test shots never touch your real Pictures folder. A packaged build uses a `data` folder next to `ShotDrop.exe` when one exists (the zip ships with one), else `%APPDATA%/ShotDrop` and `Pictures/ShotDrop`.
 
+**Running a second dev copy** (e.g. two Claude sessions testing at once) needs its own data folder and ports, or the two fight over `.dev-data` and ports 5173/8787/2121. Create `<dir>/app/settings.json` with `{"api":{"port":8792},"ftp":{"port":2132,"pasvMin":51200,"pasvMax":51220}}` (other keys fill in with defaults), then:
+
+```bash
+SHOTDROP_DEV_HOME=<dir> SHOTDROP_VITE_PORT=5182 VITE_SHOTDROP_API=http://127.0.0.1:8792 npm run dev
+```
+
 To fake a camera, upload over FTP with the user and password shown in the app:
 
 ```bash

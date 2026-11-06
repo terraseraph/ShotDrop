@@ -341,6 +341,42 @@ export class Library {
     return out
   }
 
+  /** Newest unresolved error and newest finished upload, per destination. */
+  destHealth(): Record<string, { lastError: string | null; lastDoneAt: number | null }> {
+    const out: Record<string, { lastError: string | null; lastDoneAt: number | null }> = {}
+    // SQLite returns the bare column from the row holding MAX(updated_at).
+    const errs = this.db
+      .prepare(`SELECT dest_id, error, MAX(updated_at) AS at FROM sync_jobs WHERE error IS NOT NULL AND status != 'done' GROUP BY dest_id`)
+      .all() as { dest_id: string; error: string }[]
+    const done = this.db
+      .prepare(`SELECT dest_id, MAX(updated_at) AS at FROM sync_jobs WHERE status = 'done' GROUP BY dest_id`)
+      .all() as { dest_id: string; at: number }[]
+    for (const e of errs) (out[e.dest_id] ??= { lastError: null, lastDoneAt: null }).lastError = e.error
+    for (const d of done) (out[d.dest_id] ??= { lastError: null, lastDoneAt: null }).lastDoneAt = d.at
+    return out
+  }
+
+  /** Files and bytes each sync filter would send (XMP sidecars ride along and aren't counted). */
+  filterCounts(): { all: { files: number; bytes: number }; jpeg: { files: number; bytes: number }; raw: { files: number; bytes: number }; picks: { files: number; bytes: number } } {
+    const row = this.db
+      .prepare(
+        `SELECT
+           SUM(f.kind != 'sidecar') AS allN, SUM(CASE WHEN f.kind != 'sidecar' THEN f.size ELSE 0 END) AS allB,
+           SUM(f.kind IN ('jpeg','heif')) AS jpgN, SUM(CASE WHEN f.kind IN ('jpeg','heif') THEN f.size ELSE 0 END) AS jpgB,
+           SUM(f.kind = 'raw') AS rawN, SUM(CASE WHEN f.kind = 'raw' THEN f.size ELSE 0 END) AS rawB,
+           SUM(s.flag = 1 AND f.kind != 'sidecar') AS pickN, SUM(CASE WHEN s.flag = 1 AND f.kind != 'sidecar' THEN f.size ELSE 0 END) AS pickB
+         FROM files f JOIN shots s ON s.id = f.shot_id`
+      )
+      .get() as Record<string, number | null>
+    const n = (k: string): number => row[k] ?? 0
+    return {
+      all: { files: n('allN'), bytes: n('allB') },
+      jpeg: { files: n('jpgN'), bytes: n('jpgB') },
+      raw: { files: n('rawN'), bytes: n('rawB') },
+      picks: { files: n('pickN'), bytes: n('pickB') }
+    }
+  }
+
   /** Shots imported since `since` and the newest import time, per source (ftp user). */
   sourceStats(since: number): Record<string, { today: number; lastAt: number }> {
     const rows = this.db

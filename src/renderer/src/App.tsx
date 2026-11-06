@@ -21,6 +21,7 @@ import { DeleteWarning } from './components/DeleteWarning'
 import { MobileLoupe } from './components/MobileLoupe'
 import { ActionBar } from './components/ActionBar'
 import { ViewOnPhone } from './components/ViewOnPhone'
+import { LiveView } from './components/LiveView'
 
 /** Phone layout: remote browsers at phone widths. The desktop window never switches. */
 function useMobile(): boolean {
@@ -86,6 +87,7 @@ export default function App() {
   const [setupOpen, setSetupOpen] = useState(false) // dialog, opened from Settings
   const [wizard, setWizard] = useState(false) // full-page first-run flow, held open until the test shot is seen
   const [phoneOpen, setPhoneOpen] = useState(false)
+  const [liveOpen, setLiveOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const mobile = useMobile()
   const emptyRef = useRef(true)
@@ -226,6 +228,7 @@ export default function App() {
         onDock={toggleDock}
         onHelp={() => setHelpOpen(true)}
         onPhone={() => setPhoneOpen(true)}
+        onLive={() => setLiveOpen(true)}
         mobile={mobile}
         visibleCount={visible.length}
       />
@@ -255,7 +258,7 @@ export default function App() {
                 </>
                 )
               ) : (
-                <Grid shots={visible} cull={cull} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} tapOpens={mobile} />
+                <Grid shots={visible} cull={cull} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} onPatch={(ids, p) => void lib.patch(ids, p)} tapOpens={mobile} />
               )}
             </main>
             {infoOpen && !mobile && <InfoPanel shot={selected} status={lib.status} compare={compareShots} onSelect={select} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
@@ -279,6 +282,7 @@ export default function App() {
         </div>
       )}
       {phoneOpen && !isRemote && <ViewOnPhone status={lib.status} onClose={() => setPhoneOpen(false)} />}
+      {liveOpen && !isRemote && <LiveView status={lib.status} onClose={() => setLiveOpen(false)} />}
       {helpOpen && <Shortcuts onClose={() => setHelpOpen(false)} />}
       {lib.deleteFailure && <DeleteWarning failed={lib.deleteFailure} onClose={lib.clearDeleteFailure} />}
 

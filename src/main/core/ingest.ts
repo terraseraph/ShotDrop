@@ -222,7 +222,8 @@ export class Ingestor {
     // Tidy empty camera sub-folders under .incoming.
     if (opts.mode === 'move') {
       const parent = dirname(path)
-      if (parent !== this.incomingDir && parent.startsWith(this.incomingDir)) {
+      // Never remove the FTP user's own folder (first level): the FTP session's root lives there and the next STOR would 550.
+      if (dirname(parent) !== this.incomingDir && parent.startsWith(this.incomingDir)) {
         await rmdir(parent).catch(() => undefined)
       }
     }

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { Destination, DestinationFilter, DestinationType, Settings, Status } from '@shared/types'
+import type { Settings, Status } from '@shared/types'
 import { api, desktop } from '../api'
 import { NetworkCheck } from './NetworkCheck'
 import { TunnelPanel } from './TunnelPanel'
 import { PhoneLink } from './PhoneLink'
 import { lanUrl } from './ViewOnPhone'
 import { Icon } from './Icon'
-import { CloudPicker } from './CloudPicker'
+import { SyncBoard } from './SyncBoard'
 
 export type Tab = 'camera' | 'sync' | 'library' | 'remote'
 
@@ -65,7 +65,7 @@ export function SettingsDrawer({ status, tab: initialTab, onClose, toast, onSetu
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
-      <aside className="drawer" role="dialog" aria-label="Settings" onClick={(e) => e.stopPropagation()}>
+      <aside className={`drawer ${tab === 'sync' ? 'wide' : ''}`} role="dialog" aria-label="Settings" onClick={(e) => e.stopPropagation()}>
         <header className="drawer-head">
           <h2>Settings</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -87,7 +87,7 @@ export function SettingsDrawer({ status, tab: initialTab, onClose, toast, onSetu
           ) : tab === 'camera' ? (
             <CameraTab s={s} status={status} edit={edit} toast={toast} onSetup={onSetup} />
           ) : tab === 'sync' ? (
-            <SyncTab s={s} status={status} reload={load} toast={toast} />
+            <SyncBoard s={s} status={status} reload={load} toast={toast} />
           ) : tab === 'library' ? (
             <LibraryTab s={s} edit={edit} />
           ) : (
@@ -192,116 +192,6 @@ function CameraTab({ s, status, edit, toast, onSetup }: { s: Settings; status: S
   )
 }
 
-function SyncTab({ s, status, reload, toast }: { s: Settings; status: Status | null; reload: () => void; toast: Props['toast'] }) {
-  const empty = { name: '', type: 'rclone' as DestinationType, target: '', filter: 'all' as DestinationFilter }
-  const [draft, setDraft] = useState(empty)
-  // 'cloud' = linked Google Drive / Dropbox; 'advanced' = type your own rclone remote path.
-  const [cloudMode, setCloudMode] = useState(true)
-  const run = async (fn: () => Promise<unknown>, ok?: string): Promise<void> => {
-    try {
-      await fn()
-      if (ok) toast(ok)
-      reload()
-    } catch (e) {
-      toast((e as Error).message, 'error')
-    }
-  }
-  const sync = status?.sync
-
-  return (
-    <>
-      <section className="panel">
-        <div className="row between">
-          <h3>Destinations</h3>
-          {sync && (
-            <span className="muted small">
-              {sync.pending} queued · {sync.running} uploading · {sync.errors} failed
-              {sync.errors > 0 && (
-                <button className="link" onClick={() => void run(() => api.retrySync(), 'Retrying failed uploads')}> Retry</button>
-              )}
-            </span>
-          )}
-        </div>
-        {!s.destinations.length && <p className="muted small">No destinations yet. Shots stay on this PC until you add one.</p>}
-        {s.destinations.map((d: Destination) => (
-          <div className="dest" key={d.id}>
-            <div className="dest-main">
-              <strong>{d.name}</strong>
-              <span className="mono small muted">{d.type === 'rclone' ? 'rclone' : 'folder'} → {d.target}</span>
-              <span className="small muted">{FILTER_TEXT[d.filter]}</span>
-            </div>
-            <Switch checked={d.enabled} onChange={(v) => void run(() => api.patchDestination(d.id, { enabled: v }))} label="" />
-            <button className="icon-btn" title="Resync everything" onClick={() => void run(async () => toast(`Queued ${(await api.resync(d.id)).queued} files`))}>
-              <Icon name="refresh" />
-            </button>
-            <button className="icon-btn" title="Remove" onClick={() => confirm(`Remove ${d.name}? Files already uploaded stay where they are.`) && void run(() => api.deleteDestination(d.id))}>
-              <Icon name="trash" />
-            </button>
-          </div>
-        ))}
-      </section>
-
-      <section className="panel">
-        <h3>Add destination</h3>
-        <div className="seg wide">
-          <button className={draft.type === 'rclone' && cloudMode ? 'on' : ''} onClick={() => (setCloudMode(true), setDraft({ ...draft, type: 'rclone' }))}>Google Drive / Dropbox</button>
-          <button className={draft.type === 'folder' ? 'on' : ''} onClick={() => setDraft({ ...draft, type: 'folder' })}>Folder / NAS</button>
-          <button className={draft.type === 'rclone' && !cloudMode ? 'on' : ''} onClick={() => (setCloudMode(false), setDraft({ ...draft, type: 'rclone' }))}>Advanced: custom rclone remote</button>
-        </div>
-        {draft.type === 'rclone' && cloudMode && (
-          <CloudPicker toast={toast} onPick={(target, name) => setDraft((d) => ({ ...d, target, name: d.name || name }))} />
-        )}
-        <Field label="Name">
-          <input className="input" value={draft.name} placeholder={draft.type === 'rclone' ? 'Google Drive' : 'NAS'} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        </Field>
-        {!(draft.type === 'rclone' && cloudMode && !draft.target) && (
-        <Field
-          label={draft.type === 'rclone' ? (cloudMode ? 'Sync into' : 'rclone remote path') : 'Folder'}
-          hint={draft.type === 'rclone' ? (cloudMode ? 'Pick a different folder above to change this.' : 'e.g. gdrive:Photos/ShotDrop, from your own rclone.conf (`rclone config`).') : 'Local folder or network share, e.g. \\\\nas\\photos'}
-        >
-          <div className="row tight">
-            <input className="input mono" value={draft.target} readOnly={draft.type === 'rclone' && cloudMode} onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
-            {draft.type === 'folder' && desktop && (
-              <button className="btn" onClick={async () => {
-                const p = await desktop!.pickFolder()
-                if (p) setDraft({ ...draft, target: p })
-              }}>
-                <Icon name="folder" /> Browse
-              </button>
-            )}
-          </div>
-        </Field>
-        )}
-        <Field label="What to sync">
-          <select className="select" value={draft.filter} onChange={(e) => setDraft({ ...draft, filter: e.target.value as DestinationFilter })}>
-            {Object.entries(FILTER_TEXT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </Field>
-        {draft.type === 'rclone' && status && !status.sync.rcloneAvailable && (
-          <p className="warn-box small">rclone wasn't found on this PC. Install it from rclone.org, or set its path under Library.</p>
-        )}
-        <button
-          className="btn primary"
-          disabled={!draft.name.trim() || !draft.target.trim()}
-          onClick={() => void run(async () => {
-            await api.addDestination({ ...draft, enabled: true })
-            setDraft(empty)
-          }, 'Destination added. Existing shots are queued.')}
-        >
-          <Icon name="plus" /> Add
-        </button>
-      </section>
-    </>
-  )
-}
-
-const FILTER_TEXT: Record<DestinationFilter, string> = {
-  all: 'Everything',
-  jpeg: 'JPEG / HEIF only',
-  raw: 'RAW only',
-  picks: 'Picks only'
-}
-
 function LibraryTab({ s, edit }: { s: Settings; edit: (p: Partial<Settings>) => void }) {
   return (
     <>
@@ -373,15 +263,15 @@ function RemoteTab({ s, status, edit, toast }: { s: Settings; status: Status | n
           <Switch checked={s.remote.enabled} onChange={(v) => edit({ remote: { ...s.remote, enabled: v } })} label={s.remote.enabled ? 'On' : 'Off'} />
         </div>
         <p className="muted small">
-          View and cull from a phone or another computer on the same network. When on, the API listens on your network and asks for this PIN. The public link below uses the same PIN.
+          View and cull from a phone or another computer on the same network. When on, anyone on your network can open it. The public (internet) link still asks for a PIN.
         </p>
-        <Field label="PIN">
+        <Field label="Public link PIN">
           <input className="input mono big" value={s.remote.pin} onChange={(e) => edit({ remote: { ...s.remote, pin: e.target.value.replace(/\D/g, '').slice(0, 12) } })} />
         </Field>
         {status?.api.remote && lanUrl(status) && (
           <div className="remote-qr">
-            <PhoneLink url={lanUrl(status)!} pin={s.remote.pin} size={200} />
-            <p className="muted small">Scan with a phone on this network, enter the PIN, then Add to Home Screen.</p>
+            <PhoneLink url={lanUrl(status)!} size={200} />
+            <p className="muted small">Scan with a phone on this network, then Add to Home Screen.</p>
           </div>
         )}
         {status?.api.remote && (
