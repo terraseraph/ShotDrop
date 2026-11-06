@@ -20,3 +20,14 @@ export function Badges({ shot }: { shot: Shot }) {
     </span>
   )
 }
+
+/** One dot per sync destination: grey queued, amber pulsing running, green done, red error. */
+export function SyncDots({ sync }: { sync: Shot['sync'] }) {
+  const e = Object.entries(sync)
+  if (!e.length) return null
+  return (
+    <span className="sync-dots" aria-hidden>
+      {e.map(([id, st]) => <i key={id} className={st} />)}
+    </span>
+  )
+}

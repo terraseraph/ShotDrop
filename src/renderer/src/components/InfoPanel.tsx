@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Label, Shot, ShotPatch, Status, SyncStatus } from '@shared/types'
+import { motion } from 'motion/react'
 import { api } from '../api'
 import { fmtAperture, fmtFocal, fmtShutter, fmtSize, fmtTime, fmtDate } from '../format'
 import { Icon } from './Icon'
@@ -11,9 +12,11 @@ interface Props {
   shot: Shot | null
   status: Status | null
   onPatch: (p: ShotPatch) => void
+  compare: Shot[]
+  onSelect: (id: number) => void
 }
 
-export function InfoPanel({ shot, onPatch }: Props) {
+export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
   const [destNames, setDestNames] = useState<Record<string, string>>({})
   const syncKeys = shot ? Object.keys(shot.sync).join() : ''
   useEffect(() => {
@@ -51,13 +54,14 @@ export function InfoPanel({ shot, onPatch }: Props) {
               ★
             </button>
           ))}
+          <kbd>1–5</kbd>
         </div>
         <div className="flag-input">
           <button className={shot.flag === 1 ? 'on pick' : ''} onClick={() => onPatch({ flag: shot.flag === 1 ? 0 : 1 })} title="Pick (P)">
-            <Icon name="check" /> Pick
+            <Icon name="check" /> Pick <kbd>P</kbd>
           </button>
           <button className={shot.flag === -1 ? 'on reject' : ''} onClick={() => onPatch({ flag: shot.flag === -1 ? 0 : -1 })} title="Reject (X)">
-            <Icon name="close" /> Reject
+            <Icon name="close" /> Reject <kbd>X</kbd>
           </button>
         </div>
         <div className="label-input" aria-label="Colour label">
@@ -65,6 +69,21 @@ export function InfoPanel({ shot, onPatch }: Props) {
             <button key={l} className={`label-dot ${l} ${shot.label === l ? 'on' : ''}`} onClick={() => onPatch({ label: shot.label === l ? null : l })} aria-label={l} title={l} />
           ))}
         </div>
+      </section>
+
+      <section>
+        <h3>
+          Compare <span className="muted hint">· C to add, Shift+C clears</span>
+        </h3>
+        {compare.length > 0 && (
+          <div className="compare">
+            {compare.map((c) => (
+              <motion.button key={c.id} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', bounce: 0.3, visualDuration: 0.45 }} className={c.id === shot.id ? 'sel' : ''} onClick={() => onSelect(c.id)} title={c.name}>
+                <img src={api.thumbUrl(c.id)} alt={c.name} draggable={false} />
+              </motion.button>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>

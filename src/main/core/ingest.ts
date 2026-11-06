@@ -196,8 +196,8 @@ export class Ingestor {
     const best = this.lib.bestPreviewSource(shotId)
     if (best && best.id !== this.lib.previewFileId(shotId)) {
       try {
-        await this.previews.render(shotId, best.path, this.lib.orientation(shotId))
-        this.lib.setPreview(shotId, best.id)
+        const stats = await this.previews.render(shotId, best.path, this.lib.orientation(shotId))
+        this.lib.setPreview(shotId, best.id, stats)
       } catch (e) {
         this.bus.emit({ type: 'ingest:error', file: dest, error: `Preview failed: ${String(e)}` })
       }

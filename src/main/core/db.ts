@@ -52,6 +52,14 @@ export function openDb(dataDir: string): DB {
     );
     CREATE INDEX IF NOT EXISTS sync_status ON sync_jobs(status);
   `)
+  // Columns added after v0.1; CREATE TABLE IF NOT EXISTS won't add them to an existing library.
+  for (const col of ['hist TEXT', 'clipped REAL']) {
+    try {
+      db.exec(`ALTER TABLE shots ADD COLUMN ${col}`)
+    } catch {
+      /* already there */
+    }
+  }
   // Anything left "running" from a previous crash goes back to the queue.
   db.prepare(`UPDATE sync_jobs SET status = 'pending' WHERE status = 'running'`).run()
   return db

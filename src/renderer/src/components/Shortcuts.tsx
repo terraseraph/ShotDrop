@@ -9,6 +9,9 @@ const KEYS: [string, string][] = [
   ['F', 'Follow new shots'],
   ['G / E', 'Grid / loupe'],
   ['Z or Space', 'Zoom to 100%'],
+  ['H', 'Histogram + clipping warning'],
+  ['C', 'Add to compare (max 4)'],
+  ['Shift + C', 'Clear compare'],
   ['I', 'Info panel'],
   ['Delete', 'Move to recycle bin'],
   ['?', 'This list']
