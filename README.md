@@ -130,7 +130,7 @@ npm run dist:portable    # release/ShotDrop-win-x64.zip + release/ShotDrop-porta
 - **Desktop-only screens in a browser:** add `?desktop` to the dev URL (dev builds only) to see Settings and setup screens in a browser tab.
 - **Fake a camera:** `curl -T DSC01234.JPG ftp://camera:<password>@127.0.0.1:2121/`
 
-**Releases:** push a tag such as `v0.2.0`. [GitHub Actions](.github/workflows/build.yml) builds both packages on Windows and attaches them to the release, and the download links above always point at the latest one. Every push to `main` also builds, with the files attached to the Actions run.
+**Releases:** every push to `main` builds both packages on Windows with [GitHub Actions](.github/workflows/build.yml) and publishes them as a new release numbered `0.1.<build>`, so the download links above always serve the newest build. Push a tag such as `v0.2.0` for a named version. Pull requests build too, with the files attached to the Actions run.
 
 ### Project layout
 
