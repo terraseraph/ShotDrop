@@ -1,21 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Shot, ShotSource, ShotSources } from '@shared/types'
+import type { Shot, ShotPatch, ShotSource, ShotSources } from '@shared/types'
 import { api, isRemote } from '../api'
-import { fmtAperture, fmtFocal, fmtIso, fmtShutter, fmtTime } from '../format'
 import { motion } from 'motion/react'
+import { fade, popIn } from '../motion'
 import { Icon } from './Icon'
-import { Badges } from './Badges'
 import { OpenExternal } from './OpenExternal'
+import { HintStrip } from './HintStrip'
+import { SourcePill } from './SourcePill'
+
+export interface Burst {
+  index: number
+  size: number
+  best: boolean
+  soft: boolean
+  blink: boolean
+}
 
 interface Props {
   shot: Shot | null
   fresh: boolean
   follow: boolean
+  burst: Burst | null
+  /** Name of the enabled picks-only destination, if any ("sent to Drive"). */
+  picksDest: string | null
+  onPatch: (p: ShotPatch) => void
   onPrev: () => void
   onNext: () => void
 }
 
-export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
+export function Loupe({ shot, fresh, follow, burst, picksDest, onPatch, onPrev, onNext }: Props) {
   const [zoom, setZoom] = useState(false)
   const [origin, setOrigin] = useState({ x: 50, y: 50 })
   const [loaded, setLoaded] = useState(false)
@@ -86,7 +99,7 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  if (!shot) return <div className="loupe" />
+  if (!shot) return <div className="stage-col"><div className="canvas" /></div>
 
   const video = shot.files.find((f) => f.kind === 'video')
   const jpeg = shot.files.find((f) => f.kind === 'jpeg')
@@ -123,22 +136,17 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
     const r = box.current!.getBoundingClientRect()
     setOrigin({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 })
   }
-
-  const exif = [fmtShutter(shot.shutter), fmtAperture(shot.aperture), fmtIso(shot.iso), fmtFocal(shot.focalLength)].filter(Boolean)
+  const toggleZoom = (): void => {
+    setOrigin({ x: 50, y: 50 })
+    setZoom((z) => !z)
+  }
 
   return (
-    <div className="loupe">
+    <div className="stage-col">
       <div
         ref={box}
-        className={`loupe-canvas ${zoom && !video ? 'zoomed' : ''} ${fresh ? 'fresh' : ''}`}
-        onClick={
-          video
-            ? undefined
-            : (e) => {
-                track(e)
-                setZoom((z) => !z)
-              }
-        }
+        className={`canvas ${zoom && !video ? 'zoomed' : ''}`}
+        onClick={video ? undefined : (e) => { track(e); setZoom((z) => !z) }}
         onMouseMove={zoom && !video ? track : undefined}
       >
         {video ? (
@@ -165,14 +173,7 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
           ) : (
             <>
               <img className="loupe-thumb" src={api.thumbUrl(shot)} alt="" aria-hidden />
-              <img
-                key={`${shot.id}-${src}`}
-                className={`loupe-img ${loaded ? 'ready' : ''}`}
-                src={fitSrc}
-                alt={shot.name}
-                onLoad={() => setLoaded(true)}
-                draggable={false}
-              />
+              <img key={`${shot.id}-${src}`} className={`loupe-img ${loaded ? 'ready' : ''}`} src={fitSrc} alt={shot.name} onLoad={() => setLoaded(true)} draggable={false} />
             </>
           )
         ) : (
@@ -181,80 +182,64 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
             <span>No preview for {shot.files.map((f) => f.name).join(', ')}</span>
           </div>
         )}
-      </div>
 
-      {shot.hasPreview && (
-        <div className="loupe-src" onClick={(e) => e.stopPropagation()}>
-          {list.length > 1 && (
-            <div className="seg" role="radiogroup" aria-label="Image source">
-              {list.map((s) => {
-                const needsDevelop = s.key === 'raw' && !s.ready
-                return (
-                  <button
-                    key={s.key}
-                    role="radio"
-                    aria-checked={active === s.key}
-                    className={active === s.key ? 'on' : ''}
-                    disabled={developing || (needsDevelop && (!sources?.canDevelop || isRemote))}
-                    title={needsDevelop ? 'Decode the RAW file at full resolution (takes a few seconds)' : s.detail}
-                    onClick={() => void choose(s)}
-                  >
-                    {needsDevelop ? 'Develop RAW' : sourceName(s)}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-          {developing ? (
-            <span className="pill warn">Developing RAW…</span>
-          ) : info && info.width && info.height ? (
-            <span className="pill" title={info.detail}>
-              {sourceName(info)} {info.width}×{info.height}
+        {/* Follow mode: a brief amber glow each time a new frame takes the stage. */}
+        {fresh && follow && <div key={shot.id} className="glow-ring" aria-hidden />}
+
+        {shot.hasPreview && !video && <SourcePill sources={sources} active={active} name={sourceName} developing={developing} error={err} onChoose={(s) => void choose(s)} />}
+
+        {fresh && (
+          <motion.span className="badge new stage-new" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={popIn.transition}>
+            New
+          </motion.span>
+        )}
+
+        {showHist && shot.histogram && !zoom && <Histogram bins={shot.histogram} clipped={shot.clipped} />}
+
+        <div className="stage-bl">
+          {burst && burst.size > 1 && (
+            <span className="badge chipx">
+              <Icon name="layers" size={12} />
+              Burst {burst.index} of {burst.size}{burst.best ? ' · best' : ''}
             </span>
-          ) : null}
-          {err && <span className="pill warn">{err}</span>}
-        </div>
-      )}
-
-      {showHist && shot.histogram && !zoom && <Histogram bins={shot.histogram} clipped={shot.clipped} />}
-
-      <button className="nav prev" onClick={onPrev} aria-label="Previous">
-        <Icon name="prev" size={22} />
-      </button>
-      <button className="nav next" onClick={onNext} aria-label="Next">
-        <Icon name="next" size={22} />
-      </button>
-
-      <div className="loupe-hud">
-        <div className="hud-left">
-          <strong>{shot.name}</strong>
-          <span className="muted">{fmtTime(shot.capturedAt)}</span>
-          {shot.files.length > 1 && <span className="pill">{shot.files.map((f) => f.kind.toUpperCase()).join('+')}</span>}
-          {fresh && (
-            <motion.span className="pill new" initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', bounce: 0.3, visualDuration: 0.45 }}>
-              New
-            </motion.span>
           )}
+          {burst?.soft && <span className="badge chipx">Soft</span>}
+          {burst?.blink && <span className="badge chipx">Eyes closed</span>}
         </div>
-        <div className="hud-exif mono">{exif.join('  ·  ')}</div>
-        <div className="hud-right">
-          <Badges shot={shot} />
-          {zoom && <span className="pill">100%</span>}
-          {follow && <span className="pill live">Following</span>}
+        <div className="stage-br" onClick={(e) => e.stopPropagation()}>
+          <button className="badge chipx" onClick={toggleZoom} aria-pressed={zoom} title="Zoom to 100% (Z)">
+            <span className="key">Z</span> {zoom ? 'Fit' : '100%'}
+          </button>
+          <button className={`badge chipx ${showHist ? 'lit' : ''}`} onClick={() => setShowHist((h) => !h)} aria-pressed={showHist} title="Histogram (H)">
+            <span className="key">H</span> Histogram
+          </button>
         </div>
+
+        <button className="nav prev" onClick={(e) => { e.stopPropagation(); onPrev() }} aria-label="Previous">
+          <Icon name="prev" size={22} />
+        </button>
+        <button className="nav next" onClick={(e) => { e.stopPropagation(); onNext() }} aria-label="Next">
+          <Icon name="next" size={22} />
+        </button>
       </div>
+
+      <HintStrip shot={shot} onPatch={onPatch} picksDest={picksDest} />
     </div>
   )
 }
 
+/** 64 luminance bins, drawn as in the board: soft white fill, red bar at the right edge when highlights clip. */
 function Histogram({ bins, clipped }: { bins: number[]; clipped: number | null }) {
-  const d = `M0 100 ${bins.map((v, i) => `L${i} ${100 - v}`).join(' ')} L63 100Z`
+  const n = bins.length - 1 || 1
+  const d = `M0 48 ${bins.map((v, i) => `L${((i / n) * 148).toFixed(1)} ${(48 - (Math.min(v, 100) / 100) * 46).toFixed(1)}`).join(' ')} L148 48Z`
+  const clip = clipped ?? 0
   return (
-    <motion.div className="hist" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-      {clipped != null && clipped > 1 && <span className="pill warn">▲ {Math.round(clipped)}% highlights clipped</span>}
-      <svg viewBox="0 0 63 100" preserveAspectRatio="none" aria-hidden>
-        <path d={d} fill="rgba(255,255,255,.45)" />
+    <motion.div className="hist" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={fade}>
+      <svg viewBox="0 0 148 48" width="148" height="48" role="img" aria-label={`Histogram, ${clip > 1 ? 'highlight clipping' : 'no clipping'}`}>
+        <path d={d} fill="rgba(255,255,255,.55)" />
+        {clip > 0.05 && <rect x="143" y="0" width="5" height="48" fill="rgba(229,72,77,.8)" />}
       </svg>
+      <span className="hist-clip" style={{ color: clip > 1 ? '#f2a5a8' : 'var(--faint)' }}>CLIP {clip < 10 ? clip.toFixed(1) : Math.round(clip)}%</span>
     </motion.div>
   )
 }

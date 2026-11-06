@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
-import { copyFile, rename, stat, unlink } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { copyFile, rename, rm, stat, unlink } from 'node:fs/promises'
+import { dirname, join, posix } from 'node:path'
 import type { Destination, FileKind, Settings } from '@shared/types'
 import type { FileRow, Library } from './library'
 import type { Bus } from './events'
@@ -39,13 +39,23 @@ export class SyncService {
   private recent: { t: number; dest: string; size: number }[] = []
   /** Destinations that couldn't be reached: skipped by pump() until `until`; `streak` drives the backoff. */
   private offline = new Map<string, { until: number; streak: number }>()
+  /** "dest|rel_path" with an upload or delete in flight: the other kind waits, so a delete never races an upload of the same path. */
+  private busy = new Set<string>()
+  /**
+   * Remote folders known to exist. Google Drive allows two folders with the same name, so two uploads that both create
+   * a missing folder at once make two of them and files end up split across both (one is hidden from listings).
+   * Missing folders are therefore made one at a time per account before uploading into them.
+   */
+  private knownDirs = new Set<string>()
+  private mkdirChain = new Map<string, Promise<unknown>>()
 
   constructor(
     private lib: Library,
     private bus: Bus,
     private settings: () => Settings,
     private onState: () => void,
-    private cloud: CloudAccounts
+    private cloud: CloudAccounts,
+    private trash?: (path: string) => Promise<void>
   ) {}
 
   async start(): Promise<void> {
@@ -119,15 +129,28 @@ export class SyncService {
   }
 
   pump(): void {
+    if (CONCURRENCY - this.active <= 0) return
+    const now = Date.now()
+    // Unreachable and paused destinations are skipped in the query, so they can't fill the slots and starve the rest.
+    const skip = [
+      ...[...this.offline].filter(([, o]) => o.until > now).map(([id]) => id),
+      ...this.settings().destinations.filter((d) => !d.enabled).map((d) => d.id)
+    ]
+    // Deletes first: they're quick, and they clear the way for any new upload to the same path.
+    this.pumpDeletes(skip)
     const free = CONCURRENCY - this.active
     if (free <= 0) return
-    const now = Date.now()
-    const waiting = [...this.offline].filter(([, o]) => o.until > now).map(([id]) => id)
-    const jobs = this.lib.nextSyncJobs(free, waiting)
+    const jobs = this.lib.nextSyncJobs(free + this.busy.size, skip)
+    let started = 0
     for (const job of jobs) {
+      if (started >= free) break
       const dest = this.settings().destinations.find((d) => d.id === job.dest_id)
       const file = this.lib.file(job.file_id)
       if (!dest || !dest.enabled || !file) continue
+      const key = `${dest.id}|${file.rel_path}`
+      if (this.busy.has(key)) continue
+      started++
+      this.busy.add(key)
       this.active++
       this.lib.setSyncStatus(job.id, 'running')
       this.changed(file.shot_id)
@@ -151,9 +174,93 @@ export class SyncService {
         })
         .finally(() => {
           this.active--
+          this.busy.delete(key)
           this.changed(file.shot_id)
           this.pump()
         })
+    }
+  }
+
+  private pumpDeletes(skip: string[]): void {
+    const free = CONCURRENCY - this.active
+    if (free <= 0) return
+    let started = 0
+    for (const job of this.lib.nextRemoteDeletes(free + this.busy.size, skip)) {
+      if (started >= free) break
+      const dest = this.settings().destinations.find((d) => d.id === job.dest_id)
+      const key = `${job.dest_id}|${job.rel_path}`
+      if (!dest || !dest.enabled || this.busy.has(key)) continue
+      started++
+      this.busy.add(key)
+      this.active++
+      this.lib.setRemoteDeleteStatus(job.id, 'running')
+      this.removeRemote(dest, job.rel_path)
+        .then(() => {
+          this.lib.finishRemoteDelete(job.id)
+          this.offline.delete(dest.id)
+        })
+        .catch((e: SyncError) => {
+          if (isUnreachable(e)) {
+            const streak = (this.offline.get(dest.id)?.streak ?? -1) + 1
+            this.offline.set(dest.id, { until: Date.now() + offlineDelay(streak), streak })
+            this.lib.setRemoteDeleteStatus(job.id, 'pending', `Waiting for destination: ${e.message}`)
+            return
+          }
+          this.lib.setRemoteDeleteStatus(job.id, 'error', e.message)
+          if (job.attempts + 1 < MAX_ATTEMPTS) setTimeout(() => this.lib.retryRemoteDelete(job.id), 15000 * (job.attempts + 1))
+        })
+        .finally(() => {
+          this.active--
+          this.busy.delete(key)
+          this.onState()
+          this.pump()
+        })
+    }
+  }
+
+  /** Make a remote folder (and its parents) unless it's known to exist; one mkdir at a time per account. */
+  private ensureRemoteDir(dir: string, cfg: string[]): Promise<void> {
+    if (this.knownDirs.has(dir)) return Promise.resolve()
+    const account = dir.split(':')[0]
+    const next = (this.mkdirChain.get(account) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(async () => {
+        if (this.knownDirs.has(dir)) return
+        await run(toolPath(this.settings().rclonePath, 'rclone'), ['mkdir', dir, '--contimeout', '20s', '--timeout', '2m', ...cfg])
+        // The folder and every parent above it exist now.
+        for (let d = dir; d.includes('/'); d = posix.dirname(d)) this.knownDirs.add(d)
+        this.knownDirs.add(dir)
+      })
+    this.mkdirChain.set(account, next)
+    return next
+  }
+
+  /** Delete one previously sent file. Already gone counts as done. Cloud deletes go to the provider's trash where it has one. */
+  private async removeRemote(dest: Destination, relPath: string): Promise<void> {
+    if (dest.type === 'folder') return removeFromFolder(dest.target, relPath, this.trash)
+    if (!this.rcloneAvailable) throw new Error('rclone not found. Install it or set its path in Settings.')
+    const remote = `${dest.target.replace(/\/+$/, '')}/${relPath}`
+    const cfg = this.cloud.has(dest.target.split(':')[0]) ? this.cloud.cfgArgs() : []
+    try {
+      await run(toolPath(this.settings().rclonePath, 'rclone'), [
+        'deletefile',
+        remote,
+        '--drive-use-trash=true',
+        '--retries',
+        '2',
+        '--low-level-retries',
+        '10',
+        '--timeout',
+        '2m',
+        '--contimeout',
+        '20s',
+        ...cfg
+      ])
+    } catch (e) {
+      // rclone exit 3 = directory not found, 4 = file not found.
+      const err = e as SyncError
+      if (err.exitCode === 3 || err.exitCode === 4 || /not found|doesn't exist|object not found/i.test(err.message)) return
+      throw e
     }
   }
 
@@ -174,6 +281,8 @@ export class SyncService {
     // --checksum makes it compare by hash (not modtime) when deciding whether a changed sidecar needs resending.
     // Remotes linked in the app live in ShotDrop's own rclone.conf; anything else (Advanced) uses the user's.
     const cfg = this.cloud.has(dest.target.split(':')[0]) ? this.cloud.cfgArgs() : []
+    const dir = posix.dirname(remote)
+    await this.ensureRemoteDir(dir, cfg)
     await run(toolPath(this.settings().rclonePath, 'rclone'), [
       'copyto',
       file.path,
@@ -217,6 +326,28 @@ async function copyToFolder(root: string, file: FileRow): Promise<void> {
     await unlink(tmp).catch(() => {})
     throw e
   }
+}
+
+/** Recycle bin first (works for local disks); a network share usually has none, so then a plain delete. */
+async function removeFromFolder(root: string, relPath: string, trash?: (p: string) => Promise<void>): Promise<void> {
+  await stat(root).catch((e: SyncError) => {
+    throw e.code === 'ENOENT' || isUnreachable(e) ? unreachable(`${root} is not reachable`) : e
+  })
+  const path = join(root, ...relPath.split('/'))
+  const there = await stat(path).then(
+    () => true,
+    () => false
+  )
+  if (!there) return
+  if (trash) {
+    try {
+      await trash(path)
+      return
+    } catch {
+      /* no recycle bin here: fall through */
+    }
+  }
+  await rm(path, { force: true })
 }
 
 function wants(d: Destination, f: FileRow, picked: boolean, shotKinds: Set<FileKind>): boolean {

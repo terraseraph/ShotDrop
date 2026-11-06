@@ -1,0 +1,55 @@
+/* Culling panel, detector chips and flag badges. One colour per detector, kept apart from accent amber and reject red. */
+:root {
+  --d-sim: #2fc6b0;
+  --d-blur: #5aa2ff;
+  --d-eyes: #b58cff;
+  --d-expo: #ff8a3d;
+}
+
+/* toolbar chips */
+.chip.dchip { gap: 5px; }
+.chip.dchip svg { color: var(--faint); }
+.chip.dchip .n { color: var(--faintest); }
+.chip.dchip.on { background: color-mix(in srgb, var(--c) 12%, #1c1c1c); border-color: color-mix(in srgb, var(--c) 45%, #2a2a2a); color: var(--text); }
+.chip.dchip.on svg, .chip.dchip.on .n { color: var(--c); }
+
+/* thumbnail badge */
+.badge.dbadge { background: color-mix(in srgb, var(--c) 30%, rgba(0, 0, 0, 0.75)); color: var(--c); padding: 0 3px; }
+
+/* panel */
+.cp { flex: 0 0 320px; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); background: var(--panel); font-size: 12px; }
+.cp-h { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--line); min-height: 49px; }
+.cp-h strong { font-size: 13px; color: var(--text); }
+.cp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cp-card { flex-shrink: 0; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); overflow: hidden; transition: border-color 0.2s; }
+.cp-card.on { border-color: color-mix(in srgb, var(--c) 40%, var(--line-2)); }
+.cp-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.cp-ic { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; flex: none; color: var(--faint); background: var(--panel-3); }
+.cp-card.on .cp-ic { color: var(--c); background: color-mix(in srgb, var(--c) 16%, var(--panel-3)); }
+.cp-name { flex: 1; min-width: 0; font-weight: 600; color: var(--text); }
+.cp-n { color: var(--faint); font-variant-numeric: tabular-nums; }
+.cp-card.on .cp-n { color: var(--c); }
+.sw.cp-sw.on { background: var(--c); }
+.sw.cp-sw.on > i { background: #111; }
+.cp-more { overflow: hidden; }
+.cp-inner { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 12px; }
+.cp-help { margin: 0; color: var(--muted); line-height: 1.45; }
+.cp-sl { display: flex; flex-direction: column; gap: 4px; }
+.cp-sl-h { display: flex; justify-content: space-between; gap: 8px; color: var(--text-2); }
+.cp-sl-h b { color: var(--c); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cp-sl input[type='range'] { width: 100%; accent-color: var(--c); height: 16px; margin: 0; }
+.cp-sl-f { display: flex; justify-content: space-between; gap: 6px; color: var(--faint); font-size: 11px; }
+.cp-acts { display: flex; gap: 6px; }
+.cp-acts .tb { flex: 1; justify-content: center; border: 1px solid var(--line-2); background: var(--panel); }
+.cp-acts .tb.on { border-color: color-mix(in srgb, var(--c) 50%, var(--line-2)); color: var(--c); }
+.tb.cp-rej { color: var(--reject-text); }
+.tb.cp-rej:disabled { opacity: 0.4; pointer-events: none; }
+.tb.cp-best { justify-content: center; border: 1px solid var(--line-2); }
+.cp-f { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11px; }
+
+/* collapsed rail */
+.cp.cp-rail { flex-basis: 48px; align-items: center; padding: 8px 0; gap: 4px; }
+.cp-railbtn { width: 38px; min-height: 38px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--faint); padding: 4px 0; }
+.cp-railbtn:hover { background: var(--panel-3); color: var(--text); }
+.cp-railbtn span { font-size: 10px; font-variant-numeric: tabular-nums; }
+.cp-railbtn.on { color: var(--c); }

@@ -49,10 +49,15 @@ export interface ShotPatch {
 }
 
 export interface FtpUser {
+  /** Blank = no login: the camera signs in as "anonymous" with no password. */
   username: string
+  /** Blank = any password is accepted for this user name. */
   password: string
   label: string
 }
+
+/** The name a camera logs in with (and the folder/source its frames are filed under). */
+export const ftpLoginName = (u: FtpUser): string => u.username || 'anonymous'
 
 export type DestinationType = 'folder' | 'rclone'
 export type DestinationFilter = 'all' | 'jpeg' | 'raw' | 'picks'
@@ -64,6 +69,8 @@ export interface Destination {
   target: string // folder path, or rclone remote path e.g. "gdrive:Photos/ShotDrop"
   filter: DestinationFilter
   enabled: boolean
+  /** Deleting a photo in ShotDrop also deletes the copies sent here. One-way: deleting here never touches the computer. */
+  mirrorDeletes?: boolean
 }
 
 export type CloudProvider = 'drive' | 'dropbox'
@@ -162,6 +169,15 @@ export interface DestStatus {
   lastError: string | null // newest unresolved error from the sync queue
   authExpired: boolean // the cloud sign-in was revoked or expired: needs Reconnect, not Retry
   lastDoneAt: number | null // epoch ms of the newest finished upload
+  mirrorDeletes: boolean
+  deletesWaiting: number // remote deletes queued or running
+  deleteError: string | null // newest failed remote delete
+}
+
+/** Where a delete reaches beyond this computer: destinations holding copies, split by whether they mirror deletes. */
+export interface DeletePreview {
+  mirrored: { id: string; name: string; files: number }[]
+  kept: { id: string; name: string; files: number }[]
 }
 
 /** What each "what to send" choice would cover in the current library, for the add-destination sheet. */

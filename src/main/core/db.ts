@@ -51,6 +51,19 @@ export function openDb(dataDir: string): DB {
       UNIQUE(file_id, dest_id)
     );
     CREATE INDEX IF NOT EXISTS sync_status ON sync_jobs(status);
+
+    -- Deletes to repeat on a destination after a photo was deleted locally ("mirror deletes").
+    -- Keyed by path, not file id: the file row is gone by the time this runs. A finished delete removes its row.
+    CREATE TABLE IF NOT EXISTS remote_deletes (
+      id         INTEGER PRIMARY KEY,
+      dest_id    TEXT NOT NULL,
+      rel_path   TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'pending',
+      attempts   INTEGER NOT NULL DEFAULT 0,
+      error      TEXT,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(dest_id, rel_path)
+    );
   `)
   // Columns added after v0.1; CREATE TABLE IF NOT EXISTS won't add them to an existing library.
   for (const col of ['hist TEXT', 'clipped REAL', 'dark REAL', 'sharpness REAL', 'hash TEXT', 'faces INTEGER', 'blink REAL']) {
@@ -62,5 +75,6 @@ export function openDb(dataDir: string): DB {
   }
   // Anything left "running" from a previous crash goes back to the queue.
   db.prepare(`UPDATE sync_jobs SET status = 'pending' WHERE status = 'running'`).run()
+  db.prepare(`UPDATE remote_deletes SET status = 'pending' WHERE status = 'running'`).run()
   return db
 }

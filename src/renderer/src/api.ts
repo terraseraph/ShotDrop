@@ -1,4 +1,4 @@
-import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
+import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, DeletePreview, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
 
 interface DesktopBridge {
   apiBase: string
@@ -92,6 +92,7 @@ export const api = {
   changes: (after: number) =>
     req<{ seq: number; events: ServerEvent[]; reset: boolean; status: Status }>('GET', `/api/changes?after=${after}`),
   patchShot: (id: number, patch: ShotPatch) => req<Shot>('PATCH', `/api/shots/${id}`, patch),
+  deletePreview: (ids: number[]) => req<DeletePreview>('GET', `/api/shots/delete-preview?ids=${ids.join(',')}`),
   deleteShot: async (id: number): Promise<void> => {
     const res = await fetch(`${base}/api/shots/${id}`, { method: 'DELETE', headers: key && !desktop ? { 'x-shotdrop-key': key } : {} })
     if (res.status === 401) throw new AuthError('PIN required')
@@ -106,6 +107,7 @@ export const api = {
   deleteDestination: (id: string) => req<void>('DELETE', `/api/destinations/${id}`),
   resync: (id: string) => req<{ queued: number }>('POST', `/api/destinations/${id}/resync`),
   libraryCounts: () => req<LibraryCounts>('GET', '/api/library/counts'),
+  rescanLibrary: () => req<{ queued: number }>('POST', '/api/library/rescan'),
   cloudAccounts: () => req<{ accounts: CloudAccount[]; linking: CloudState['linking'] }>('GET', '/api/cloud/accounts'),
   cloudLink: (provider: CloudProvider, o: CloudLinkOptions = {}) => req<CloudAccount>('POST', '/api/cloud/link', { provider, ...o }),
   cloudCancel: () => req<void>('DELETE', '/api/cloud/link'),

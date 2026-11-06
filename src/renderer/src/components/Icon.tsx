@@ -11,6 +11,7 @@ const PATHS: Record<string, string> = {
   copy: 'M9 9h11v11H9zM5 15V4h11',
   folder: 'M3 6h6l2 2h10v11H3z',
   plus: 'M12 5v14M5 12h14',
+  chevron: 'M6 9l6 6 6-6',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   check: 'M5 12l5 5 9-11',

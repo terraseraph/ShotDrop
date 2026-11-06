@@ -256,6 +256,7 @@ export class Library {
   // ---- sync jobs ----
 
   enqueueSync(fileId: number, destId: string): void {
+    this.cancelRemoteDelete(fileId, destId)
     this.db
       .prepare(
         `INSERT INTO sync_jobs (file_id, dest_id, status, updated_at) VALUES (?, ?, 'pending', ?)
@@ -302,6 +303,7 @@ export class Library {
 
   /** Re-send a file whose content changed (sidecar): back to pending even if already done. */
   requeueSync(fileId: number, destId: string): void {
+    this.cancelRemoteDelete(fileId, destId)
     this.db
       .prepare(
         `INSERT INTO sync_jobs (file_id, dest_id, status, updated_at) VALUES (?, ?, 'pending', ?)
@@ -312,6 +314,97 @@ export class Library {
 
   dropSyncForDest(destId: string): void {
     this.db.prepare(`DELETE FROM sync_jobs WHERE dest_id = ?`).run(destId)
+    this.dropRemoteDeletes(destId)
+  }
+
+  // ---- remote deletes ("mirror deletes") ----
+
+  /**
+   * Forget a file locally and, in the same transaction, queue its deletion on each given destination that was ever
+   * sent it. Any sync row counts, not just 'done': a re-sent sidecar is 'pending' while an older copy is already there,
+   * and deleting something that isn't there is harmless.
+   */
+  removeFileMirroring(fileId: number, mirrorDests: string[]): void {
+    this.db.transaction(() => {
+      if (mirrorDests.length) {
+        this.db
+          .prepare(
+            `INSERT INTO remote_deletes (dest_id, rel_path, status, updated_at)
+             SELECT j.dest_id, f.rel_path, 'pending', @now FROM sync_jobs j JOIN files f ON f.id = j.file_id
+             WHERE j.file_id = @fileId AND j.dest_id IN (SELECT value FROM json_each(@dests))
+             ON CONFLICT(dest_id, rel_path) DO UPDATE SET status = 'pending', attempts = 0, error = NULL, updated_at = excluded.updated_at`
+          )
+          .run({ fileId, dests: JSON.stringify(mirrorDests), now: Date.now() })
+      }
+      this.removeFile(fileId)
+    })()
+  }
+
+  /** A new file is going to the same path: the old delete must not remove it. Running deletes are left to finish first. */
+  private cancelRemoteDelete(fileId: number, destId: string): void {
+    this.db
+      .prepare(`DELETE FROM remote_deletes WHERE dest_id = ? AND status != 'running' AND rel_path = (SELECT rel_path FROM files WHERE id = ?)`)
+      .run(destId, fileId)
+  }
+
+  nextRemoteDeletes(limit: number, skipDests: string[] = []): { id: number; dest_id: string; rel_path: string; attempts: number }[] {
+    return this.db
+      .prepare(
+        `SELECT id, dest_id, rel_path, attempts FROM remote_deletes
+         WHERE status = 'pending' AND dest_id NOT IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT ?`
+      )
+      .all(JSON.stringify(skipDests), limit) as { id: number; dest_id: string; rel_path: string; attempts: number }[]
+  }
+
+  setRemoteDeleteStatus(id: number, status: 'pending' | 'running' | 'error', error: string | null = null): void {
+    this.db
+      .prepare(
+        `UPDATE remote_deletes SET status = ?, error = ?, updated_at = ?,
+           attempts = attempts + CASE WHEN ? = 'error' THEN 1 ELSE 0 END WHERE id = ?`
+      )
+      .run(status, error, Date.now(), status, id)
+  }
+
+  /** Done: the row goes (only if still running, so a re-queue in the meantime survives). */
+  finishRemoteDelete(id: number): void {
+    this.db.prepare(`DELETE FROM remote_deletes WHERE id = ? AND status = 'running'`).run(id)
+  }
+
+  retryRemoteDelete(id: number): void {
+    this.db.prepare(`UPDATE remote_deletes SET status = 'pending' WHERE id = ? AND status = 'error'`).run(id)
+  }
+
+  retryFailedRemoteDeletes(destId?: string): number {
+    const sql = `UPDATE remote_deletes SET status = 'pending' WHERE status = 'error'${destId ? ' AND dest_id = ?' : ''}`
+    return (destId ? this.db.prepare(sql).run(destId) : this.db.prepare(sql).run()).changes
+  }
+
+  /** Destination removed, or mirroring switched off: nothing more gets deleted there. */
+  dropRemoteDeletes(destId: string): void {
+    this.db.prepare(`DELETE FROM remote_deletes WHERE dest_id = ? AND status != 'running'`).run(destId)
+  }
+
+  /** Per destination: deletes still to do, and the newest failure. */
+  remoteDeleteState(): Record<string, { waiting: number; error: string | null }> {
+    const out: Record<string, { waiting: number; error: string | null }> = {}
+    const rows = this.db.prepare(`SELECT dest_id, COUNT(*) AS n FROM remote_deletes GROUP BY dest_id`).all() as { dest_id: string; n: number }[]
+    for (const r of rows) out[r.dest_id] = { waiting: r.n, error: null }
+    const errs = this.db
+      .prepare(`SELECT dest_id, error, MAX(updated_at) AS at FROM remote_deletes WHERE status = 'error' GROUP BY dest_id`)
+      .all() as { dest_id: string; error: string }[]
+    for (const e of errs) (out[e.dest_id] ??= { waiting: 0, error: null }).error = e.error
+    return out
+  }
+
+  /** How many of these shots' photos each destination has (or is receiving), for the delete confirmation. Not-yet-sent ones just get dropped. */
+  destFileCounts(shotIds: number[]): Record<string, number> {
+    const rows = this.db
+      .prepare(
+        `SELECT j.dest_id, COUNT(*) AS n FROM sync_jobs j JOIN files f ON f.id = j.file_id
+         WHERE f.shot_id IN (SELECT value FROM json_each(?)) AND f.kind != 'sidecar' AND j.status != 'pending' GROUP BY j.dest_id`
+      )
+      .all(JSON.stringify(shotIds)) as { dest_id: string; n: number }[]
+    return Object.fromEntries(rows.map((r) => [r.dest_id, r.n]))
   }
 
   syncCounts(): { pending: number; running: number; errors: number } {

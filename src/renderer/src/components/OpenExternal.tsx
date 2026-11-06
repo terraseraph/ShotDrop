@@ -6,7 +6,7 @@ export function OpenExternal({ shot, file }: { shot: Shot; file: ShotFile }) {
   if (desktop) {
     return (
       <button
-        className="btn"
+        className="tb"
         onClick={() =>
           void api
             .filePath(file.id)
@@ -19,7 +19,7 @@ export function OpenExternal({ shot, file }: { shot: Shot; file: ShotFile }) {
     )
   }
   return (
-    <a className="btn" href={api.downloadUrl(shot, file.id)} download={file.name}>
+    <a className="tb" href={api.downloadUrl(shot, file.id)} download={file.name}>
       Download
     </a>
   )

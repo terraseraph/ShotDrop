@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { NetInterface, Settings, Status } from '@shared/types'
+import { ftpLoginName, type NetInterface, type Settings, type Status } from '@shared/types'
 import { api } from '../api'
 import { Icon } from './Icon'
 
@@ -83,8 +83,10 @@ export function ConnectionCard({ status }: { status: Status | null }) {
     <div className="conn-card">
       <CopyField label="Server / Host" value={ftp.addresses[0] ?? 'No network found'} />
       <CopyField label="Port" value={String(ftp.port)} />
-      {user && <CopyField label="User" value={user.username} />}
-      {user && <CopyField label="Password" value={user.password} />}
+      {user && <CopyField label="User" value={ftpLoginName(user)} />}
+      {user && (user.username && user.password
+        ? <CopyField label="Password" value={user.password} />
+        : <div className="conn-field"><span className="conn-label">Password</span><span className="conn-value">{user.username ? 'Any (none set)' : 'None · anonymous login'}</span></div>)}
       <div className="conn-field">
         <span className="conn-label">Mode</span>
         <span className="conn-value">FTP · Passive on · Folder: /</span>

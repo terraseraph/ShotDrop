@@ -7,6 +7,9 @@ import { registerDiagnostics } from './diagnostics'
 import { registerCloud } from './cloud'
 import { listSources, metadataFile, resolveImage } from '../core/sources'
 import { exportJpeg } from '../core/exporter'
+import { checkPath, ensurePath, listPlaces } from '../core/places'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Core } from '../core'
 import type { Destination, ExportOptions, Flag, ServerEvent, Settings, ShotPatch, ShotSource, SyncStatus } from '@shared/types'
 
@@ -38,7 +41,8 @@ const destinationSchema = {
     type: { type: 'string', enum: ['folder', 'rclone'] },
     target: { type: 'string', minLength: 1 },
     filter: { type: 'string', enum: ['all', 'jpeg', 'raw', 'picks'] },
-    enabled: { type: 'boolean' }
+    enabled: { type: 'boolean' },
+    mirrorDeletes: { type: 'boolean' }
   }
 } as const
 
@@ -57,6 +61,8 @@ function ensureFolder(d: Destination): void {
 
 export interface ApiOptions {
   rendererDir?: string // built UI to serve to remote browsers
+  /** Opens the native folder picker on this PC (Electron). Lets a phone ask "Browse on the PC…". */
+  pickFolder?: () => Promise<string | null>
 }
 
 /**
@@ -88,8 +94,9 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
 
   // Anything that changes configuration, runs programs or moves files elsewhere is only for the ShotDrop computer.
   // Remote clients (LAN or tunnel, with the PIN) can view and cull, nothing more.
+  const isLocalReq = (req: FastifyRequest): boolean => isLoopback(req.ip) && !req.headers['cf-connecting-ip'] && !req.headers['x-forwarded-for']
   const localOnly = async (req: FastifyRequest, reply: import('fastify').FastifyReply): Promise<void> => {
-    if (!isLoopback(req.ip) || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) {
+    if (!isLocalReq(req)) {
       return reply.code(403).send({ error: 'Only available on the ShotDrop computer' })
     }
   }
@@ -154,6 +161,14 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
       return ids.map((id) => core.updateShot(id, patch)).filter(Boolean)
     }
   )
+
+  /** Before deleting: which destinations hold copies, and which of them will lose theirs too (mirror deletes). */
+  app.get('/api/shots/delete-preview', async (req, reply) => {
+    const raw = String((req.query as { ids?: string }).ids ?? '')
+    const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    if (!ids.length) return reply.code(400).send({ error: 'ids required' })
+    return core.deletePreview(ids)
+  })
 
   app.delete('/api/shots/:id', async (req, reply) => {
     const r = await core.deleteShot(shotId(req))
@@ -295,7 +310,18 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   })
 
   // ---- settings ----
-  app.get('/api/settings', local, async () => core.settings)
+  /** Full settings on this PC. Remote viewers get a redacted copy (no PIN, no camera passwords, no secrets) so the phone can show them. */
+  app.get('/api/settings', async (req) => {
+    const s = core.settings
+    if (isLocalReq(req)) return s
+    return {
+      ...s,
+      remote: { enabled: s.remote.enabled, pin: '' },
+      ftp: { ...s.ftp, users: s.ftp.users.map((u) => ({ ...u, password: '' })) },
+      rclonePath: '',
+      tunnel: { autoStart: s.tunnel.autoStart, cloudflaredPath: '' }
+    }
+  })
 
   app.patch('/api/settings', local, async (req, reply) => {
     const patch = req.body as Partial<Settings>
@@ -304,6 +330,8 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     if (restartApi) reply.raw.once('finish', () => setTimeout(restart, 50))
     return settings
   })
+
+  app.post('/api/library/rescan', local, async () => ({ queued: await core.ingest.rescanLibrary() }))
 
   // ---- FTP ----
   app.post('/api/ftp/start', local, async () => {
@@ -349,13 +377,17 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     return reply.code(201).send(dest)
   })
 
-  app.patch('/api/destinations/:id', local, async (req, reply) => {
+  /** Remote viewers may only pause/resume (`{ enabled }`); everything else stays on this PC. */
+  app.patch('/api/destinations/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id
     const list = core.settings.destinations
     const i = list.findIndex((d) => d.id === id)
     if (i < 0) return reply.code(404).send({ error: 'Not found' })
+    const body = req.body as Partial<Destination>
+    const patch: Partial<Destination> = isLocalReq(req) ? body : typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}
+    if (!isLocalReq(req) && !('enabled' in patch)) return reply.code(403).send({ error: 'Only pause and resume are available away from the ShotDrop computer' })
     const next = [...list]
-    next[i] = { ...list[i], ...(req.body as Partial<Destination>), id }
+    next[i] = { ...list[i], ...patch, id }
     if (next[i].target !== list[i].target) ensureFolder(next[i])
     await core.updateSettings({ destinations: next })
     return next[i]
@@ -378,10 +410,56 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     return core.lib.syncJobs(status)
   })
 
-  app.post('/api/sync/retry', local, async () => {
-    const n = core.lib.retryFailedSync()
+  app.post('/api/sync/retry', async () => {
+    const n = core.lib.retryFailedSync() + core.lib.retryFailedRemoteDeletes()
     core.sync.pump()
     return { retried: n }
+  })
+
+  // ---- folders and drives: quick picks so nothing has to be typed ----
+  app.get('/api/fs/places', local, async () => listPlaces())
+
+  app.get('/api/fs/check', local, async (req, reply) => {
+    const { path } = req.query as { path?: string }
+    if (!path) return reply.code(400).send({ error: 'path required' })
+    return checkPath(path)
+  })
+
+  app.post('/api/fs/ensure', { ...local, schema: { body: { type: 'object', required: ['path'], properties: { path: { type: 'string', minLength: 1 } } } } }, async (req, reply) => {
+    try {
+      return await ensurePath((req.body as { path: string }).path)
+    } catch (e) {
+      return reply.code(500).send({ error: (e as Error).message })
+    }
+  })
+
+  /** Opens the folder picker on this PC and waits for the choice. Remote callers (the phone's "Browse on the PC…") may use it:
+   *  nothing changes until someone at the PC picks a folder, and the caller still has to PATCH the setting. */
+  let picking: Promise<string | null> | null = null
+  app.post('/api/fs/pick', async (_req, reply) => {
+    if (!opts.pickFolder) return reply.code(501).send({ error: 'No folder picker in this build' })
+    if (!picking) picking = opts.pickFolder().finally(() => (picking = null))
+    return { path: await picking }
+  })
+
+  /** Export as a download (phone "Save to phone" / "Share to…"). Written to a temp folder, served once. */
+  app.get('/api/shots/:id/export', async (req, reply) => {
+    const q = req.query as { size?: string; quality?: string; metadata?: string; source?: string }
+    const size = !q.size || q.size === 'original' ? 'original' : Number(q.size)
+    const quality = q.quality ? Number(q.quality) : 92
+    const metadata = (['all', 'noGps', 'none'].includes(q.metadata ?? '') ? q.metadata : 'all') as ExportOptions['metadata']
+    const source = (['auto', 'jpeg', 'embedded', 'raw'].includes(q.source ?? '') ? q.source : 'auto') as ExportOptions['source']
+    if (size !== 'original' && !(Number.isInteger(size) && size >= 16 && size <= 20000)) return reply.code(400).send({ error: 'bad size' })
+    if (!(Number.isInteger(quality) && quality >= 1 && quality <= 100)) return reply.code(400).send({ error: 'bad quality' })
+    const dir = join(tmpdir(), 'shotdrop-export', randomUUID())
+    mkdirSync(dir, { recursive: true })
+    try {
+      const path = await exportJpeg(core, shotId(req), { dir, size, quality, metadata, source })
+      reply.header('content-disposition', `attachment; filename="${path.split(/[\\/]/).pop()}"`)
+      return sendImage(path, reply)
+    } catch (e) {
+      return reply.code(500).send({ error: (e as Error).message })
+    }
   })
 
   // ---- live events (Server-Sent Events) ----

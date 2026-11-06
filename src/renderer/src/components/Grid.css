@@ -1,0 +1,100 @@
+/* Grid screen (docs/mockups/redesign/Grid.dc.html, MGrid.dc.html). Own `gx-` classes so styles.css's old .cell/.burst don't leak in. */
+.gx { flex: 1; min-height: 0; display: flex; background: var(--bg); }
+.gx-main { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
+.gx-rail { flex: 0 0 200px; border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; overflow-y: auto; }
+.gx-rail-h { color: var(--faint); padding: 4px 8px 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; }
+.gx-rail-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; color: var(--text-2); cursor: pointer; min-height: 30px; }
+.gx-rail-row:hover { background: var(--panel-2); }
+.gx-rail-row.on { background: var(--panel-3); color: #fff; }
+.gx-rail-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gx-rail-n { color: var(--faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+.gx-rename { flex: 1; min-width: 0; background: var(--bg); color: #fff; border: 1px solid var(--accent-line); border-radius: 4px; padding: 2px 4px; font: inherit; }
+.gx-rail-foot { margin-top: auto; color: var(--faintest); font-size: 11px; padding: 8px; }
+
+.gx-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid #1c1c1c; }
+.gx-chipwrap { display: inline-flex; align-items: center; }
+.gx-divider { width: 1px; height: 20px; background: var(--raised); margin: 0 8px 0 0; }
+.gx-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.gx-scroll { flex: 1 1 auto; overflow: auto; padding: 14px; min-height: 0; }
+.gx-minute { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+.gx-minute span { height: 1px; flex: 1; background: var(--line); }
+.gx-scroll > div + div .gx-minute, .gx-scroll > div + div { margin-top: 18px; }
+
+.gx .gx-grid.grid { display: grid; grid-template-columns: repeat(var(--cols, 6), minmax(0, 1fr)); gap: 8px; align-items: start; }
+.gx .gx-grid.grid.inner { gap: 6px; }
+
+.gx-cell { position: relative; width: 100%; align-self: start; aspect-ratio: 3 / 2; border-radius: 6px; overflow: hidden; background: #222; padding: 0; text-align: left; transition: opacity 0.2s; }
+.gx-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.gx-cell.dim { opacity: 0.5; }
+.gx-cell.rejected { opacity: 0.4; }
+.gx-cell.rejected img { filter: grayscale(1); }
+.gx-cell:hover { opacity: 1; }
+.gx-cell.best { box-shadow: 0 0 0 2px var(--accent); }
+.gx-cell.selected { outline: 2px solid #fff; outline-offset: 1px; opacity: 1; }
+.gx-cell:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.gx-empty { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; color: var(--faint); padding: 6px; text-align: center; }
+.gx-t { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; }
+.gx-b { position: absolute; left: 6px; bottom: 6px; right: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+
+.gx-burst { grid-column: span var(--span, 3); border: 1px solid var(--raised); border-radius: 8px; padding: 6px; background: #161616; }
+.gx-burst > header { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); margin: 0 2px 6px; min-height: 22px; }
+.gx-burst > header .tb { margin-left: auto; height: 22px; font-size: 11px; color: var(--accent); }
+
+.gx-selbar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; min-height: 40px; padding: 0 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; flex-wrap: wrap; }
+
+/* ---------- phone ---------- */
+.gx-m { flex-direction: column; }
+.gx-mhead { display: flex; align-items: center; gap: 10px; padding: 14px 14px 8px; }
+.gx-mhead > div { min-width: 0; flex: 1; }
+.gx-mday { font-size: 18px; font-weight: 600; color: #fff; }
+.gx-msub { font-size: 12px; color: var(--faint); }
+.gx-mdays { height: 44px; padding: 0 14px; border-radius: 10px; background: var(--panel-2); font-size: 13px; }
+.gx-mdaylist { position: absolute; z-index: 5; left: 14px; right: 14px; top: 70px; max-height: 60%; overflow: auto; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line-2); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6); }
+.gx-mdaylist .gx-rail { border: 0; }
+.gx-mdaylist .gx-rail-row { min-height: 44px; }
+.gx-mdaylist .gx-rail-foot { display: none; }
+.gx-m { position: relative; }
+.gx-mchips { display: flex; gap: 6px; padding: 4px 14px 10px; overflow-x: auto; scrollbar-width: none; flex: 0 0 auto; }
+.gx-mchips .chip { height: 44px; border-radius: 22px; padding: 0 14px; font-size: 13px; }
+.gx-m .gx-scroll { padding: 0 14px; }
+.gx-m .gx-grid.grid { gap: 4px; }
+.gx-m .gx-cell { aspect-ratio: 1 / 1; min-height: 44px; }
+.gx-m .badge { height: 16px; font-size: 10px; padding: 0 5px; min-width: 0; }
+.gx-m .gx-b { left: 4px; bottom: 4px; }
+.gx-m .gx-t { right: 4px; top: 4px; }
+.gx-m .gx-cell.best { box-shadow: inset 0 0 0 2px var(--accent); }
+.gx-m .gx-minute { margin: 4px 0 8px; }
+.gx-m .gx-scroll > div + div { margin-top: 14px; }
+
+/* frames chosen for Compare (Ctrl/Shift-click) */
+.gx-cell.chosen { outline: 2px solid var(--accent); outline-offset: 1px; opacity: 1; }
+.gx-cell { -webkit-touch-callout: none; user-select: none; }
+/* Corner checkbox: shows on hover, stays on every frame while choosing. The padding is a bigger hit area. */
+.gx-check { position: absolute; left: 2px; top: 2px; padding: 4px; box-sizing: content-box; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: transparent; background-clip: content-box; background-color: rgba(0, 0, 0, 0.35); opacity: 0; transition: opacity 0.12s, background-color 0.12s; touch-action: none; cursor: pointer; z-index: 2; }
+.gx-check::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85); }
+.gx-check svg { position: relative; }
+.gx-cell:hover .gx-check, .gx.choosing .gx-check, .gx-check.on { opacity: 1; }
+.gx-check:hover { background-color: rgba(0, 0, 0, 0.6); color: rgba(255, 255, 255, 0.7); }
+.gx-check.on { background-color: var(--accent); color: var(--accent-ink); }
+.gx-check.on::before { box-shadow: none; }
+.gx-m .gx-check { left: 0; top: 0; }
+.gx-m:not(.choosing) .gx-check:not(.on) { opacity: 0; }
+.gx-mchosen { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--accent-dim); border-top: 1px solid var(--accent-line); font-size: 13px; }
+.gx-mchosen strong { color: var(--accent); margin-right: auto; }
+.gx-mchosen .tb { height: 44px; padding: 0 16px; border-radius: 10px; }
+.gx-mchosen .tb.primary:disabled { opacity: 0.45; }
+.gx-mhint { flex: 0 0 auto; text-align: center; font-size: 12px; color: var(--faint); padding: 6px 14px; }
+
+.gx-menu { position: fixed; z-index: 50; width: 240px; padding: 6px; border-radius: 10px; display: flex; flex-direction: column; font-size: 13px; }
+.gx-menu-h { padding: 6px 10px 8px; color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gx-menu button { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 32px; padding: 0 10px; border-radius: 6px; color: var(--text); text-align: left; }
+.gx-menu button:hover, .gx-menu button:focus-visible { background: var(--panel-3); color: #fff; }
+.gx-menu button.primary { color: var(--accent); font-weight: 600; }
+.gx-menu button.primary:hover { background: var(--accent-dim); }
+.gx-menu .key { font-size: 10px; }
+.gx-menu-sep { height: 1px; background: var(--line-2); margin: 4px 6px; }
+.gx-chosenbar { color: var(--text-2); background: var(--accent-dim); border-top-color: var(--accent-line); }
+.gx-chosenbar strong { color: var(--accent); }
+.gx-chosenbar .tb.primary:disabled { opacity: 0.45; pointer-events: none; }

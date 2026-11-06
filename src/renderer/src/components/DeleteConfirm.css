@@ -1,0 +1,11 @@
+.dc { gap: 12px; }
+.dc-group { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.dc-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.dc-group li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.dc-del { border-color: color-mix(in srgb, var(--reject) 45%, var(--line)); background: color-mix(in srgb, var(--reject) 8%, transparent); }
+.dc-lbl { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.dc-del .dc-lbl { color: var(--reject-text); }
+.dc-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dc-actions .btn { justify-self: auto; }
+.btn.danger { background: var(--reject); color: #fff; border-color: transparent; font-weight: 600; }
+.btn.danger:disabled { opacity: 0.5; }

@@ -1,0 +1,24 @@
+/* Shared by FolderPicker, the add-destination sheet, Settings and the phone screens. */
+.quick { height: 30px; padding: 0 11px; border-radius: 15px; border: 1px solid var(--raised); background: #1a1a1a; color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; white-space: nowrap; transition: border-color 0.15s, background 0.15s; }
+.quick:hover { border-color: #3a3a3a; color: #fff; }
+.quick.on { border-color: var(--accent); color: #fff; background: var(--accent-dim); }
+.quick.dashed { border-style: dashed; color: var(--faint); background: transparent; }
+.quick .x { color: var(--faint); margin-left: 2px; }
+.quick:focus-visible, .fp-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--faint); }
+
+.fp { display: flex; flex-direction: column; gap: 10px; min-width: 0; border-radius: 12px; transition: box-shadow 0.15s; }
+.fp.over { box-shadow: 0 0 0 2px var(--accent); }
+.fp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fp-note { color: var(--faint); font-weight: 400; }
+.fp-path { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--raised); border-radius: 9px; padding: 6px 6px 6px 12px; min-width: 0; color: var(--faint); }
+.fp-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.fp-day, .fp-ph { color: var(--faint); }
+.fp-btn { height: 30px; padding: 0 12px; border-radius: 7px; background: var(--panel-3); color: #fff; white-space: nowrap; }
+.fp-btn:hover { background: var(--raised); }
+.fp-btn:disabled { opacity: 0.6; }
+.fp-btn.plain { background: none; color: var(--text-2); }
+.fp-hint { color: var(--faintest); font-size: 12px; }
+.fp-check { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 10px; font-size: 12px; }
+.fp-check.ok { background: var(--live-dim); color: var(--live); }
+.fp-check.bad { background: var(--warn-dim); color: var(--warn); }

@@ -1,0 +1,11 @@
+/* Dialog for Sync and Settings: floats over whatever view is open so it never feels like another screen. */
+.dlg-root { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.dlg-scrim { position: absolute; inset: 0; }
+.dlg { position: relative; display: flex; flex-direction: column; width: min(1120px, 100%); height: min(780px, 100%); border-radius: var(--radius-xl); overflow: hidden; background: var(--bg); }
+.dlg.wide { width: min(1240px, 100%); }
+.dlg-head { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.dlg-head h2 { font-size: 15px; letter-spacing: 0; }
+.dlg-close { margin-left: auto; height: 32px; color: var(--muted); }
+.dlg-body { flex: 1 1 auto; min-height: 0; position: relative; display: flex; flex-direction: column; }
+/* The pages used to be full views; inside the dialog they just fill the body. */
+.dlg-body .sx-page, .dlg-body .st-page { position: static; inset: auto; z-index: auto; flex: 1 1 auto; min-height: 0; }

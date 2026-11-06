@@ -6,6 +6,16 @@ import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQ
 const TYPES: Record<CloudProvider, string> = { drive: 'drive', dropbox: 'dropbox' }
 const LINK_TIMEOUT_MS = 5 * 60_000
 
+/**
+ * ShotDrop's own Google client, so Drive sign-in doesn't depend on rclone's shared client_id (being retired in 2026).
+ * Set in .env as MAIN_VITE_GOOGLE_CLIENT_ID / MAIN_VITE_GOOGLE_CLIENT_SECRET. A desktop client's secret is not
+ * confidential per Google, but it stays out of git anyway. Unset = fall back to rclone's shared client.
+ */
+const GOOGLE = {
+  clientId: import.meta.env?.MAIN_VITE_GOOGLE_CLIENT_ID ?? process.env.SHOTDROP_GOOGLE_CLIENT_ID ?? '',
+  clientSecret: import.meta.env?.MAIN_VITE_GOOGLE_CLIENT_SECRET ?? process.env.SHOTDROP_GOOGLE_CLIENT_SECRET ?? ''
+}
+
 /** Run rclone to completion and return stdout; the last stderr line becomes the error message. */
 function rclone(bin: string, args: string[], timeoutMs = 60_000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -23,6 +33,22 @@ function rclone(bin: string, args: string[], timeoutMs = 60_000): Promise<string
       reject(new Error(lines.filter((l) => /ERROR|Failed|error/.test(l)).pop() ?? lines.pop() ?? `rclone exit ${code}`))
     })
   })
+}
+
+/**
+ * The token JSON from `rclone authorize` output. Older rclone printed it as-is; v1.7x prints base64url of
+ * {"client_id","client_secret","token":"<token JSON>"}.
+ */
+export function readAuthorizeToken(pasted: string): string {
+  const raw = pasted.trim()
+  if (raw.startsWith('{')) return raw
+  try {
+    const wrapped = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as { token?: unknown }
+    if (typeof wrapped.token === 'string') return wrapped.token
+  } catch {
+    /* fall through */
+  }
+  throw new Error("Couldn't read the sign-in token from rclone")
 }
 
 /**
@@ -62,7 +88,7 @@ export class CloudAccounts {
         provider: v.type as CloudProvider,
         // Empty scope = full access (rclone's default).
         fullAccess: v.type === 'drive' ? v.scope !== 'drive.file' : true,
-        ownClient: !!v.client_id
+        ownClient: !!v.client_id && v.client_id !== GOOGLE.clientId
       }))
   }
 
@@ -72,7 +98,8 @@ export class CloudAccounts {
     const type = TYPES[provider]
     if (!type) throw new Error('Unknown provider')
     const scope = provider === 'drive' ? (opts.fullAccess ? 'drive' : 'drive.file') : undefined
-    const client = opts.clientId && opts.clientSecret ? { client_id: opts.clientId, client_secret: opts.clientSecret } : {}
+    const builtIn = provider === 'drive' && GOOGLE.clientId && GOOGLE.clientSecret ? { client_id: GOOGLE.clientId, client_secret: GOOGLE.clientSecret } : {}
+    const client = opts.clientId && opts.clientSecret ? { client_id: opts.clientId, client_secret: opts.clientSecret } : builtIn
     const blob = Buffer.from(JSON.stringify({ ...(scope ? { scope } : {}), ...client })).toString('base64url')
 
     const args = ['authorize', type, ...(Object.keys(client).length || scope ? [blob] : []), ...this.cfg()]
@@ -89,7 +116,12 @@ export class CloudAccounts {
         proc.stdout.on('data', (d) => {
           out += d
           const m = out.match(/--->\s*([\s\S]*?)\s*<---End paste/)
-          if (m) resolve(m[1])
+          if (!m) return
+          try {
+            resolve(readAuthorizeToken(m[1]))
+          } catch (e) {
+            reject(e)
+          }
         })
         proc.stderr.on('data', (d) => {
           err += d

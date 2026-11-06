@@ -8,3 +8,4 @@ release/
 Thumbs.db
 .dev-data/
 resources/bin/
+.dev-data-*/

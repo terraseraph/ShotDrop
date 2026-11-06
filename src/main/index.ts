@@ -116,7 +116,17 @@ app.whenReady().then(async () => {
     detectFaces: (p) => blink!.detect(p)
   })
   await core.start()
-  api = await startApi(core, { rendererDir: join(__dirname, '../renderer') })
+  api = await startApi(core, {
+    rendererDir: join(__dirname, '../renderer'),
+    pickFolder: async () => {
+      if (win) {
+        if (win.isMinimized()) win.restore()
+        win.focus()
+      }
+      const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
+      return r.canceled ? null : r.filePaths[0]
+    }
+  })
   createWindow(`http://127.0.0.1:${core.settings.api.port}`)
   if (core.settings.tunnel.autoStart) void core.startTunnel().catch((e) => console.error('[tunnel]', e))
 })

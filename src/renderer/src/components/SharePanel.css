@@ -1,0 +1,28 @@
+.share-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.share-grid .tb { justify-content: center; background: #1e1e1e; height: 34px; }
+.share-grid .tb:hover { background: var(--panel-3); }
+.share-grid .tb.strong { background: var(--raised); color: #fff; }
+.share-grid .tb.strong:hover, .share-grid .tb.strong.on { background: #343434; }
+.share-grid .tb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.share-msg { margin-top: 8px; font-size: 12px; color: var(--live); }
+.share-msg.bad { color: var(--reject-text); }
+
+/* phone share sheet (MShare.dc.html) */
+.msh-scrim { position: fixed; inset: 0; background: rgba(10, 10, 10, 0.5); z-index: 90; }
+.msh { position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; background: #1a1a1a; border-radius: 18px 18px 0 0; border-top: 1px solid var(--line-2); padding: 10px 18px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; max-height: 92vh; overflow: auto; color: var(--text); }
+.msh-grab { width: 40px; height: 4px; border-radius: 2px; background: #3a3a3a; margin: 0 auto; }
+.msh-head { display: flex; align-items: center; gap: 12px; }
+.msh-head img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; background: #222; }
+.msh-name { font-weight: 600; color: #fff; }
+.msh-meta { font-size: 12px; color: var(--faint); }
+.msh-big { display: flex; flex-direction: column; gap: 8px; }
+.msh-big button { height: 52px; border-radius: 12px; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: #1e1e1e; color: #fff; font-weight: 500; text-align: left; }
+.msh-big button:disabled { opacity: 0.6; }
+.msh-big svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--text-2); }
+.msh-big span { margin-left: auto; font-size: 12px; color: var(--faint); font-weight: 400; }
+.msh-lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--faint); margin-bottom: 6px; }
+.msh-seg { display: flex; gap: 2px; background: var(--panel); padding: 2px; border-radius: 10px; }
+.msh-seg button { height: 44px; border-radius: 8px; color: var(--muted); flex: 1; font-size: 13px; }
+.msh-seg button.on { background: var(--raised); color: #fff; }
+.msh-pub { border-top: 1px solid var(--raised); padding-top: 12px; display: flex; align-items: center; gap: 10px; }
+.msh-pub button { margin-left: auto; height: 44px; padding: 0 14px; border-radius: 10px; background: var(--panel-3); color: #fff; font-weight: 500; flex: 0 0 auto; }

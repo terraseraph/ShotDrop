@@ -1,7 +1,70 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "shotdrop", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5173 },
-    { "name": "mockups", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "http-server", "C:/Users/terra/Design-mockups", "-p", "5190", "-c-1", "--silent"], "port": 5190 }
+    {
+      "name": "shotdrop",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "shotdrop-grid",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5182,
+      "env": {
+        "SHOTDROP_DEV_HOME": ".dev-data-grid",
+        "SHOTDROP_VITE_PORT": "5182",
+        "VITE_SHOTDROP_API": "http://127.0.0.1:8792"
+      }
+    },
+    {
+      "name": "shotdrop-setup",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5183,
+      "env": {
+        "SHOTDROP_DEV_HOME": ".dev-data-setup",
+        "SHOTDROP_VITE_PORT": "5183",
+        "VITE_SHOTDROP_API": "http://127.0.0.1:8793"
+      }
+    },
+    {
+      "name": "mockups",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "http-server",
+        "C:/Users/terra/Design-mockups",
+        "-p",
+        "5190",
+        "-c-1",
+        "--silent"
+      ],
+      "port": 5190
+    },
+    {
+      "name": "shotdrop-sync",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5184,
+      "env": {
+        "SHOTDROP_DEV_HOME": ".dev-data-sync",
+        "SHOTDROP_VITE_PORT": "5184",
+        "VITE_SHOTDROP_API": "http://127.0.0.1:8794"
+      }
+    }
   ]
 }

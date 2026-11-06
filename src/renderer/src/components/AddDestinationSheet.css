@@ -1,0 +1,73 @@
+/* Add destination sheet (docs/mockups/redesign/AddDest.dc.html) */
+.ad-scrim { position: fixed; inset: var(--topbar) 0 0 0; z-index: 60; }
+.ad-sheet { position: fixed; top: var(--topbar); right: 0; bottom: 0; z-index: 61; width: min(560px, 100%); display: flex; flex-direction: column; border-width: 0 0 0 1px; box-shadow: -30px 0 80px rgba(0, 0, 0, 0.5); }
+.ad-head { display: flex; align-items: center; gap: 10px; padding: 18px 24px 12px; }
+.ad-head h2 { margin: 0; font-size: 18px; font-weight: 600; color: #fff; }
+.ad-cancel { margin-left: auto; color: var(--faint); }
+.ad-body { flex: 1 1 auto; overflow: auto; padding: 0 24px 24px; display: flex; flex-direction: column; gap: 22px; }
+.ad-sec { display: flex; flex-direction: column; gap: 10px; }
+
+.ad-types { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.ad-type { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px; border-radius: 10px; border: 1px solid var(--raised); background: var(--panel-2); color: var(--text-2); font-weight: 500; text-align: center; transition: border-color 0.15s, background 0.15s; }
+.ad-type:hover:not(:disabled) { border-color: #3a3a3a; }
+.ad-type.on { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+.ad-type-i { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; background: var(--panel-3); }
+.ad-type:focus-visible, .ad-opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.ad-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ad-opt { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--raised); background: var(--panel-2); text-align: left; }
+.ad-opt.on { border-color: var(--accent); background: var(--accent-dim); }
+.ad-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #4a4a4a; flex: 0 0 auto; }
+.ad-opt.on .ad-radio { border-color: var(--accent); background: radial-gradient(var(--accent) 45%, transparent 50%); }
+.ad-opt-t { display: flex; flex-direction: column; min-width: 0; }
+.ad-opt-n { color: #fff; }
+.ad-opt-s { color: var(--faint); font-size: 12px; }
+
+.ad-name { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--raised); border-radius: 9px; padding: 0 12px; height: 38px; }
+.ad-name label { color: var(--faint); font-size: 12px; }
+.ad-name input, .ad-bare { flex: 1; background: none; border: 0; color: #fff; font: inherit; outline: none; min-width: 0; }
+.ad-input { height: 32px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--raised); background: var(--panel); color: #fff; font: inherit; min-width: 0; flex: 1; }
+.ad-input:focus { outline: 2px solid var(--focus); outline-offset: 0; }
+.ad-bare.ad-input { border: 0; background: none; height: 28px; }
+.ad-bare.ad-input:focus { outline: none; }
+
+.ad-foot { display: flex; align-items: center; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--raised); color: var(--faint); font-size: 12px; }
+.ad-go { margin-left: auto; height: 38px; padding: 0 18px; font-size: 14px; }
+.ad-go:disabled { opacity: 0.5; }
+
+.ad-acct { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--raised); background: var(--panel-2); text-align: left; }
+.ad-acct.on { border-color: var(--accent-line); }
+.ad-acct-i { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; }
+.ad-acct-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ad-acct-main strong { color: #fff; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-acct-main span { color: var(--faint); font-size: 12px; }
+.ad-connect { display: flex; flex-direction: column; gap: 10px; }
+.ad-access { display: grid; gap: 8px; }
+.ad-access label { display: flex; gap: 10px; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--raised); background: var(--panel-2); color: var(--faint); font-size: 12px; align-items: flex-start; }
+.ad-access label.on { border-color: var(--accent); background: var(--accent-dim); }
+.ad-access strong { display: block; color: #fff; font-size: 13px; font-weight: 500; }
+.ad-access input { accent-color: var(--accent); margin-top: 3px; }
+.ad-own { color: var(--faint); font-size: 12px; }
+.ad-own summary { cursor: pointer; }
+.ad-own-row { display: flex; gap: 8px; margin-top: 8px; }
+.ad-another { align-self: flex-start; }
+.ad-wait { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 10px; background: var(--sync-dim); }
+.ad-wait p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+.ad-wait a { color: var(--sync); }
+.ad-spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--sync-dim); border-top-color: var(--sync); animation: ad-spin 0.8s linear infinite; flex: 0 0 auto; }
+@keyframes ad-spin { to { transform: rotate(360deg); } }
+.ad-warn { margin: 0; padding: 10px 12px; border-radius: 9px; background: var(--warn-dim); color: var(--warn); font-size: 12px; }
+
+.ad-fb { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--raised); border-radius: 10px; background: var(--panel); }
+.ad-fb-new { display: flex; gap: 8px; }
+.ad-note { margin: 0; display: flex; gap: 8px; color: var(--muted); font-size: 12px; }
+.ad-link { color: var(--accent); text-decoration: underline; }
+.ad-crumbs { font-size: 12px; color: var(--faint); }
+.ad-crumbs strong { color: #fff; font-weight: 500; }
+.ad-flist { display: flex; flex-direction: column; max-height: 180px; overflow: auto; border-radius: 8px; background: var(--panel-2); }
+.ad-flist button { display: flex; align-items: center; gap: 10px; padding: 8px 12px; text-align: left; color: var(--text-2); }
+.ad-flist button span { flex: 1; }
+.ad-flist button:hover { background: var(--panel-3); color: #fff; }
+.ad-empty { padding: 10px 12px; color: var(--faint); font-size: 12px; }
+.ad-fb-foot { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; }
+.ad-fb-foot .fp-btn { margin-left: auto; }

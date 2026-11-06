@@ -1,299 +1,388 @@
-import { useEffect, useState } from 'react'
-import type { Settings, Status } from '@shared/types'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import type { FtpUser, Settings, Status } from '@shared/types'
+import { ftpLoginName } from '@shared/types'
 import { api, desktop } from '../api'
+import { fade, firm } from '../motion'
+import { fmtSize } from '../format'
+import { AddressPicker, CopyField } from './ConnectionCard'
+import { FolderPicker } from './FolderPicker'
 import { NetworkCheck } from './NetworkCheck'
-import { TunnelPanel } from './TunnelPanel'
 import { PhoneLink } from './PhoneLink'
+import { TabBar } from './TabBar'
+import { type PrefKey, type Drive, dropProps, fetchPlaces, getPref, lastPart, setPref } from './fsApi'
 import { lanUrl } from './ViewOnPhone'
-import { Icon } from './Icon'
-import { SyncBoard } from './SyncBoard'
+import { Dialog } from './Dialog'
+import './FolderPicker.css'
+import './Phone.css'
+import './Settings.css'
 
 export type Tab = 'camera' | 'sync' | 'library' | 'remote'
+type Toast = (t: string, tone?: 'info' | 'error') => void
 
 interface Props {
   status: Status | null
   tab?: Tab
   onClose: () => void
-  toast: (t: string, tone?: 'info' | 'error') => void
-  onSetup: () => void
+  toast: Toast
+  onSetup?: () => void
+  /** Opens the Sync page (the "Sync" row in the left nav). */
+  onOpenSync?: () => void
 }
 
-const isWindows = navigator.userAgent.includes('Windows')
-const PORT_HINT = isWindows
-  ? 'Any free port works; set the same number in the camera. Use a free port in the connection check if this one is taken.'
-  : 'Any free port works. Ports below 1024 need root on macOS/Linux.'
+const SECTIONS = [
+  { id: 'library', label: 'Library' },
+  { id: 'cameras', label: 'Cameras' },
+  { id: 'culling', label: 'Culling' },
+  { id: 'remote', label: 'Phone and remote' },
+  { id: 'sync', label: 'Sync' },
+  { id: 'apps', label: 'Open in…' },
+  { id: 'about', label: 'About' }
+] as const
+const TAB_SECTION: Record<Tab, string> = { camera: 'cameras', sync: 'sync', library: 'library', remote: 'remote' }
 
-export function SettingsDrawer({ status, tab: initialTab, onClose, toast, onSetup }: Props) {
-  const [tab, setTab] = useState<Tab>(initialTab ?? 'camera')
+/** Settings that apply the moment they change: optimistic update, PATCH, roll back with a message on failure. */
+function useLiveSettings(toast: Toast) {
   const [s, setS] = useState<Settings | null>(null)
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  const load = (): void => void api.settings().then((v) => {
-    setS(v)
-    setDirty(false)
-  })
-  useEffect(load, [])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  const edit = (patch: Partial<Settings>): void => {
-    setS((cur) => (cur ? { ...cur, ...patch } : cur))
-    setDirty(true)
-  }
-
-  const save = async (): Promise<void> => {
-    if (!s) return
-    setSaving(true)
-    try {
-      const { destinations: _ignored, ...rest } = s
-      setS(await api.patchSettings(rest))
-      setDirty(false)
-      toast('Settings saved')
-    } catch (e) {
-      toast(`Couldn't save: ${(e as Error).message}`, 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="drawer-backdrop" onClick={onClose}>
-      <aside className={`drawer ${tab === 'sync' ? 'wide' : ''}`} role="dialog" aria-label="Settings" onClick={(e) => e.stopPropagation()}>
-        <header className="drawer-head">
-          <h2>Settings</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
-            <Icon name="close" />
-          </button>
-        </header>
-
-        <nav className="tabs">
-          {(['camera', 'sync', 'library', 'remote'] as Tab[]).map((t) => (
-            <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-              {t[0].toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </nav>
-
-        <div className="drawer-body">
-          {!s ? (
-            <p className="muted">Loading…</p>
-          ) : tab === 'camera' ? (
-            <CameraTab s={s} status={status} edit={edit} toast={toast} onSetup={onSetup} />
-          ) : tab === 'sync' ? (
-            <SyncBoard s={s} status={status} reload={load} toast={toast} />
-          ) : tab === 'library' ? (
-            <LibraryTab s={s} edit={edit} />
-          ) : (
-            <RemoteTab s={s} status={status} edit={edit} toast={toast} />
-          )}
-        </div>
-
-        {tab !== 'sync' && (
-          <footer className="drawer-foot">
-            <span className="muted small">{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
-            <button className="btn" disabled={!dirty || saving} onClick={load}>Revert</button>
-            <button className="btn primary" disabled={!dirty || saving} onClick={() => void save()}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </footer>
-        )}
-      </aside>
-    </div>
+  const load = useCallback(() => void api.settings().then(setS, (e: Error) => toast(e.message, 'error')), [toast])
+  useEffect(load, [load])
+  const apply = useCallback(
+    async (patch: Partial<Settings>): Promise<void> => {
+      setS((cur) => (cur ? { ...cur, ...patch } : cur))
+      try {
+        const { destinations: _d, ...rest } = patch
+        setS(await api.patchSettings(rest))
+      } catch (e) {
+        const m = (e as Error).message
+        toast(/only available|only pause/i.test(m) ? 'Change this on the PC.' : `Couldn't change that: ${m}`, 'error')
+        load()
+      }
+    },
+    [toast, load]
   )
+  return { s, apply, load }
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Switch({ on, onChange, label, className = '' }: { on: boolean; onChange: (v: boolean) => void; label: string; className?: string }) {
   return (
-    <label className="field">
-      <span className="field-label">{label}</span>
-      {children}
-      {hint && <span className="field-hint">{hint}</span>}
-    </label>
-  )
-}
-
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <button role="switch" aria-checked={checked} className={`switch ${checked ? 'on' : ''}`} onClick={() => onChange(!checked)}>
-      <span className="switch-knob" />
-      <span>{label}</span>
+    <button role="switch" aria-checked={on} aria-label={label} className={`sw ${on ? 'on' : ''} ${className}`} onClick={() => onChange(!on)}>
+      <i />
     </button>
   )
 }
 
-function CameraTab({ s, status, edit, toast, onSetup }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void; toast: Props['toast']; onSetup: () => void }) {
-  const ftp = s.ftp
-  const setFtp = (p: Partial<Settings['ftp']>): void => edit({ ftp: { ...ftp, ...p } })
+const rememberedPin = (): string | null => {
+  try {
+    return localStorage.getItem('shotdrop.key')
+  } catch {
+    return null
+  }
+}
+const newPin = (): string => String(Math.floor(1000 + Math.random() * 9000))
+const addrOf = (status: Status | null): string => (status?.ftp.addresses[0] ? `${status.ftp.addresses[0]}:${status.ftp.port}` : '')
 
-  return (
-    <>
-      <section className="panel">
-        <div className="row between">
-          <h3>Camera connection</h3>
-          <Switch checked={ftp.enabled} onChange={(v) => setFtp({ enabled: v })} label={ftp.enabled ? 'FTP server on' : 'FTP server off'} />
-        </div>
-        <p className="muted small">Host, password, QR code and per-brand menu steps are on the setup screen.</p>
-        <button className="btn" onClick={onSetup}><Icon name="camera" /> Camera setup</button>
-      </section>
-
-      <section className="panel">
-        <h3>Connection check</h3>
-        <NetworkCheck watch={`${status?.ftp.running}-${status?.ftp.port}`} toast={toast} />
-      </section>
-
-      <section className="panel">
-        <h3>Cameras / FTP users</h3>
-        <p className="muted small">Give each camera or shooter its own login and their frames are tagged by name.</p>
-        {ftp.users.map((u, i) => (
-          <div className="row user-row" key={i}>
-            <input className="input" value={u.label} placeholder="Label" aria-label="Label"
-              onChange={(e) => setFtp({ users: ftp.users.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} />
-            <input className="input mono" value={u.username} placeholder="user" aria-label="Username"
-              onChange={(e) => setFtp({ users: ftp.users.map((x, j) => (j === i ? { ...x, username: e.target.value.replace(/[^\w.-]/g, '') } : x)) })} />
-            <input className="input mono" value={u.password} placeholder="password" aria-label="Password"
-              onChange={(e) => setFtp({ users: ftp.users.map((x, j) => (j === i ? { ...x, password: e.target.value } : x)) })} />
-            <button className="icon-btn" disabled={ftp.users.length === 1} title="Remove"
-              onClick={() => setFtp({ users: ftp.users.filter((_, j) => j !== i) })}>
-              <Icon name="trash" />
-            </button>
-          </div>
-        ))}
-        <button className="btn" onClick={() => setFtp({
-          users: [...ftp.users, { label: `Camera ${ftp.users.length + 1}`, username: `camera${ftp.users.length + 1}`, password: Math.random().toString(36).slice(2, 10) }]
-        })}>
-          <Icon name="plus" /> Add camera
-        </button>
-      </section>
-
-      <section className="panel">
-        <h3>Ports</h3>
-        <div className="row">
-          <Field label="FTP port" hint={PORT_HINT}>
-            <input className="input mono" type="number" value={ftp.port} onChange={(e) => setFtp({ port: Number(e.target.value) })} />
-          </Field>
-          <Field label="Passive ports" hint="Cameras use these for the photo transfer. 'Allow cameras' in the connection check opens them.">
-            <div className="row tight">
-              <input className="input mono" type="number" value={ftp.pasvMin} onChange={(e) => setFtp({ pasvMin: Number(e.target.value) })} />
-              <span className="muted">–</span>
-              <input className="input mono" type="number" value={ftp.pasvMax} onChange={(e) => setFtp({ pasvMax: Number(e.target.value) })} />
-            </div>
-          </Field>
-        </div>
-      </section>
-
-    </>
-  )
+function usePref(k: PrefKey): [string, (v: string) => void] {
+  const [v, setV] = useState(() => getPref(k))
+  return [v, (n) => { setPref(k, n); setV(n) }]
 }
 
-function LibraryTab({ s, edit }: { s: Settings; edit: (p: Partial<Settings>) => void }) {
+// ================= desktop =================
+
+/** Full Settings view under the top bar (Esc goes back). Kept under its old name so App keeps compiling. */
+export function SettingsDrawer({ status, tab, onClose, toast, onSetup, onOpenSync }: Props) {
+  const { s, apply } = useLiveSettings(toast)
+  const [active, setActive] = useState('library')
+  const main = useRef<HTMLElement>(null)
+  const [editors, setEditors] = useState<{ id: string; name: string }[]>([])
+  const [removable, setRemovable] = useState<Drive[]>([])
+  const [bursts, setBursts] = usePref('bursts')
+  const [shift, setShift] = usePref('shiftAdvance')
+  const [del, setDel] = usePref('deleteMode')
+  const [open, setOpen] = useState<{ card?: number; rename?: number; address?: boolean; check?: boolean; qr?: boolean; adv?: boolean }>({})
+
+  useEffect(() => { void desktop?.editors().then(setEditors).catch(() => undefined) }, [])
+  useEffect(() => { void fetchPlaces().then((p) => setRemovable((p?.drives ?? []).filter((d) => d.kind === 'removable'))) }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const go = useCallback((id: string): void => {
+    if (id === 'sync' && onOpenSync) return onOpenSync()
+    setActive(id)
+    document.getElementById(`st-${id}`)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
+  }, [onOpenSync])
+  useEffect(() => { if (tab) go(TAB_SECTION[tab]) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = main.current
+    if (!el || !s) return
+    const io = new IntersectionObserver((es) => { const v = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]; if (v) setActive(v.target.id.slice(3)) }, { root: el, rootMargin: '0px 0px -70% 0px' })
+    el.querySelectorAll('section.sec').forEach((n) => io.observe(n))
+    return () => io.disconnect()
+  }, [s])
+
+  const ftp = s?.ftp
+  const setFtp = (p: Partial<Settings['ftp']>): void => void apply({ ftp: { ...s!.ftp, ...p } })
+  const setUsers = (users: FtpUser[]): void => setFtp({ users })
+  const lan = lanUrl(status)
+  const t = status?.tunnel
+  const tunnelOn = t?.status === 'running' || t?.status === 'starting' || t?.status === 'installing'
+  const toggleTunnel = async (): Promise<void> => {
+    try {
+      if (tunnelOn) await api.tunnelStop()
+      else {
+        if (t && !t.installed) await api.tunnelInstall()
+        await api.tunnelStart()
+      }
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
+  const watchAdd = (p: string): void => { if (s && !s.watchFolders.includes(p)) void apply({ watchFolders: [...s.watchFolders, p] }) }
+
   return (
-    <>
-      <section className="panel">
-        <h3>Library folder</h3>
-        <p className="muted small">Shots are filed into a folder per day, e.g. 2026-11-06.</p>
-        <div className="row tight">
-          <input className="input mono" value={s.libraryDir} onChange={(e) => edit({ libraryDir: e.target.value })} />
-          {desktop && (
-            <>
-              <button className="btn" onClick={async () => {
-                const p = await desktop!.pickFolder()
-                if (p) edit({ libraryDir: p })
-              }}>
-                <Icon name="folder" /> Browse
-              </button>
-              <button className="btn" onClick={() => void desktop!.openPath(s.libraryDir)}>Open</button>
-            </>
-          )}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h3>XMP sidecars</h3>
-        <p className="muted small">
-          Write rating, pick/reject and colour label to a <span className="mono">.xmp</span> file next to each shot, so Lightroom, Capture One and
-          Bridge see your culling. Sidecars are synced along with the photos.
-        </p>
-        <Switch checked={s.xmpSidecars} onChange={(v) => edit({ xmpSidecars: v })} label={s.xmpSidecars ? 'Write sidecars' : 'Off'} />
-      </section>
-
-      <section className="panel">
-        <h3>Watched folders</h3>
-        <p className="muted small">New images in these folders are copied in (originals left alone). Handy for card readers or tethering software.</p>
-        {s.watchFolders.map((f, i) => (
-          <div className="row tight" key={f}>
-            <span className="input mono readonly">{f}</span>
-            <button className="icon-btn" title="Remove" onClick={() => edit({ watchFolders: s.watchFolders.filter((_, j) => j !== i) })}>
-              <Icon name="trash" />
-            </button>
-          </div>
+    <Dialog title="Settings" onClose={onClose} wide>
+    <div className="st-page">
+      <nav className="st-nav" aria-label="Settings sections">
+        {SECTIONS.map((x) => (
+          <a key={x.id} href={`#st-${x.id}`} className={active === x.id ? 'on' : ''} onClick={(e) => { e.preventDefault(); go(x.id) }}>
+            {x.label}
+            {x.id === 'sync' && s && <span className="st-n">{s.destinations.length}</span>}
+          </a>
         ))}
-        {desktop && (
-          <button className="btn" onClick={async () => {
-            const p = await desktop!.pickFolder()
-            if (p && !s.watchFolders.includes(p)) edit({ watchFolders: [...s.watchFolders, p] })
-          }}>
-            <Icon name="plus" /> Add folder
-          </button>
-        )}
-      </section>
+        <div className="st-foot">Changes apply instantly. Nothing to save.</div>
+      </nav>
 
-      <section className="panel">
-        <h3>rclone</h3>
-        <Field label="rclone executable" hint="Leave as 'rclone' if it's on your PATH.">
-          <input className="input mono" value={s.rclonePath} onChange={(e) => edit({ rclonePath: e.target.value })} />
-        </Field>
-      </section>
-    </>
-  )
-}
+      <main className="st-main" ref={main} {...dropProps((p) => void apply({ libraryDir: p }))}>
+        {!s || !ftp ? <p className="st-muted">Loading…</p> : (
+          <>
+            <Sec id="library" title="Library" i={0}>
+              <Row label="Photos land in" stack>
+                <FolderPicker value={s.libraryDir} onChange={(p) => void apply({ libraryDir: p })} s={s} status={status} dayFolder noCheck={false}
+                  hint={`${status?.library.free != null ? `${fmtSize(status.library.free)} free. ` : ''}A folder per shoot day. Photos you copy into it yourself are picked up too. Drop a folder from Explorer anywhere on this page to use it.`}
+                  extra={<>
+                    {desktop && <button className="fp-btn plain" onClick={() => void desktop!.openPath(s.libraryDir)}>Show</button>}
+                    <button className="fp-btn plain" title="Add photos that are in the library folder but not in the gallery" onClick={async () => {
+                      try {
+                        const { queued } = await api.rescanLibrary()
+                        toast(queued ? `Adding ${queued} photo${queued === 1 ? '' : 's'} from the library folder.` : 'Everything in the library folder is already in the gallery.')
+                      } catch (e) { toast((e as Error).message, 'error') }
+                    }}>Rescan</button>
+                  </>} />
+              </Row>
+              <Row label="Also watch" hint="Copied in, never moved. Card readers are offered here automatically when plugged in.">
+                <div className="st-chips">
+                  {s.watchFolders.map((f, i) => (
+                    <span key={f} className="quick" title={f}>{f.length > 28 ? lastPart(f) : f}<button className="x" aria-label={`Stop watching ${f}`} onClick={() => void apply({ watchFolders: s.watchFolders.filter((_, j) => j !== i) })}>×</button></span>
+                  ))}
+                  {removable.filter((d) => !s.watchFolders.includes(d.path)).map((d) => (
+                    <button key={d.path} className="quick on" onClick={() => watchAdd(d.path)}>+ Watch {d.path.slice(0, 2)} {d.label}</button>
+                  ))}
+                  {desktop && <button className="quick dashed" onClick={async () => { const p = await desktop!.pickFolder(); if (p) watchAdd(p) }}>+ Card reader or tether folder</button>}
+                </div>
+              </Row>
+            </Sec>
 
-function RemoteTab({ s, status, edit, toast }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void; toast: Props['toast'] }) {
-  return (
-    <>
-      <section className="panel">
-        <div className="row between">
-          <h3>Remote gallery</h3>
-          <Switch checked={s.remote.enabled} onChange={(v) => edit({ remote: { ...s.remote, enabled: v } })} label={s.remote.enabled ? 'On' : 'Off'} />
-        </div>
-        <p className="muted small">
-          View and cull from a phone or another computer on the same network. When on, anyone on your network can open it. The public (internet) link still asks for a PIN.
-        </p>
-        <Field label="Public link PIN">
-          <input className="input mono big" value={s.remote.pin} onChange={(e) => edit({ remote: { ...s.remote, pin: e.target.value.replace(/\D/g, '').slice(0, 12) } })} />
-        </Field>
-        {status?.api.remote && lanUrl(status) && (
-          <div className="remote-qr">
-            <PhoneLink url={lanUrl(status)!} size={200} />
-            <p className="muted small">Scan with a phone on this network, then Add to Home Screen.</p>
-          </div>
-        )}
-        {status?.api.remote && (
-          <div className="conn-card">
-            {status.api.urls.map((u) => (
-              <div className="conn-field" key={u}>
-                <span className="conn-label">Open</span>
-                <span className="conn-value mono">{u}</span>
+            <Sec id="cameras" title="Cameras" i={1}>
+              <div className="st-cams">
+                {ftp.users.map((u, i) => {
+                  const cam = status?.cameras.find((c) => c.username === ftpLoginName(u))
+                  return (
+                    <div key={i} className="st-cam-wrap">
+                      <div className="st-cam">
+                        <span className={`dot ${cam?.connected ? 'live' : ''}`} style={cam?.connected ? undefined : { background: 'var(--faintest)' }} />
+                        <div className="st-cam-t">
+                          {open.rename === i ? (
+                            <input className="st-input" autoFocus defaultValue={u.label} aria-label="Camera name" onBlur={(e) => { setUsers(ftp.users.map((x, j) => (j === i ? { ...x, label: e.target.value } : x))); setOpen({}) }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { e.stopPropagation(); setOpen({}) } }} />
+                          ) : (
+                            <div className="st-cam-n">{u.label || ftpLoginName(u)} <span className="st-muted">· {u.label ? 'named' : 'named automatically'}</span></div>
+                          )}
+                          <div className="mono st-cam-s">user {ftpLoginName(u)}{u.username && u.password ? ` · ${u.password}` : u.username ? ' · any password' : ' · no password'}</div>
+                        </div>
+                        <button className="tb" onClick={() => setOpen({ rename: i })}>Rename</button>
+                        <button className="tb" onClick={() => setOpen({ card: open.card === i ? undefined : i })}>Show card</button>
+                        {ftp.users.length > 1 && <button className="tb" aria-label="Remove login" onClick={() => setUsers(ftp.users.filter((_, j) => j !== i))}>×</button>}
+                      </div>
+                      <AnimatePresence>
+                        {open.card === i && (
+                          <motion.div className="st-card" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={fade}>
+                            <div className="st-card-in">
+                              <CopyField label="Host" value={status?.ftp.addresses[0] ?? ''} />
+                              <CopyField label="Port" value={String(ftp.port)} />
+                              <CopyField label="User" value={ftpLoginName(u)} />
+                              {u.username && u.password && <CopyField label="Password" value={u.password} />}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )
+                })}
+                <button className="st-cam dashed" onClick={() => setUsers([...ftp.users, { label: '', username: `camera${ftp.users.length + 1}`, password: Math.random().toString(36).slice(2, 10) }])}>+ Add a camera login</button>
               </div>
-            ))}
-          </div>
+              <Row label="FTP server">
+                <Switch on={ftp.enabled} onChange={(v) => setFtp({ enabled: v })} label={ftp.enabled ? 'FTP server on' : 'FTP server off'} />
+                <span className="mono st-text2">{addrOf(status) || `port ${ftp.port}`}</span>
+                <button className="tb" onClick={() => setOpen({ ...open, address: !open.address })}>Change address</button>
+                <button className="tb" onClick={() => setOpen({ ...open, check: !open.check })}>Connection check</button>
+                {onSetup && <button className="tb" onClick={onSetup}>Camera setup</button>}
+              </Row>
+              <AnimatePresence>
+                {open.address && status && <Reveal key="a"><AddressPicker ftp={status.ftp} /></Reveal>}
+                {open.check && <Reveal key="c"><NetworkCheck watch={`${status?.ftp.running}-${status?.ftp.port}`} toast={toast} /></Reveal>}
+              </AnimatePresence>
+              <Row label={<>Wi-Fi live view <span className="st-muted">(Nikon Z, experimental)</span></>}>
+                <Switch on={s.ptp.enabled} onChange={(v) => void apply({ ptp: { ...s.ptp, enabled: v } })} label={s.ptp.enabled ? 'Live view on' : 'Live view off'} />
+              </Row>
+            </Sec>
+
+            <Sec id="culling" title="Culling" i={2}>
+              <Row label="Group bursts and mark the best"><Switch on={bursts === '1'} onChange={(v) => setBursts(v ? '1' : '0')} label="Bursts" /><span className="st-muted">Flags soft frames and eyes closed too</span></Row>
+              <Row label="Write XMP sidecars"><Switch on={s.xmpSidecars} onChange={(v) => void apply({ xmpSidecars: v })} label="XMP sidecars" /><span className="st-muted">Lightroom and Capture One see your ratings</span></Row>
+              <Row label="Shift + key moves to next"><Switch on={shift === '1'} onChange={(v) => setShift(v ? '1' : '0')} label="Shift advances" /></Row>
+              <Row label="Delete goes to">
+                <div className="seg" role="radiogroup" aria-label="Delete goes to">
+                  <button role="radio" aria-checked={del === 'bin'} className={del === 'bin' ? 'on' : ''} onClick={() => setDel('bin')}>Recycle bin</button>
+                  <button role="radio" aria-checked={del === 'permanent'} className={del === 'permanent' ? 'on' : ''} onClick={() => setDel('permanent')}>Permanent</button>
+                </div>
+              </Row>
+            </Sec>
+
+            <Sec id="remote" title="Phone and remote" i={3}>
+              <Row label="Remote gallery">
+                <Switch on={s.remote.enabled} onChange={(v) => void apply({ remote: { ...s.remote, enabled: v, pin: s.remote.pin || newPin() } })} label="Remote gallery" />
+                <span className="st-muted">PIN</span>
+                <span className="mono st-pin">{s.remote.pin ? s.remote.pin.split('').join(' ') : '—'}</span>
+                <button className="tb" onClick={() => void apply({ remote: { ...s.remote, pin: newPin() } })}>New PIN</button>
+                <button className="tb st-accent" onClick={() => setOpen({ ...open, qr: !open.qr })}>Show QR</button>
+              </Row>
+              <AnimatePresence>
+                {open.qr && <Reveal key="q">{lan && s.remote.enabled ? <PhoneLink url={lan} pin={s.remote.pin} size={180} /> : <p className="st-muted">Turn on the remote gallery and connect to a network to get a QR code.</p>}</Reveal>}
+              </AnimatePresence>
+              <Row label="Public link">
+                <Switch on={tunnelOn} onChange={() => void toggleTunnel()} label="Public link" />
+                <span className="st-muted">{t?.status === 'running' && t.url ? t.url : t?.status === 'error' ? t.error ?? 'Could not start' : t?.status === 'installing' ? 'Getting the helper…' : 'One click, no account. Lets a client watch from anywhere.'}</span>
+              </Row>
+            </Sec>
+
+            <Sec id="sync" title="Sync" i={4}>
+              {s.destinations.length === 0 && <p className="st-muted">No destinations yet. Photos stay on this PC.</p>}
+              {s.destinations.map((d) => <div key={d.id} className="st-dest"><span className="st-cam-n">{d.name}</span><span className="mono st-muted st-ell">{d.target}</span></div>)}
+              {onOpenSync && <div><button className="tb" onClick={onOpenSync}>Open Sync</button></div>}
+            </Sec>
+
+            <Sec id="apps" title="Open in…" i={5}>
+              {editors.length ? <div className="st-chips">{editors.map((e) => <span key={e.id} className="quick">{e.name}</span>)}</div> : <p className="st-muted">No editors detected. "Open with…" in the photo panel lets you choose one.</p>}
+              <Row label="rclone"><input className="st-input mono" defaultValue={s.rclonePath} aria-label="rclone executable" onBlur={(e) => e.target.value !== s.rclonePath && void apply({ rclonePath: e.target.value })} /></Row>
+            </Sec>
+
+            <Sec id="about" title="About" i={6}>
+              <Row label="ShotDrop"><span className="mono st-text2">{status?.version ?? ''}</span></Row>
+              <Row label="Ports">
+                <button className="tb" onClick={() => setOpen({ ...open, adv: !open.adv })}>{open.adv ? 'Hide' : 'Show'} FTP and API ports</button>
+              </Row>
+              <AnimatePresence>
+                {open.adv && (
+                  <Reveal key="p">
+                    <div className="st-ports">
+                      <Num label="FTP port" v={ftp.port} on={(n) => setFtp({ port: n })} />
+                      <Num label="Passive from" v={ftp.pasvMin} on={(n) => setFtp({ pasvMin: n })} />
+                      <Num label="to" v={ftp.pasvMax} on={(n) => setFtp({ pasvMax: n })} />
+                      <Num label="API port (restart to apply)" v={s.api.port} on={(n) => void apply({ api: { port: n } })} />
+                    </div>
+                  </Reveal>
+                )}
+              </AnimatePresence>
+            </Sec>
+          </>
         )}
-      </section>
-
-      <section className="panel">
-        <h3>API</h3>
-        <Field label="Port" hint="REST API and web gallery. Restart ShotDrop after changing it.">
-          <input className="input mono" type="number" value={s.api.port} onChange={(e) => edit({ api: { port: Number(e.target.value) } })} />
-        </Field>
-      </section>
-
-      <TunnelPanel s={s} status={status} edit={edit} toast={toast} />
-    </>
+      </main>
+    </div>
+    </Dialog>
   )
 }
+
+function Num({ label, v, on }: { label: string; v: number; on: (n: number) => void }) {
+  return <label className="st-num">{label}<input className="st-input mono" type="number" defaultValue={v} key={v} onBlur={(e) => { const n = Number(e.target.value); if (n && n !== v) on(n) }} /></label>
+}
+const Reveal = ({ children }: { children: React.ReactNode }) => (
+  <motion.div className="st-reveal" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={fade}>{children}</motion.div>
+)
+function Sec({ id, title, i, children }: { id: string; title: string; i: number; children: React.ReactNode }) {
+  return (
+    <motion.section className="sec" id={`st-${id}`} initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ ...firm, delay: i * 0.06 }}>
+      <h2>{title}</h2>
+      {children}
+    </motion.section>
+  )
+}
+function Row({ label, hint, stack, children }: { label: React.ReactNode; hint?: string; stack?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={`st-row ${stack ? 'stack' : ''}`}>
+      <div className="l">{label}</div>
+      <div className="c">{children}</div>
+      {hint && <div className="h">{hint}</div>}
+    </div>
+  )
+}
+
+// ================= phone =================
+
+/** MSettings.dc.html: grouped rows, 44px switches. Writes go through the same API; the PC decides what a phone may change. */
+export function MobileSettings({ status, toast }: { status: Status | null; toast: Toast }) {
+  const { s, apply } = useLiveSettings(toast)
+  const [bursts, setBursts] = usePref('bursts')
+  const [del, setDel] = usePref('deleteMode')
+  const [card, setCard] = useState<number | null>(null)
+  const [check, setCheck] = useState(false)
+  const t = status?.tunnel
+  return (
+    <div className="m-page">
+      <div className="m-head"><div><h1>Settings</h1><div className="st-sub">Changes apply instantly on the PC.</div></div></div>
+      <div className="m-scroll st-m">
+        {!s ? <p className="st-muted">Loading…</p> : (
+          <>
+            <MGroup title="LIBRARY">
+              <div className="mrow stack">
+                <div className="t"><div>Photos land in</div><div className="mono s">{s.libraryDir}{'\\{day}'}</div></div>
+                <FolderPicker value={s.libraryDir} onChange={(p) => { if (p !== s.libraryDir) toast(`Picked ${p}. The library folder is changed on the PC, in Settings.`) }} s={s} status={status} remote noCheck />
+              </div>
+              <div className="mrow"><div className="t"><div>Watched folders</div><div className="s">{s.watchFolders.length ? s.watchFolders.join(', ') : 'None'}</div></div></div>
+            </MGroup>
+            <MGroup title="CAMERAS">
+              {s.ftp.users.map((u, i) => {
+                const cam = status?.cameras.find((c) => c.username === ftpLoginName(u))
+                return (
+                  <div key={i} className="mrow stack">
+                    <div className="mline">
+                      <span className={`dot ${cam?.connected ? 'live' : ''}`} style={cam?.connected ? undefined : { background: 'var(--faintest)' }} />
+                      <div className="t"><div>{u.label || ftpLoginName(u)}</div><div className="mono s">{ftpLoginName(u)}{u.password ? ` · ${u.password}` : ''}</div></div>
+                      <button className="mlink" onClick={() => setCard(card === i ? null : i)}>Show card</button>
+                    </div>
+                    {card === i && <div className="st-card-in"><CopyField label="Host" value={status?.ftp.addresses[0] ?? ''} /><CopyField label="Port" value={String(s.ftp.port)} /><CopyField label="User" value={ftpLoginName(u)} />{u.username && u.password && <CopyField label="Password" value={u.password} />}</div>}
+                  </div>
+                )
+              })}
+              <div className="mrow"><div className="t"><div>FTP server</div><div className="mono s">{addrOf(status) || `port ${s.ftp.port}`}</div></div><Switch className="m" on={s.ftp.enabled} onChange={(v) => void apply({ ftp: { ...s.ftp, enabled: v } })} label="FTP server" /></div>
+              <button className="mrow tap" onClick={() => setCheck(!check)}><div className="t"><div>Connection check</div></div><span className="chev">›</span></button>
+              {check && <div className="mrow stack"><NetworkCheck watch={`${status?.ftp.running}-${status?.ftp.port}`} toast={toast} /></div>}
+            </MGroup>
+            <MGroup title="CULLING">
+              <div className="mrow"><div className="t"><div>Group bursts, mark best</div><div className="s">Also flags soft and eyes closed</div></div><Switch className="m" on={bursts === '1'} onChange={(v) => setBursts(v ? '1' : '0')} label="Bursts" /></div>
+              <div className="mrow"><div className="t"><div>Write XMP sidecars</div><div className="s">Lightroom and Capture One see ratings</div></div><Switch className="m" on={s.xmpSidecars} onChange={(v) => void apply({ xmpSidecars: v })} label="XMP sidecars" /></div>
+              <button className="mrow tap" onClick={() => setDel(del === 'bin' ? 'permanent' : 'bin')}><div className="t"><div>Delete goes to</div></div><span className="st-text2">{del === 'bin' ? 'Recycle bin' : 'Permanent'}</span><span className="chev">›</span></button>
+            </MGroup>
+            <MGroup title="PHONE AND REMOTE">
+              <div className="mrow"><div className="t"><div>Remote gallery</div><div className="s">PIN <span className="mono st-pin-s">{rememberedPin() || (s.remote.enabled ? 'not needed here' : 'off')}</span></div></div><Switch className="m" on={s.remote.enabled} onChange={(v) => void apply({ remote: { ...s.remote, enabled: v } })} label="Remote gallery" /></div>
+              <div className="mrow"><div className="t"><div>Public link</div><div className="s">{t?.status === 'running' ? 'On' : 'One click, no account'}</div></div><Switch className="m" on={t?.status === 'running'} onChange={(v) => void (v ? api.tunnelStart() : api.tunnelStop()).catch(() => toast('Change this on the PC.', 'error'))} label="Public link" /></div>
+            </MGroup>
+          </>
+        )}
+      </div>
+      <TabBar current="settings" />
+    </div>
+  )
+}
+const MGroup = ({ title, children }: { title: string; children: React.ReactNode }) => <section className="msec"><h2>{title}</h2>{children}</section>

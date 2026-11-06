@@ -1,19 +1,55 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Shot } from '@shared/types'
 import { api } from '../api'
+import { fmtAperture, fmtFocal, fmtIso, fmtShutter, fmtTime } from '../format'
 import { Icon } from './Icon'
+import { SessionChooser, type ChooserProps } from './TopBar'
+import type { Burst } from './Loupe'
 
 interface Props {
   shot: Shot | null
+  /** The shots around the current one, for the page dots. */
+  neighbours: number
+  position: number
+  burst: Burst | null
   onPrev: () => void
   onNext: () => void
+}
+
+interface TopProps extends ChooserProps {
+  title: string
+  follow: boolean
+  onFollow: (f: boolean) => void
+  onGrid: () => void
+  onMenu: () => void
+}
+
+/** Phone header: grid button, session (tap for the list), Follow pill, menu. */
+export function MobileTop({ follow, onFollow, onGrid, onMenu, ...chooser }: TopProps) {
+  return (
+    <div className="m-top">
+      <button className="m-sq" aria-label="Grid" onClick={onGrid}>
+        <Icon name="grid" size={18} />
+      </button>
+      <SessionChooser {...chooser} />
+      <button className={`m-follow ${follow ? 'on' : ''}`} aria-pressed={follow} onClick={() => onFollow(!follow)}>
+        <span className={`dot ${follow ? 'live' : ''}`} style={follow ? undefined : { background: '#555' }} />
+        Follow
+      </button>
+      <button className="m-sq" aria-label="Menu" onClick={onMenu}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
+    </div>
+  )
 }
 
 interface View { s: number; x: number; y: number }
 const MAX = 5
 
 /** Touch loupe: swipe to change shot, pinch or double-tap to zoom, drag to pan while zoomed. */
-export function MobileLoupe({ shot, onPrev, onNext }: Props) {
+export function MobileLoupe({ shot, neighbours, position, burst, onPrev, onNext }: Props) {
   const [v, setV] = useState<View>({ s: 1, x: 0, y: 0 })
   const [dx, setDx] = useState(0) // live swipe offset
   const box = useRef<HTMLDivElement>(null)
@@ -96,37 +132,54 @@ export function MobileLoupe({ shot, onPrev, onNext }: Props) {
     }
   }
 
-  if (!shot) return <div className="loupe" />
+  if (!shot) return <div className="m-photo" />
   const jpeg = shot.files.find((f) => f.kind === 'jpeg')
   // Sharper source once zoomed in (camera JPEG), the 2560px preview otherwise.
   const src = v.s > 1.5 && jpeg ? api.originalUrl(shot, jpeg.id) : api.previewUrl(shot)
+  const exif = [fmtShutter(shot.shutter), fmtAperture(shot.aperture), fmtIso(shot.iso), fmtFocal(shot.focalLength)].filter(Boolean) as string[]
+  const dots = Array.from({ length: Math.min(neighbours, 5) }, (_, i) => i)
 
   return (
-    <div className="loupe m-loupe">
-      <div
-        ref={box}
-        className="m-canvas"
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={up}
-      >
-        {shot.hasPreview ? (
-          <img
-            key={shot.id}
-            className="m-img"
-            src={src}
-            alt={shot.name}
-            draggable={false}
-            style={{ transform: `translate(${v.x + dx}px, ${v.y}px) scale(${v.s})`, transition: dx || pts.current.size ? 'none' : 'transform 0.2s' }}
-          />
-        ) : (
-          <div className="no-preview">
-            <Icon name="camera" size={32} />
-            <span>No preview for {shot.files.map((f) => f.name).join(', ')}</span>
-          </div>
-        )}
+    <>
+      <div className="m-photo">
+        <div ref={box} className="m-canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+          {shot.hasPreview ? (
+            <img
+              key={shot.id}
+              className="m-img"
+              src={src}
+              alt={shot.name}
+              draggable={false}
+              style={{ transform: `translate(${v.x + dx}px, ${v.y}px) scale(${v.s})`, transition: dx || pts.current.size ? 'none' : 'transform 0.2s' }}
+            />
+          ) : (
+            <div className="no-preview">
+              <Icon name="camera" size={32} />
+              <span>No preview for {shot.files.map((f) => f.name).join(', ')}</span>
+            </div>
+          )}
+        </div>
+        <div className="m-tl">
+          <span className="badge">{jpeg ? 'Camera JPEG' : shot.files.some((f) => f.kind === 'raw') ? 'RAW preview' : 'Preview'}</span>
+          {burst && burst.size > 1 && <span className="badge">Burst {burst.index}/{burst.size}{burst.best ? ' · best' : ''}</span>}
+        </div>
+        <div className="m-tr">
+          {shot.flag === 1 && <span className="badge pick">P</span>}
+          {shot.flag === -1 && <span className="badge rej">X</span>}
+        </div>
+        <div className="m-dots" aria-hidden>
+          {dots.map((i) => (
+            <span key={i} className={i === Math.min(position, dots.length - 1) ? 'cur' : ''} />
+          ))}
+        </div>
+        <div className="m-br">
+          <span className="badge">{v.s > 1.05 ? `${Math.round(v.s * 100)}%` : 'pinch · 100%'}</span>
+        </div>
       </div>
-    </div>
+      <div className="m-exif mono">
+        {exif.map((e) => <span key={e}>{e}</span>)}
+        <span style={{ color: 'var(--faint)' }}>{fmtTime(shot.capturedAt).slice(0, 5)}</span>
+      </div>
+    </>
   )
 }

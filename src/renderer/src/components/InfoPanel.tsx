@@ -1,140 +1,87 @@
-import { useEffect, useState } from 'react'
-import type { Label, Shot, ShotPatch, Status, SyncStatus } from '@shared/types'
-import { motion } from 'motion/react'
-import { api } from '../api'
-import { fmtAperture, fmtFocal, fmtShutter, fmtSize, fmtTime, fmtDate } from '../format'
-import { Icon } from './Icon'
-import { OpenExternal } from './OpenExternal'
+import type { Shot, ShotPatch, Status, SyncStatus } from '@shared/types'
+import { desktop } from '../api'
+import { fmtAperture, fmtFocal, fmtShutter, fmtSize, fmtTime } from '../format'
 import { MetadataPanel } from './MetadataPanel'
 import { SharePanel } from './SharePanel'
 
-const LABELS: Exclude<Label, null>[] = ['red', 'yellow', 'green', 'blue', 'purple']
-const SYNC_TEXT: Record<SyncStatus, string> = { pending: 'Queued', running: 'Uploading', done: 'Synced', error: 'Failed' }
+const FILTER_WORD = { all: 'everything', jpeg: 'JPEG', raw: 'RAW', picks: 'picks' } as const
+const DOT: Record<SyncStatus, string> = { done: 'var(--live)', running: 'var(--sync)', pending: 'var(--sync)', error: 'var(--reject)' }
+const STATE: Record<SyncStatus, string> = { done: 'done', running: 'uploading', pending: 'queued', error: 'failed' }
+const extOf = (n: string): string => (n.includes('.') ? n.slice(n.lastIndexOf('.') + 1).toUpperCase() : '')
 
 interface Props {
   shot: Shot | null
   status: Status | null
-  onPatch: (p: ShotPatch) => void
-  compare: Shot[]
-  onSelect: (id: number) => void
+  /** Kept for the phone sheet; the desktop panel is read-only (keys do the culling). */
+  onPatch?: (p: ShotPatch) => void
+  compare?: Shot[]
+  onSelect?: (id: number) => void
 }
 
-export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
-  const [destNames, setDestNames] = useState<Record<string, string>>({})
-  const syncKeys = shot ? Object.keys(shot.sync).join() : ''
-  useEffect(() => {
-    if (!syncKeys) return
-    api.settings().then((s) => setDestNames(Object.fromEntries(s.destinations.map((d) => [d.id, d.name])))).catch(() => undefined)
-  }, [syncKeys])
-
+export function InfoPanel({ shot, status }: Props) {
   if (!shot) return <aside className="info" />
 
-  const rows: [string, string | null][] = [
-    ['Captured', `${fmtDate(shot.session)}, ${fmtTime(shot.capturedAt)}`],
-    ['Camera', shot.camera],
+  const kinds = shot.files.filter((f) => f.kind !== 'sidecar')
+  const kindLabel = [...new Set(shot.files.map((f) => (f.kind === 'jpeg' ? 'JPEG' : f.kind === 'raw' ? 'RAW' : f.kind === 'heif' ? 'HEIF' : f.kind === 'video' ? 'Video' : null)))].filter(Boolean).join(' + ')
+  const exposure = [fmtShutter(shot.shutter), fmtAperture(shot.aperture)].filter(Boolean).join(' at ')
+  const landed = Math.max(0, Math.round((shot.importedAt - shot.capturedAt) / 1000))
+  const cams = status?.cameras ?? []
+  const cam = cams.find((c) => c.username === shot.source)
+  const rows: [string, React.ReactNode][] = [
+    ['Camera', shot.camera ? <>{shot.camera}{shot.source && <> · <span style={{ color: 'var(--muted)' }}>{cam?.label || shot.source}</span></>}</> : null],
     ['Lens', shot.lens],
-    ['Exposure', [fmtShutter(shot.shutter), fmtAperture(shot.aperture)].filter(Boolean).join(' at ') || null],
-    ['ISO', shot.iso ? String(shot.iso) : null],
-    ['Focal length', fmtFocal(shot.focalLength)],
-    ['Size', shot.width && shot.height ? `${shot.width} × ${shot.height}` : null],
-    ['From', shot.source]
+    ['Taken', fmtTime(shot.capturedAt)],
+    ['Landed', landed < 600 ? <>{fmtTime(shot.importedAt)} · <span style={{ color: 'var(--live)' }}>{landed} s</span></> : fmtTime(shot.importedAt)],
+    ['Exposure', exposure || null],
+    ['ISO / focal', [shot.iso ? `ISO ${shot.iso}` : '', fmtFocal(shot.focalLength) ?? ''].filter(Boolean).join(' · ') || null],
+    ['Size', shot.width && shot.height ? `${shot.width} × ${shot.height}` : null]
   ]
+  const places = Object.entries(shot.sync).flatMap(([id, st]) => {
+    const d = status?.destinations.find((x) => x.id === id)
+    return d ? [{ id, name: d.name, filter: d.filter, st }] : []
+  })
 
   return (
     <aside className="info">
-      <section>
-        <h3>Cull</h3>
-        <div className="stars-input" role="radiogroup" aria-label="Rating">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              role="radio"
-              aria-checked={shot.rating === n}
-              className={n <= shot.rating ? 'on' : ''}
-              onClick={() => onPatch({ rating: shot.rating === n ? 0 : n })}
-              title={`${n} (key ${n})`}
-            >
-              ★
-            </button>
-          ))}
-          <kbd>1–5</kbd>
+      <div>
+        <div className="info-name">{shot.name}</div>
+        <div className="info-sub">
+          {kindLabel || 'File'} · {kinds.map((f) => fmtSize(f.size)).join(' + ')}
         </div>
-        <div className="flag-input">
-          <button className={shot.flag === 1 ? 'on pick' : ''} onClick={() => onPatch({ flag: shot.flag === 1 ? 0 : 1 })} title="Pick (P)">
-            <Icon name="check" /> Pick <kbd>P</kbd>
-          </button>
-          <button className={shot.flag === -1 ? 'on reject' : ''} onClick={() => onPatch({ flag: shot.flag === -1 ? 0 : -1 })} title="Reject (X)">
-            <Icon name="close" /> Reject <kbd>X</kbd>
-          </button>
-        </div>
-        <div className="label-input" aria-label="Colour label">
-          {LABELS.map((l) => (
-            <button key={l} className={`label-dot ${l} ${shot.label === l ? 'on' : ''}`} onClick={() => onPatch({ label: shot.label === l ? null : l })} aria-label={l} title={l} />
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <h3>
-          Compare <span className="muted hint">· C to add, Shift+C clears</span>
-        </h3>
-        {compare.length > 0 && (
-          <div className="compare">
-            {compare.map((c) => (
-              <motion.button key={c.id} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', bounce: 0.3, visualDuration: 0.45 }} className={c.id === shot.id ? 'sel' : ''} onClick={() => onSelect(c.id)} title={c.name}>
-                <img src={api.thumbUrl(c)} alt={c.name} draggable={false} />
-              </motion.button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h3>Details</h3>
-        <dl>
-          {rows
-            .filter(([, v]) => v)
-            .map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
-        </dl>
-      </section>
-
-      <MetadataPanel shot={shot} />
-
-      <SharePanel shot={shot} />
-
-      <section>
-        <h3>Files</h3>
-        <ul className="files">
+        <div className="info-badges">
           {shot.files.map((f) => (
-            <li key={f.id}>
-              <a href={api.originalUrl(shot, f.id)} target="_blank" rel="noreferrer" className="mono">
-                {f.name}
-              </a>
-              <span className="muted">{fmtSize(f.size)}</span>
-              {f.kind === 'video' && <OpenExternal shot={shot} file={f} />}
-            </li>
+            <span key={f.id} className="badge" style={{ background: 'var(--panel-3)' }}>{extOf(f.name)}</span>
           ))}
-        </ul>
-      </section>
+        </div>
+      </div>
 
-      {Object.keys(shot.sync).length > 0 && (
-        <section>
-          <h3>Sync</h3>
-          <ul className="files">
-            {Object.entries(shot.sync).map(([dest, st]) => (
-              <li key={dest}>
-                <span>{destNames[dest] ?? dest}</span>
-                <span className={`sync-state ${st}`}>{SYNC_TEXT[st]}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <div className="info-grid">
+        {rows.filter(([, v]) => v).map(([k, v]) => (
+          <div key={k}>
+            <div className="k">{k}</div>
+            <div className="v">{v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="info-sec">
+        <div className="k">Where this shot is</div>
+        <div className="where">
+          <div><span className="dot" style={{ background: 'var(--live)' }} /><span className="nowrap">This PC ·</span> <span className="mono where-path" title={status?.library.dir}>{status?.library.dir ?? 'library'}</span></div>
+          {places.map((p) => (
+            <div key={p.id}>
+              <span className="dot" style={{ background: DOT[p.st] }} />
+              <span className="nowrap">{p.name} · {FILTER_WORD[p.filter]}</span>
+              <span className="where-st">{STATE[p.st]}</span>
+            </div>
+          ))}
+          {!places.length && <div className="k" style={{ margin: 0 }}>No destinations yet</div>}
+        </div>
+      </div>
+
+      {desktop && <div className="info-sec"><SharePanel shot={shot} /></div>}
+      <MetadataPanel shot={shot} />
+      {desktop && <div className="info-hint">Drag the thumbnail into Explorer, email or any editor.</div>}
     </aside>
   )
 }

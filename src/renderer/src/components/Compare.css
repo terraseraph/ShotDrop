@@ -1,0 +1,56 @@
+/* Compare (docs/mockups/redesign/Compare.dc.html) */
+.cmp { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.cmp-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid #1c1c1c; font-size: 12px; color: var(--muted); }
+.cmp-bar strong { color: #fff; font-weight: 500; }
+.cmp-div { width: 1px; height: 20px; background: var(--raised); margin: 0 4px; }
+
+.cmp-panes { flex: 1 1 auto; min-height: 0; display: grid; gap: 8px; padding: 10px 14px; }
+.cmp-pane { position: relative; border-radius: 8px; overflow: hidden; min-height: 0; display: flex; flex-direction: column; background: var(--stage); transition: opacity 0.2s; }
+.cmp-pane.dim { opacity: 0.75; }
+.cmp-pane.on { box-shadow: 0 0 0 2px var(--accent); opacity: 1; }
+.cmp-img { flex: 1 1 auto; position: relative; overflow: hidden; min-height: 0; touch-action: none; }
+.cmp-img.grab { cursor: grab; }
+.cmp-img.grab:active { cursor: grabbing; }
+.cmp-fit { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.cmp-full { position: absolute; max-width: none; user-select: none; }
+.cmp-tl, .cmp-tr { position: absolute; top: 10px; display: flex; gap: 4px; }
+.cmp-tl { left: 10px; }
+.cmp-tr { right: 10px; }
+.cmp-tl .badge.bad { background: #5a2a2c; color: #ffb3b5; }
+.cmp-hist { position: absolute; right: 10px; bottom: 10px; width: 120px; height: 44px; background: rgba(0, 0, 0, 0.55); border-radius: 4px; padding: 3px; fill: #ddd; pointer-events: none; }
+.cmp-foot { height: 34px; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 0 10px; background: #161616; font-size: 12px; color: var(--muted); }
+.cmp-name { color: #fff; }
+.cmp-key { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.cmp-act { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 0 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; flex-wrap: wrap; }
+.cmp-act .tb.primary { margin-left: auto; height: 32px; padding: 0 14px; }
+
+/* Toolbar groups: frames · view · done */
+.cmp-title { display: inline-flex; align-items: baseline; gap: 8px; margin-right: 4px; }
+.cmp-group { display: inline-flex; align-items: center; gap: 2px; padding-left: 10px; border-left: 1px solid var(--raised); }
+.cmp-end { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+/* Many frames: rows keep a usable height and the panes scroll. */
+.cmp-panes.scroll { overflow-y: auto; grid-auto-rows: max(200px, 30vh); }
+.cmp-pane.rej .cmp-img img { filter: grayscale(1); opacity: 0.6; }
+.cmp-tr { align-items: center; }
+.cmp-x { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); color: #fff; opacity: 0; transition: opacity 0.12s; }
+.cmp-pane:hover .cmp-x, .cmp-pane.on .cmp-x, .cmp-x:focus-visible { opacity: 1; }
+.cmp-x:hover { background: var(--reject); }
+.cmp-flags { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.cmp-flag { width: 24px; height: 22px; border-radius: 5px; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--panel-3); }
+.cmp-flag:hover { color: #fff; }
+.cmp-flag.pick.on { background: var(--accent); color: var(--accent-ink); }
+.cmp-flag.rej.on { background: var(--reject); color: #fff; }
+.grid-empty .tb.primary { margin-top: 12px; }
+
+/* phone */
+.cmp-m .cmp-bar { gap: 6px; padding: 8px 10px; }
+.cmp-m .cmp-title { width: 100%; }
+.cmp-m .cmp-group { padding-left: 0; border-left: 0; }
+.cmp-m .cmp-end { margin-left: 0; }
+.cmp-m .tb { height: 36px; }
+.cmp-m .cmp-panes { padding: 8px 10px; gap: 6px; }
+.cmp-m .cmp-panes.scroll { grid-auto-rows: max(160px, 32vh); }
+.cmp-m .cmp-x { opacity: 1; width: 32px; height: 32px; }
+.cmp-m .cmp-flag { width: 36px; height: 30px; }
+.cmp-m .cmp-act { padding: 8px 10px; }
+.cmp-m .cmp-act .tb.primary { width: 100%; justify-content: center; height: 44px; margin-left: 0; }

@@ -9,15 +9,15 @@ export function Stars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | '
   )
 }
 
-/** Rating, pick/reject flag and colour label in one compact cluster. */
+/** Rating, pick/reject flag and colour label in one compact cluster (the redesign's thumbnail badges). */
 export function Badges({ shot }: { shot: Shot }) {
   return (
     <span className="badges">
-      {shot.files.some((f) => f.kind === 'video') && <span className="flag" aria-label="Video">▶</span>}
+      {shot.files.some((f) => f.kind === 'video') && <span className="badge" aria-label="Video">▶</span>}
       {shot.label && <span className={`label-dot ${shot.label}`} aria-label={`${shot.label} label`} />}
-      <Stars rating={shot.rating} />
-      {shot.flag === 1 && <span className="flag pick" aria-label="Pick">●</span>}
-      {shot.flag === -1 && <span className="flag reject" aria-label="Rejected">✕</span>}
+      {shot.rating > 0 && <span className="badge" aria-label={`${shot.rating} stars`}>★{shot.rating}</span>}
+      {shot.flag === 1 && <span className="badge pick" aria-label="Pick">P</span>}
+      {shot.flag === -1 && <span className="badge rej" aria-label="Rejected">X</span>}
     </span>
   )
 }

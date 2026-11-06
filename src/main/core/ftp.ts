@@ -1,7 +1,7 @@
 import FtpSrv from 'ftp-srv'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import type { Settings } from '@shared/types'
+import { ftpLoginName, type Settings } from '@shared/types'
 import type { LoginAttempt } from '@shared/diagnostics'
 import { addressFacing } from './net'
 
@@ -64,7 +64,8 @@ export class FtpService {
       pasv_url: (clientIp: string) => addressFacing(clientIp, this.preferredAddress),
       pasv_min: cfg.pasvMin,
       pasv_max: cfg.pasvMax,
-      anonymous: false,
+      // Blank user name in settings = no login; ftp-srv then accepts USER anonymous without a password.
+      anonymous: cfg.users.some((u) => !u.username),
       greeting: 'ShotDrop ready',
       log: quietLog as never
     } as unknown as ConstructorParameters<typeof FtpSrv>[0])
@@ -77,21 +78,22 @@ export class FtpService {
     }
 
     server.on('login', ({ connection, username, password }, resolve, reject) => {
-      const user = cfg.users.find((u) => u.username === username && u.password === password)
+      const user = cfg.users.find((u) => ftpLoginName(u) === username && (!u.username || !u.password || u.password === password))
       this.attempts.push({ at: Date.now(), ip: String(connection.ip ?? ''), username, ok: !!user })
       if (this.attempts.length > 50) this.attempts.shift()
       if (!user) return reject(new Error('Invalid username or password'))
-      const root = join(this.incomingDir(), user.username)
+      const name = ftpLoginName(user)
+      const root = join(this.incomingDir(), name)
       mkdirSync(root, { recursive: true })
-      this.conns.set(user.username, (this.conns.get(user.username) ?? 0) + 1)
+      this.conns.set(name, (this.conns.get(name) ?? 0) + 1)
       ;(connection as unknown as { commandSocket: NodeJS.EventEmitter }).commandSocket.on('close', () => {
-        this.conns.set(user.username, Math.max(0, (this.conns.get(user.username) ?? 1) - 1))
+        this.conns.set(name, Math.max(0, (this.conns.get(name) ?? 1) - 1))
         this.onState()
       })
       connection.on('STOR', (err: Error | null, filePath: string) => {
         ftpLog('STOR', filePath, err ? `ERR ${err.message}` : 'ok')
         if (err || !filePath) return
-        this.onUploaded(isAbsolute(filePath) ? filePath : join(root, filePath), user.username)
+        this.onUploaded(isAbsolute(filePath) ? filePath : join(root, filePath), name)
       })
       this.onState()
       resolve({ root })

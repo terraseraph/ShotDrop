@@ -7,11 +7,9 @@ const KEYS: [string, string][] = [
   ['6 7 8 9', 'Red / yellow / green / blue label'],
   ['Shift + key', 'Rate or flag, then go to next'],
   ['F', 'Follow new shots'],
-  ['G / E', 'Grid / loupe'],
+  ['L / G / C', 'Loupe / grid / compare'],
   ['Z or Space', 'Zoom to 100%'],
   ['H', 'Histogram + clipping warning'],
-  ['C', 'Add to compare (max 4)'],
-  ['Shift + C', 'Clear compare'],
   ['I', 'Info panel'],
   ['Delete', 'Move to recycle bin'],
   ['?', 'This list']
@@ -19,14 +17,14 @@ const KEYS: [string, string][] = [
 
 export function Shortcuts({ onClose }: { onClose: () => void }) {
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" role="dialog" aria-label="Keyboard shortcuts" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop scrim" onClick={onClose}>
+      <div className="modal sheet" role="dialog" aria-label="Keyboard shortcuts" onClick={(e) => e.stopPropagation()}>
         <h2>Keyboard shortcuts</h2>
         <dl className="keys">
           {KEYS.map(([k, v]) => (
             <div key={k}>
               <dt>
-                <kbd>{k}</kbd>
+                <span className="key" style={{ height: 22 }}>{k}</span>
               </dt>
               <dd>{v}</dd>
             </div>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ShotDrop phone share and export</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#111;color:#ededed;font-family:Inter,system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+a{color:#ededed;text-decoration:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.seg{display:flex;gap:2px;background:#141414;padding:2px;border-radius:10px}
+.seg button{height:40px;border-radius:8px;color:#a3a3a3;flex:1;font-size:13px}
+.seg button.on{background:#2a2a2a;color:#fff}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.04em;color:#8a8a8a}
+.big{height:52px;border-radius:12px;display:flex;align-items:center;gap:12px;padding:0 14px;background:#1e1e1e;color:#fff;font-weight:500}
+.big svg{width:20px;height:20px;flex:0 0 auto;color:#c9c9c9}
+@keyframes rise{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.sheet{animation:rise .72s linear(0,.064,.21,.387,.561,.713,.834,.924,.984,1.021,1.04,1.046,1.044,1.038,1.03,1.022,1.014,1.009,1.004,1.001,.999,.998,.998,.998,.998) both}
+</style>
+</helmet>
+
+<div style="width:390px;height:844px;box-sizing:border-box;background:#111;display:flex;flex-direction:column;overflow:hidden;position:relative">
+
+  <!-- loupe behind -->
+  <div style="height:52px;display:flex;align-items:center;padding:8px 14px 0;color:#fff;font-weight:600">Thu 6 Nov · Studio</div>
+  <div style="flex:1;margin:10px 0 0;background:radial-gradient(120% 90% at 30% 20%,#6b5a48 0%,#3a3230 40%,#17171a 100%);opacity:.6"></div>
+
+  <div style="position:absolute;inset:0;background:rgba(10,10,10,.5)"></div>
+  <div class="sheet" style="position:absolute;left:0;right:0;bottom:0;background:#1a1a1a;border-radius:18px 18px 0 0;border-top:1px solid #2e2e2e;padding:10px 18px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="width:40px;height:4px;border-radius:2px;background:#3a3a3a;margin:0 auto" aria-hidden="true"></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:56px;height:56px;border-radius:8px;flex:0 0 auto;background:radial-gradient(120% 90% at 30% 20%,#6b5a48,#17171a)"></div>
+      <div style="min-width:0"><div style="font-weight:600;color:#fff">DSC01248</div><div style="font-size:12px;color:#8a8a8a">★4 · Picked · RAW + JPEG</div></div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>Share to… <span style="margin-left:auto;font-size:12px;color:#8a8a8a;font-weight:400">2048 px JPEG</span></button>
+      <button class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M4 8h16"/></svg>Copy preview link <span style="margin-left:auto;font-size:12px;color:#8a8a8a;font-weight:400">valid until PIN changes</span></button>
+      <button class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>Save to phone</button>
+    </div>
+
+    <div><div class="lbl" style="margin-bottom:6px">SIZE</div><div class="seg"><button>Original</button><button class="on">2048 px</button><button>1080 px</button></div></div>
+    <div><div class="lbl" style="margin-bottom:6px">METADATA</div><div class="seg"><button class="on">Keep</button><button>Strip GPS</button><button>Strip all</button></div></div>
+
+    <div style="border-top:1px solid #2a2a2a;padding-top:12px;display:flex;align-items:center;gap:10px">
+      <div style="min-width:0"><div style="color:#fff;font-weight:500">Public link for this shoot</div><div style="font-size:12px;color:#8a8a8a">Lets a client watch from anywhere.</div></div>
+      <button style="margin-left:auto;height:40px;padding:0 14px;border-radius:10px;background:#242424;color:#fff;font-weight:500;flex:0 0 auto">Turn on</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

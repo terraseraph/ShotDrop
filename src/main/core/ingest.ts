@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs'
-import { copyFile, rename, rmdir, unlink } from 'node:fs/promises'
+import { copyFile, readdir, rename, rmdir, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { watch, type FSWatcher } from 'chokidar'
 import type { Library } from './library'
@@ -10,8 +10,11 @@ import type { Bus } from './events'
 import { XmpService } from './xmp'
 
 export interface IngestOptions {
-  /** Move the file into the library (FTP incoming) or copy it (watched card/folder, leave the original). */
-  mode: 'move' | 'copy'
+  /**
+   * Move the file into the library (FTP incoming), copy it (watched card/folder, leave the original),
+   * or adopt it where it is (already inside a library day folder, e.g. dropped in by hand).
+   */
+  mode: 'move' | 'copy' | 'adopt'
   source: string | null
 }
 
@@ -54,6 +57,8 @@ export class Ingestor {
   private queued = new Set<string>()
   private running = false
   private watchers: FSWatcher[] = []
+  /** Library files left alone because they're copies of a shot we already have; rescans skip them. */
+  private libraryDupes = new Set<string>()
 
   constructor(
     private lib: Library,
@@ -78,16 +83,58 @@ export class Ingestor {
     incoming.on('add', (p) => this.enqueue(p, { mode: 'move', source: this.sourceFromIncoming(p) }))
     this.watchers.push(incoming)
 
+    // Photos dropped straight into the library by hand. Dot folders (.incoming) have their own handling.
+    const libDir = this.getLibraryDir()
+    const lib = watch(libDir, { ignoreInitial: true, awaitWriteFinish: stable, ignored: (p) => this.isHidden(libDir, p) })
+    lib.on('add', (p) => this.enqueueLibraryFile(libDir, p))
+    this.watchers.push(lib)
+
     for (const folder of watchFolders.filter((f) => existsSync(f))) {
       const w = watch(folder, { ignoreInitial: true, awaitWriteFinish: stable })
       w.on('add', (p) => this.enqueue(p, { mode: 'copy', source: basename(folder) }))
       this.watchers.push(w)
     }
+
+    // Catch up on anything added to the library while ShotDrop wasn't running.
+    void this.rescanLibrary().catch((e) => this.bus.emit({ type: 'ingest:error', file: libDir, error: `Library rescan failed: ${String(e)}` }))
+  }
+
+  /** Queue every photo in the library that isn't in the database yet. Returns how many were queued. */
+  async rescanLibrary(): Promise<number> {
+    const libDir = this.getLibraryDir()
+    if (!existsSync(libDir)) return 0
+    const entries = await readdir(libDir, { recursive: true, withFileTypes: true })
+    let n = 0
+    for (const e of entries) {
+      if (!e.isFile()) continue
+      const p = join(e.parentPath, e.name)
+      if (this.isHidden(libDir, p) || !isImage(p) || this.lib.pathTaken(p) || this.libraryDupes.has(p)) continue
+      this.enqueueLibraryFile(libDir, p)
+      n++
+    }
+    return n
+  }
+
+  /** Anything under a dot folder or dot file inside the library (.incoming, .trash...). */
+  private isHidden(libDir: string, p: string): boolean {
+    const rel = relative(libDir, p)
+    return rel !== '' && rel.split(sep).some((part) => part.startsWith('.'))
+  }
+
+  /** Loose files at the library root go into a day folder; files already in a subfolder stay put. */
+  private enqueueLibraryFile(libDir: string, p: string): void {
+    // Sidecars next to photos are picked up with their photo; ShotDrop writes its own .xmp files here too.
+    if (!isImage(p)) return
+    this.enqueue(p, { mode: dirname(p) === libDir ? 'move' : 'adopt', source: null })
   }
 
   async stop(): Promise<void> {
     await Promise.all(this.watchers.map((w) => w.close()))
     this.watchers = []
+  }
+
+  private isInLibraryRoot(path: string): boolean {
+    return dirname(path) === this.getLibraryDir()
   }
 
   /** FTP user name is the first folder under .incoming. */
@@ -135,13 +182,16 @@ export class Ingestor {
 
   private async ingest(path: string, opts: IngestOptions): Promise<void> {
     if (!existsSync(path)) return
+    // The library watcher also sees files ShotDrop itself just filed there.
+    if (opts.mode === 'adopt' && this.lib.pathTaken(path)) return
     const size = statSync(path).size
     if (size === 0) return
 
     const hash = await hashFile(path)
     if (this.lib.findFileByHash(hash)) {
-      // Camera re-sent a frame we already have.
-      if (opts.mode === 'move') await unlink(path).catch(() => undefined)
+      // Camera re-sent a frame we already have. Never delete a file the user put in the library.
+      if (opts.mode === 'adopt' || this.isInLibraryRoot(path)) this.libraryDupes.add(path)
+      if (opts.mode === 'move' && !this.isInLibraryRoot(path)) await unlink(path).catch(() => undefined)
       return
     }
 
@@ -150,18 +200,21 @@ export class Ingestor {
     const session = localDate(capturedAt)
     const libDir = this.getLibraryDir()
     const destDir = join(libDir, session)
-    mkdirSync(destDir, { recursive: true })
 
     const ext = extname(path)
     const stem = basename(path, ext)
     let destName = basename(path)
-    let n = 1
-    while (existsSync(join(destDir, destName)) || this.lib.pathTaken(join(destDir, destName))) {
-      destName = `${stem}-${n++}${ext}`
+    let dest = path
+    if (opts.mode !== 'adopt') {
+      mkdirSync(destDir, { recursive: true })
+      let n = 1
+      while (existsSync(join(destDir, destName)) || this.lib.pathTaken(join(destDir, destName))) {
+        destName = `${stem}-${n++}${ext}`
+      }
+      dest = join(destDir, destName)
+      if (opts.mode === 'move') await moveFile(path, dest)
+      else await copyFile(path, dest)
     }
-    const dest = join(destDir, destName)
-    if (opts.mode === 'move') await moveFile(path, dest)
-    else await copyFile(path, dest)
 
     // RAW+JPEG with the same stem become one shot. A renamed duplicate name is its own shot.
     const name = basename(destName, ext)

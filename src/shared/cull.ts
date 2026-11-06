@@ -8,7 +8,9 @@ export const CULL_DEFAULTS = {
   maxHamming: 16, // of 64 bits; same-burst frames measured <=12, cuts to a new scene >=23
   softRatio: 0.6, // soft = under 60% of the sharpest frame in its burst
   softAbs: 20, // lone frames: Laplacian variance this low is almost always blur
-  blinkAt: 0.45 // MediaPipe eyeBlink score (0 open .. 1 shut); 0.45 catches 85% of shut eyes at 89% precision vs 73% at 0.5
+  blinkAt: 0.45, // MediaPipe eyeBlink score (0 open .. 1 shut); 0.45 catches 85% of shut eyes at 89% precision vs 73% at 0.5
+  clipAt: 5, // % of pixels at pure white before a frame counts as blown out
+  darkAt: 30 // % of pixels at pure black before a frame counts as too dark
 }
 export type CullThresholds = typeof CULL_DEFAULTS
 
@@ -18,6 +20,7 @@ export interface Cull {
   best: boolean // top-scoring frame of its burst (lone frames are their own best)
   soft: boolean
   blink: boolean // at least one face has closed eyes
+  exposure: boolean // blown highlights or crushed shadows
 }
 
 export function hamming(a: string, b: string): number {
@@ -32,9 +35,13 @@ export function hamming(a: string, b: string): number {
 
 /** Sharpness, discounted for blown highlights or crushed shadows (a sharp but unusable frame shouldn't win). */
 function score(s: Shot, t: CullThresholds): number {
-  const exposure = (s.clipped ?? 0) > 5 || (s.dark ?? 0) > 30 ? 0.5 : 1
+  const exposure = isBadExposure(s, t) ? 0.5 : 1
   // Someone with their eyes shut loses to any frame where everyone's eyes are open, however sharp it is.
   return (s.sharpness ?? 0) * exposure * (isBlink(s, t) ? 0.1 : 1)
+}
+
+function isBadExposure(s: Shot, t: CullThresholds): boolean {
+  return (s.clipped ?? 0) > t.clipAt || (s.dark ?? 0) > t.darkAt
 }
 
 function isBlink(s: Shot, t: CullThresholds): boolean {
@@ -61,7 +68,7 @@ export function analyze(shots: Shot[], t: CullThresholds = CULL_DEFAULTS): Map<n
     for (const s of g) {
       const sharp = s.sharpness
       const soft = sharp == null ? false : g.length > 1 ? sharp < topSharp * t.softRatio : sharp < t.softAbs
-      out.set(s.id, { group: i, size: g.length, best: s === top, soft, blink: isBlink(s, t) })
+      out.set(s.id, { group: i, size: g.length, best: s === top, soft, blink: isBlink(s, t), exposure: isBadExposure(s, t) })
     }
   })
   return out

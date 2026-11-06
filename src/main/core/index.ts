@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { existsSync, mkdirSync, statfsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import type { Settings, ShotPatch, Status } from '@shared/types'
+import { ftpLoginName, type DeletePreview, type Settings, type ShotPatch, type Status } from '@shared/types'
 import { ConfigStore } from './config'
 import { openDb, type DB } from './db'
 import { Library } from './library'
@@ -56,7 +56,7 @@ export class Core {
     this.previews = new Previewer(join(opts.dataDir, 'cache'))
     this.cloud = new CloudAccounts(join(opts.dataDir, 'rclone.conf'), () => toolPath(this.settings.rclonePath, 'rclone'))
     this.meta = new MetadataStore(join(opts.dataDir, 'cache'))
-    this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud)
+    this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud, opts.trash)
     this.xmp = new XmpService(
       this.lib,
       this.bus,
@@ -168,6 +168,7 @@ export class Core {
     const prog = this.lib.destProgress()
     const bps = this.sync.throughput()
     const health = this.lib.destHealth()
+    const dels = this.lib.remoteDeleteState()
     let free: number | null = null
     let total: number | null = null
     try {
@@ -189,13 +190,10 @@ export class Core {
       sync: { ...this.lib.syncCounts(), rcloneAvailable: this.sync.rcloneAvailable },
       tunnel: this.tunnel.state,
       ptp: this.ptp.state,
-      cameras: s.ftp.users.map((u) => ({
-        username: u.username,
-        label: u.label,
-        connected: this.ftp.isConnected(u.username),
-        lastAt: stats[u.username]?.lastAt ?? null,
-        today: stats[u.username]?.today ?? 0
-      })),
+      cameras: s.ftp.users.map((u) => {
+        const name = ftpLoginName(u)
+        return { username: name, label: u.label, connected: this.ftp.isConnected(name), lastAt: stats[name]?.lastAt ?? null, today: stats[name]?.today ?? 0 }
+      }),
       destinations: s.destinations.map((d) => ({
         id: d.id,
         name: d.name,
@@ -209,7 +207,10 @@ export class Core {
         enabled: d.enabled,
         lastError: health[d.id]?.lastError ?? null,
         authExpired: AUTH_EXPIRED.test(health[d.id]?.lastError ?? ''),
-        lastDoneAt: health[d.id]?.lastDoneAt ?? null
+        lastDoneAt: health[d.id]?.lastDoneAt ?? null,
+        mirrorDeletes: !!d.mirrorDeletes,
+        deletesWaiting: dels[d.id]?.waiting ?? 0,
+        deleteError: dels[d.id]?.error ?? null
       }))
     }
   }
@@ -242,6 +243,8 @@ export class Core {
     if (changed('destinations')) {
       for (const d of after.destinations) if (!before.destinations.some((b) => b.id === d.id)) this.sync.backfill(d)
       for (const b of before.destinations) if (!after.destinations.some((d) => d.id === b.id)) this.lib.dropSyncForDest(b.id)
+      // Mirroring switched off: deletes still waiting there are cancelled, not carried out later.
+      for (const d of after.destinations) if (!d.mirrorDeletes && before.destinations.find((b) => b.id === d.id)?.mirrorDeletes) this.lib.dropRemoteDeletes(d.id)
     }
     this.emitStatus()
     return { settings: after, restartApi: changed('remote') || changed('api') }
@@ -268,11 +271,13 @@ export class Core {
     const files = this.lib.files(id)
     if (!files.length && !this.lib.get(id)) return null
     const failed: DeleteResult['failed'] = []
+    const mirror = this.settings.destinations.filter((d) => d.mirrorDeletes).map((d) => d.id)
     for (const f of files) {
       const error = await removeFromDisk(f.path, this.opts.trash)
       if (error) failed.push({ name: f.name, path: f.path, error })
       else {
-        this.lib.removeFile(f.id)
+        // Only once it's really gone from this computer does the delete spread to mirrored destinations.
+        this.lib.removeFileMirroring(f.id, mirror)
         this.meta.clear(f.id)
       }
     }
@@ -284,8 +289,20 @@ export class Core {
     this.lib.remove(id)
     this.previews.clear(id)
     this.bus.emit({ type: 'shot:removed', id })
+    if (mirror.length) this.sync.pump()
     this.emitStatus()
     return { deleted: true, failed: [] }
+  }
+
+  /** Which destinations hold copies of these shots, and whether deleting them would reach there too. */
+  deletePreview(ids: number[]): DeletePreview {
+    const counts = this.lib.destFileCounts(ids)
+    const out: DeletePreview = { mirrored: [], kept: [] }
+    for (const d of this.settings.destinations) {
+      const files = counts[d.id]
+      if (files) (d.mirrorDeletes ? out.mirrored : out.kept).push({ id: d.id, name: d.name, files })
+    }
+    return out
   }
 }
 

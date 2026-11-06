@@ -1,0 +1,123 @@
+/* ShotDrop redesign tokens (docs/mockups/redesign). Loaded after styles.css so these win.
+   Dark neutral grey, one amber accent. Photos read true on #111. */
+:root {
+  --bg: #111111;
+  --stage: #0d0d0d;
+  --panel: #141414;
+  --panel-2: #1a1a1a;
+  --panel-3: #242424;
+  --raised: #2a2a2a;
+  --line: #222222;
+  --line-2: #2e2e2e;
+  --text: #ededed;
+  --text-2: #c9c9c9;
+  --muted: #a3a3a3;
+  --faint: #8a8a8a; /* smallest labels: still 5.5:1 on #111 */
+  --faintest: #6f6f6f; /* decorative only, never for text under 14px */
+
+  --accent: #f2b134; /* picks, primary actions, selection ring */
+  --accent-ink: #1a1200; /* text on accent */
+  --accent-dim: #2b2515; /* selected chip background */
+  --accent-line: #5a4a1e;
+  --pick: #f2b134;
+  --star: #f2b134;
+  --live: #3dd68c; /* cameras connected, incoming, up to date */
+  --live-dim: #15301f;
+  --sync: #5ba7f7; /* outgoing, queued, running */
+  --sync-dim: #1b2a3a;
+  --warn: #f2b134;
+  --warn-dim: #3a2f12;
+  --reject: #e5484d;
+  --reject-text: #ff9a9d;
+  --reject-dim: #3a1c1d;
+  --focus: #5ba7f7;
+
+  --l-red: #e5484d;
+  --l-yellow: #f5c84c;
+  --l-green: #3dd68c;
+  --l-blue: #5ba7f7;
+  --l-purple: #c9a0f0;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --font: Inter, 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'Cascadia Mono', ui-monospace, Consolas, monospace;
+
+  --topbar: 44px;
+  --transfer: 36px;
+  --dock: 34px;
+  --strip: 116px;
+  --info: 300px;
+
+  /* Motion. Springs sampled from Motion's spring model; use these for CSS, and
+     the matching `transition` objects from src/renderer/src/motion.ts in React. */
+  --spring-firm: 0.54s linear(0, 0.071, 0.221, 0.388, 0.543, 0.672, 0.773, 0.848, 0.902, 0.94, 0.964, 0.98, 0.99, 0.996, 0.999, 1.001, 1.001, 1.002, 1.001, 1.001, 1.001, 1.001, 1);
+  --spring-soft: 0.72s linear(0, 0.064, 0.21, 0.387, 0.561, 0.713, 0.834, 0.924, 0.984, 1.021, 1.04, 1.046, 1.044, 1.038, 1.03, 1.022, 1.014, 1.009, 1.004, 1.001, 0.999, 0.998, 0.998, 0.998, 0.998);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ---------- shared primitives used across the redesign ---------- */
+.key {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 4px;
+  background: var(--raised); border: 1px solid #3a3a3a; color: var(--text-2);
+  font-family: var(--mono); font-size: 11px; line-height: 1;
+}
+.key.accent { background: #b8841f; border-color: #b8841f; color: var(--accent-ink); }
+
+.tb { height: 28px; padding: 0 10px; border-radius: 7px; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); white-space: nowrap; }
+.tb:hover { background: var(--panel-3); color: #fff; }
+.tb.on { background: var(--panel-3); color: #fff; }
+.tb.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.tb.primary:hover { background: #f7c04f; color: var(--accent-ink); }
+
+.seg { display: inline-flex; gap: 2px; background: var(--panel-2); padding: 2px; border-radius: 9px; }
+.seg > button { height: 28px; padding: 0 12px; border-radius: 7px; color: var(--muted); }
+.seg > button.on { background: var(--raised); color: #fff; }
+
+.chip { height: 28px; padding: 0 11px; border-radius: 14px; display: inline-flex; align-items: center; gap: 6px; background: #1c1c1c; color: var(--text-2); border: 1px solid var(--raised); white-space: nowrap; }
+.chip.on { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-line); }
+.chip .n { color: var(--faint); font-size: 11px; }
+
+.pill { height: 22px; padding: 0 9px; border-radius: 11px; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill.ok { background: var(--live-dim); color: var(--live); }
+.pill.run { background: var(--sync-dim); color: var(--sync); }
+.pill.warn { background: var(--warn-dim); color: var(--warn); }
+.pill.bad { background: var(--reject-dim); color: var(--reject-text); }
+.pill.off { background: var(--panel-3); color: var(--faint); }
+
+.badge { height: 18px; min-width: 18px; padding: 0 5px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: rgba(0, 0, 0, 0.6); color: var(--text); white-space: nowrap; }
+.badge.pick { background: var(--accent); color: var(--accent-ink); }
+.badge.rej { background: var(--reject); color: #fff; }
+.badge.best { background: var(--live); color: #04170d; }
+.badge.new { background: var(--live); color: #04170d; }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; display: inline-block; }
+.dot.live { background: var(--live); animation: sd-pulse 1.8s ease-out infinite; }
+
+.bar { height: 4px; border-radius: 2px; background: #262626; overflow: hidden; flex: 1 1 60px; min-width: 40px; }
+.bar > i { display: block; height: 100%; border-radius: 2px; background: var(--live); transition: width 0.4s var(--ease-out); }
+.bar.out > i { background: var(--sync); }
+.bar.thick { height: 6px; border-radius: 3px; }
+
+.sw { width: 38px; height: 22px; border-radius: 11px; background: var(--raised); position: relative; flex: 0 0 auto; }
+.sw > i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--faint); transition: left 0.2s var(--ease-out), background 0.2s; }
+.sw.on { background: var(--accent); }
+.sw.on > i { left: 19px; background: var(--accent-ink); }
+
+.node { background: var(--panel-2); border: 1px solid var(--raised); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.sheet { background: rgba(28, 28, 28, 0.97); border: 1px solid var(--line-2); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+.scrim { background: rgba(10, 10, 10, 0.45); backdrop-filter: blur(2px); }
+
+@keyframes sd-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(61, 214, 140, 0.55); } 70% { box-shadow: 0 0 0 7px rgba(61, 214, 140, 0); } }
+@keyframes sd-land { from { transform: translateX(56px) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sd-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sd-glow { 0% { box-shadow: 0 0 0 2px var(--accent); } 100% { box-shadow: 0 0 0 2px rgba(242, 177, 52, 0); } }
+@keyframes sd-ripple { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(2.4); opacity: 0; } }
+@keyframes sd-flow { from { left: -14px; } to { left: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

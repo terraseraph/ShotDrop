@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { statfs } from 'node:fs/promises'
 import { createServer, Socket } from 'node:net'
 import type { Check, DiagnosticsReport, FixId, FixResult, LoginAttempt } from '@shared/diagnostics'
+import { ftpLoginName } from '@shared/types'
 import type { Core } from './index'
 import { allowCameras, firewallStatus, removeRules, type FirewallStatus } from './firewall'
 import { listInterfaces } from './net'
@@ -86,8 +87,9 @@ async function ftpSelfTest(host: string, port: number, user: string, pass: strin
     sock.connect(port, host)
     await greeting
     step = 'login'
-    await send(`USER ${user}`)
-    const pw = await send(`PASS ${pass}`)
+    const usr = await send(`USER ${user}`)
+    // Anonymous logins are accepted at USER (230); otherwise send the password.
+    const pw = usr.startsWith('230') ? usr : await send(`PASS ${pass}`)
     if (!pw.startsWith('230')) return { ok: false, step, detail: pw }
     step = 'passive'
     const pasv = await send('PASV')
@@ -236,7 +238,7 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
   // 5. Self-test: log in like a camera would, through the network address.
   if (ftp.running && primary && s.ftp.users[0]) {
     const u = s.ftp.users[0]
-    const r = await ftpSelfTest(primary, s.ftp.port, u.username, u.password)
+    const r = await ftpSelfTest(primary, s.ftp.port, ftpLoginName(u), u.password || 'shotdrop')
     checks.push({
       id: 'selftest',
       title: 'Test login',
@@ -244,7 +246,7 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
       detail: r.ok
         ? r.detail
           ? `Login works, but ${r.detail}, which may not be reachable from the camera.`
-          : `Logged in as "${u.username}" via ${primary} and opened a transfer connection, just like a camera. (Tested from this PC, so it can't prove the firewall lets outside devices in.)`
+          : `Logged in as "${ftpLoginName(u)}" via ${primary} and opened a transfer connection, just like a camera. (Tested from this PC, so it can't prove the firewall lets outside devices in.)`
         : `${STEP_TEXT[r.step] ?? 'Test failed'}: ${r.detail}`
     })
   }
@@ -256,7 +258,7 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
   const recentFails = external.filter((a) => !a.ok && (!lastOk || a.at > lastOk.at))
   if (recentFails.length) {
     const f = recentFails.at(-1)!
-    const known = s.ftp.users.some((u) => u.username === f.username)
+    const known = s.ftp.users.some((u) => ftpLoginName(u) === f.username)
     checks.push({
       id: 'camera',
       title: 'Camera activity',

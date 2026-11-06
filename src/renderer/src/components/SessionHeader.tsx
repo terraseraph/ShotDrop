@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Shot } from '@shared/types'
-import { fmtDate } from '../format'
 
 interface Props {
   shots: Shot[] // everything in the current session, before filters
-  session: string
   source: string
   onSource: (s: string) => void
 }
 
 const LIVE_MS = 2 * 60_000
 
-export function SessionHeader({ shots, session, source, onSource }: Props) {
+/** One chip per camera, only when there is more than one: tap to see just that camera's frames. */
+export function SessionHeader({ shots, source, onSource }: Props) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000)
@@ -19,28 +18,20 @@ export function SessionHeader({ shots, session, source, onSource }: Props) {
   }, [])
 
   const cams = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const s of shots) if (s.source) m.set(s.source, Math.max(m.get(s.source) ?? 0, s.importedAt))
+    const m = new Map<string, { last: number; n: number }>()
+    for (const s of shots) if (s.source) m.set(s.source, { last: Math.max(m.get(s.source)?.last ?? 0, s.importedAt), n: (m.get(s.source)?.n ?? 0) + 1 })
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [shots])
 
-  const picks = shots.filter((s) => s.flag === 1).length
-  const rejects = shots.filter((s) => s.flag === -1).length
-
+  if (cams.length < 2) return null
   return (
-    <div className="sesshead">
-      <h2>{session ? fmtDate(session) : 'All sessions'}</h2>
-      <div className="cams">
-        {cams.map(([name, last]) => (
-          <button key={name} className={`cam ${now - last < LIVE_MS ? '' : 'idle'} ${source === name ? 'on' : ''}`} aria-pressed={source === name} onClick={() => onSource(source === name ? '' : name)} title={`Only ${name}`}>
-            <i />
-            {name}
-          </button>
-        ))}
-      </div>
-      <span className="muted count-line">
-        {shots.length} shots · {picks} picks · {rejects} rejects
-      </span>
+    <div className="camchips" role="group" aria-label="Cameras">
+      {cams.map(([name, c]) => (
+        <button key={name} className={`chip ${source === name ? 'on' : ''}`} aria-pressed={source === name} onClick={() => onSource(source === name ? '' : name)} title={`Only ${name}`}>
+          <span className={`dot ${now - c.last < LIVE_MS ? 'live' : ''}`} style={now - c.last < LIVE_MS ? undefined : { background: '#555' }} />
+          {name} <span className="n">{c.n}</span>
+        </button>
+      ))}
     </div>
   )
 }
