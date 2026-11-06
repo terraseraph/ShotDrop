@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Shot } from '@shared/types'
-import { api } from '../api'
+import { api, dragProps } from '../api'
 import { fmtTime } from '../format'
 import { Badges, SyncDots } from './Badges'
 
@@ -33,7 +33,7 @@ export function Grid({ shots, selectedId, freshIds, onSelect, onOpen, tapOpens }
             onDoubleClick={() => onOpen(s.id)}
           >
             <span className="cell-img">
-              {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
+              {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" {...dragProps(s.id)} /> : <span className="frame-empty">{s.name}</span>}
             <SyncDots sync={s.sync} />
             </span>
             <span className="cell-meta">

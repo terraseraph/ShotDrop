@@ -177,3 +177,53 @@ export type ServerEvent =
   | { type: 'shot:removed'; id: number }
   | { type: 'status'; status: Status }
   | { type: 'ingest:error'; file: string; error: string }
+
+// ---- RAW sources, metadata, export ----
+
+/** One way to look at a shot: the camera JPEG, the RAW's embedded preview, or a real RAW decode. */
+export interface ShotSource {
+  key: 'jpeg' | 'embedded' | 'raw'
+  label: string // "Camera JPEG", "Camera preview", "RAW decode"
+  width: number | null // null until known (RAW decode is sized when developed)
+  height: number | null
+  ready: boolean // false: needs developing first (RAW decode only)
+  detail?: string // e.g. which embedded tag the preview came from
+  bytes?: number
+}
+
+export interface ShotSources {
+  sources: ShotSource[]
+  canDevelop: boolean // a RAW decoder is available on this machine
+}
+
+export interface MetaItem {
+  group: string // exiftool family-1 group, e.g. "ExifIFD", "Nikon"
+  tag: string
+  value: string
+}
+
+export interface MetaGroup {
+  name: 'EXIF' | 'MakerNotes' | 'XMP' | 'IPTC' | 'GPS' | 'File' | 'Other'
+  items: MetaItem[]
+}
+
+export interface ShotMetadata {
+  fileId: number
+  fileName: string
+  summary: { label: string; value: string }[] // useful maker-note fields
+  gps: { lat: number; lon: number; alt: number | null; mapUrl: string } | null
+  groups: MetaGroup[]
+}
+
+export interface ExportOptions {
+  dir: string
+  size: 'original' | number // long edge in px
+  quality: number // 1-100
+  metadata: 'all' | 'noGps' | 'none'
+  source?: 'auto' | ShotSource['key']
+}
+
+export interface Editor {
+  id: string
+  name: string
+}

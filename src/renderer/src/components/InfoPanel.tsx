@@ -4,6 +4,8 @@ import { motion } from 'motion/react'
 import { api } from '../api'
 import { fmtAperture, fmtFocal, fmtShutter, fmtSize, fmtTime, fmtDate } from '../format'
 import { Icon } from './Icon'
+import { MetadataPanel } from './MetadataPanel'
+import { SharePanel } from './SharePanel'
 
 const LABELS: Exclude<Label, null>[] = ['red', 'yellow', 'green', 'blue', 'purple']
 const SYNC_TEXT: Record<SyncStatus, string> = { pending: 'Queued', running: 'Uploading', done: 'Synced', error: 'Failed' }
@@ -99,6 +101,10 @@ export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
             ))}
         </dl>
       </section>
+
+      <MetadataPanel shot={shot} />
+
+      <SharePanel shot={shot} />
 
       <section>
         <h3>Files</h3>

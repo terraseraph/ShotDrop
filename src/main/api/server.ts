@@ -2,13 +2,18 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify'
 import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
 import { createReadStream, existsSync, statSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 import { registerDiagnostics } from './diagnostics'
 import { registerCloud } from './cloud'
+import { listSources, metadataFile, resolveImage } from '../core/sources'
+import { exportJpeg } from '../core/exporter'
 import type { Core } from '../core'
-import type { Destination, Flag, ServerEvent, Settings, ShotPatch, SyncStatus } from '@shared/types'
+import type { Destination, ExportOptions, Flag, ServerEvent, Settings, ShotPatch, ShotSource, SyncStatus } from '@shared/types'
 
 const isLoopback = (ip: string): boolean => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
+
+/** Scoped, PIN-derived token that lets a shared link fetch one shot's image but nothing else. */
+const shareToken = (pin: string, id: number | string): string => createHmac('sha256', pin).update(`share:${id}`).digest('hex').slice(0, 24)
 
 const MIME: Record<string, string> = {
   jpeg: 'image/jpeg', heif: 'image/heif', raw: 'application/octet-stream', other: 'application/octet-stream'
@@ -61,6 +66,9 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     const key = (req.headers['x-shotdrop-key'] as string | undefined) ?? (req.query as { key?: string }).key
     // Outside access is allowed through LAN remote mode or a running tunnel, and always needs the PIN.
     const open = remote.enabled || (proxied && core.tunnel.state.status === 'running')
+    const img = /^\/api\/shots\/(\d+)\/preview(?:$|\?)/.exec(req.url)
+    const share = (req.query as { share?: string }).share
+    if (req.method === 'GET' && open && remote.pin && img && share && share === shareToken(remote.pin, img[1])) return
     if (!open || !remote.pin || key !== remote.pin) return reply.code(401).send({ error: 'PIN required' })
   })
 
@@ -156,6 +164,83 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     if (!file || file.shot_id !== id) return reply.code(404).send({ error: 'Not found' })
     reply.header('content-disposition', `inline; filename="${file.name}"`)
     return sendImage(file.path, reply, MIME[file.kind])
+  })
+
+  // ---- RAW sources, develop, full-res ----
+  app.get('/api/shots/:id/sources', async (req, reply) => {
+    if (!core.lib.get(shotId(req))) return reply.code(404).send({ error: 'Not found' })
+    return listSources(core, shotId(req))
+  })
+
+  /** Full-resolution rendition: `?src=jpeg|embedded|raw`. embedded is made on demand; raw must be developed first. */
+  app.get('/api/shots/:id/full', async (req, reply) => {
+    const src = (req.query as { src?: string }).src as ShotSource['key']
+    if (!['jpeg', 'embedded', 'raw'].includes(src)) return reply.code(400).send({ error: 'src must be jpeg, embedded or raw' })
+    try {
+      const r = await resolveImage(core, shotId(req), src, false)
+      return r ? sendImage(r.path, reply) : reply.code(404).send({ error: 'Not ready' })
+    } catch (e) {
+      return reply.code(500).send({ error: (e as Error).message })
+    }
+  })
+
+  /** Make the full-size RAW decode (seconds). Only on the ShotDrop computer: it runs a program and eats CPU/RAM. */
+  app.post('/api/shots/:id/develop', local, async (req, reply) => {
+    try {
+      const r = await resolveImage(core, shotId(req), 'raw', true)
+      return r ? r.source : reply.code(404).send({ error: 'This shot has no RAW file' })
+    } catch (e) {
+      return reply.code(500).send({ error: (e as Error).message })
+    }
+  })
+
+  // ---- metadata ----
+  app.get('/api/shots/:id/metadata', async (req, reply) => {
+    const f = metadataFile(core, shotId(req), Number((req.query as { file?: string }).file) || undefined)
+    if (!f) return reply.code(404).send({ error: 'Not found' })
+    try {
+      return await core.meta.get(f.id, f.name, f.path)
+    } catch (e) {
+      return reply.code(500).send({ error: (e as Error).message })
+    }
+  })
+
+  // ---- export & sharing ----
+  app.post(
+    '/api/shots/:id/export',
+    {
+      ...local,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['dir', 'size', 'quality', 'metadata'],
+          properties: {
+            dir: { type: 'string', minLength: 1 },
+            size: { anyOf: [{ const: 'original' }, { type: 'integer', minimum: 16, maximum: 20000 }] },
+            quality: { type: 'integer', minimum: 1, maximum: 100 },
+            metadata: { enum: ['all', 'noGps', 'none'] },
+            source: { enum: ['auto', 'jpeg', 'embedded', 'raw'] }
+          }
+        }
+      }
+    },
+    async (req, reply) => {
+      try {
+        return { path: await exportJpeg(core, shotId(req), req.body as ExportOptions) }
+      } catch (e) {
+        return reply.code(500).send({ error: (e as Error).message })
+      }
+    }
+  )
+
+  /** A link to the shot's preview for people outside the LAN, via the tunnel or remote mode. Its token opens that one image only. */
+  app.get('/api/shots/:id/link', local, async (req) => {
+    const id = shotId(req)
+    const { remote } = core.settings
+    const t = core.tunnel.state
+    const origin = t.status === 'running' && t.url ? t.url : remote.enabled ? core.status().api.urls[0] : null
+    if (!origin || !remote.pin) return { url: null, reason: 'Turn on the tunnel or remote access (with a PIN) to share links.' }
+    return { url: `${origin}/api/shots/${id}/preview?share=${shareToken(remote.pin, id)}`, via: t.status === 'running' ? 'tunnel' : 'LAN' }
   })
 
   // ---- settings ----

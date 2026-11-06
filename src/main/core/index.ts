@@ -6,6 +6,7 @@ import { ConfigStore } from './config'
 import { openDb, type DB } from './db'
 import { Library } from './library'
 import { Previewer, shutdownMedia } from './media'
+import { MetadataStore } from './metadata'
 import { Ingestor } from './ingest'
 import { FtpService } from './ftp'
 import { SyncService } from './sync'
@@ -34,6 +35,7 @@ export class Core {
   readonly db: DB
   readonly lib: Library
   readonly previews: Previewer
+  readonly meta: MetadataStore
   readonly ingest: Ingestor
   readonly ftp: FtpService
   readonly sync: SyncService
@@ -49,6 +51,7 @@ export class Core {
     this.lib = new Library(this.db)
     this.previews = new Previewer(join(opts.dataDir, 'cache'))
     this.cloud = new CloudAccounts(join(opts.dataDir, 'rclone.conf'), () => toolPath(this.settings.rclonePath, 'rclone'))
+    this.meta = new MetadataStore(join(opts.dataDir, 'cache'))
     this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud)
     this.xmp = new XmpService(
       this.lib,
@@ -208,6 +211,7 @@ export class Core {
     }
     this.lib.remove(id)
     this.previews.clear(id)
+    for (const f of files) this.meta.clear(f.id)
     this.bus.emit({ type: 'shot:removed', id })
     this.emitStatus()
     return true
