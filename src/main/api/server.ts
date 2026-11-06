@@ -10,7 +10,7 @@ import type { Destination, Flag, ServerEvent, Settings, ShotPatch, SyncStatus } 
 const isLoopback = (ip: string): boolean => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
 
 const MIME: Record<string, string> = {
-  jpeg: 'image/jpeg', heif: 'image/heif', raw: 'application/octet-stream', other: 'application/octet-stream'
+  jpeg: 'image/jpeg', heif: 'image/heif', raw: 'application/octet-stream', video: 'video/mp4', other: 'application/octet-stream'
 }
 
 const shotPatchSchema = {
@@ -87,6 +87,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     const seq = core.bus.current
     const page = core.lib.list({
       session: q.session || undefined,
+      source: q.source || undefined,
       minRating: q.minRating ? Number(q.minRating) : undefined,
       flag,
       label: q.label || undefined,
@@ -147,14 +148,47 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   app.get('/api/shots/:id/thumb', async (req, reply) => sendImage(core.previews.thumbPath(shotId(req)), reply))
   app.get('/api/shots/:id/preview', async (req, reply) => sendImage(core.previews.previewPath(shotId(req)), reply))
 
-  /** Original file. `?file=<fileId>` picks one of a RAW+JPEG pair; default is the preview source. */
+  /** sendImage plus Range support: <video> seeks (and Chromium starts playback) with Range requests. */
+  const sendFile = (req: FastifyRequest, reply: import('fastify').FastifyReply, path: string, type: string) => {
+    reply.header('accept-ranges', 'bytes')
+    const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '')
+    if (!m || !existsSync(path)) return sendImage(path, reply, type)
+    const size = statSync(path).size
+    const start = m[1] ? Number(m[1]) : Math.max(size - Number(m[2]), 0)
+    const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1
+    if ((!m[1] && !m[2]) || start > end || start >= size) return reply.code(416).header('content-range', `bytes */${size}`).send()
+    return reply
+      .code(206)
+      .header('content-type', type)
+      .header('content-range', `bytes ${start}-${end}/${size}`)
+      .header('content-length', end - start + 1)
+      .send(createReadStream(path, { start, end }))
+  }
+
+  /** Original file. `?file=<fileId>` picks one of a RAW+JPEG pair; default is the preview source. `?dl=1` forces a download. */
   app.get('/api/shots/:id/original', async (req, reply) => {
     const id = shotId(req)
-    const fileId = Number((req.query as { file?: string }).file) || core.lib.previewFileId(id)
+    const q = req.query as { file?: string; dl?: string }
+    const fileId = Number(q.file) || core.lib.previewFileId(id)
     const file = fileId ? core.lib.file(fileId) : undefined
     if (!file || file.shot_id !== id) return reply.code(404).send({ error: 'Not found' })
-    reply.header('content-disposition', `inline; filename="${file.name}"`)
-    return sendImage(file.path, reply, MIME[file.kind])
+    reply.header('content-disposition', `${q.dl ? 'attachment' : 'inline'}; filename="${file.name}"`)
+    return sendFile(req, reply, file.path, MIME[file.kind])
+  })
+
+  /** Browser-playable copy of a video. POST starts the transcode (idempotent) and says whether it's ready; GET serves it. */
+  app.post('/api/shots/:id/proxy', async (req, reply) => {
+    const id = shotId(req)
+    const video = core.lib.files(id).find((f) => f.kind === 'video')
+    if (!video) return reply.code(404).send({ error: 'Not a video' })
+    return core.previews.proxy(id, video.path)
+  })
+  app.get('/api/shots/:id/proxy', async (req, reply) => sendFile(req, reply, core.previews.proxyPath(shotId(req)), 'video/mp4'))
+
+  /** Where a file lives on disk, so the desktop app can open it in the user's own player. */
+  app.get('/api/files/:id/path', local, async (req, reply) => {
+    const file = core.lib.file(Number((req.params as { id: string }).id))
+    return file ? { path: file.path } : reply.code(404).send({ error: 'Not found' })
   })
 
   // ---- settings ----

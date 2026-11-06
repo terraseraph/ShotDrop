@@ -5,7 +5,7 @@ import type { Settings, ShotPatch, Status } from '@shared/types'
 import { ConfigStore } from './config'
 import { openDb, type DB } from './db'
 import { Library } from './library'
-import { Previewer, shutdownMedia } from './media'
+import { Previewer, lumaStats, shutdownMedia } from './media'
 import { Ingestor } from './ingest'
 import { FtpService } from './ftp'
 import { SyncService } from './sync'
@@ -20,6 +20,8 @@ export interface CoreOptions {
   version: string
   /** Send a file to the OS recycle bin. Defaults to permanent delete only if nothing else is provided. */
   trash?: (path: string) => Promise<void>
+  /** Optional face/blink scanner (needs a browser runtime, so the host supplies it). Without it faces stay unscanned. */
+  detectFaces?: (imagePath: string) => Promise<{ faces: number; blink: number | null } | null>
 }
 
 /**
@@ -67,7 +69,10 @@ export class Core {
       () => this.emitStatus()
     )
     this.bus.on((e) => {
-      if (e.type === 'shot:added') this.emitStatus()
+      if (e.type === 'shot:added') {
+        this.emitStatus()
+        void this.faceScan()
+      }
     })
     this.tunnel = new TunnelService(join(opts.dataDir, 'bin'), () => this.settings.tunnel.cloudflaredPath, () => this.emitStatus())
   }
@@ -82,6 +87,44 @@ export class Core {
     if (this.settings.ftp.enabled) await this.ftp.start(this.settings.ftp)
     await this.sync.start()
     await this.tunnel.refreshInstalled()
+    void this.scoreBackfill().then(() => this.faceScan())
+  }
+
+  private faceBusy = false
+  private faceTried = new Set<number>() // failed this run; don't spin on them
+
+  /** One scan loop at a time; re-queries so shots that arrive mid-scan are picked up too. */
+  private async faceScan(): Promise<void> {
+    const detect = this.opts.detectFaces
+    if (!detect || this.faceBusy) return
+    this.faceBusy = true
+    try {
+      for (;;) {
+        const id = this.lib.unfacedIds().find((i) => !this.faceTried.has(i))
+        if (id === undefined) break
+        this.faceTried.add(id)
+        const r = await detect(this.previews.previewPath(id)).catch(() => null)
+        if (!r) continue
+        this.lib.setFaces(id, r.faces, r.blink)
+        const shot = this.lib.get(id)
+        if (shot) this.bus.emit({ type: 'shot:updated', shot })
+      }
+    } finally {
+      this.faceBusy = false
+    }
+  }
+
+  /** Score shots that were imported before sharpness/hash existed, from their cached thumbnails. */
+  private async scoreBackfill(): Promise<void> {
+    for (const id of this.lib.unscoredIds()) {
+      try {
+        this.lib.setScores(id, await lumaStats(this.previews.thumbPath(id)))
+        const shot = this.lib.get(id)
+        if (shot) this.bus.emit({ type: 'shot:updated', shot })
+      } catch {
+        /* thumbnail missing: leave unscored */
+      }
+    }
   }
 
   /** Call once the API is listening. */

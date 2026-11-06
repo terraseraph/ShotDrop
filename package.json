@@ -5,7 +5,7 @@
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev --watch",
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
@@ -32,6 +32,7 @@
       "**/node_modules/sharp/**",
       "**/node_modules/@img/**",
       "**/node_modules/exiftool-vendored*/**",
+      "**/node_modules/@mediapipe/**",
       "**/node_modules/better-sqlite3/**"
     ],
     "electronLanguages": [
@@ -63,6 +64,7 @@
   "dependencies": {
     "@fastify/cors": "^11.4.1",
     "@fastify/static": "^10.1.10",
+    "@mediapipe/tasks-vision": "^1.2.2",
     "better-sqlite3": "^13.0.3",
     "chokidar": "^5.0.0",
     "exiftool-vendored": "^39.1.1",

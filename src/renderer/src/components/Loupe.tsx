@@ -5,6 +5,7 @@ import { fmtAperture, fmtFocal, fmtIso, fmtShutter, fmtTime } from '../format'
 import { motion } from 'motion/react'
 import { Icon } from './Icon'
 import { Badges } from './Badges'
+import { OpenExternal } from './OpenExternal'
 
 interface Props {
   shot: Shot | null
@@ -19,17 +20,43 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
   const [origin, setOrigin] = useState({ x: 50, y: 50 })
   const [loaded, setLoaded] = useState(false)
   const [showHist, setShowHist] = useState(true)
+  // Video the browser can't decode (HEVC, ProRes, 10-bit...) falls back to a server-made H.264 copy.
+  const [fallback, setFallback] = useState<'off' | 'working' | 'ready' | 'failed'>('off')
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setZoom(false)
     setLoaded(false)
+    setFallback('off')
   }, [shot?.id])
+
+  const shotId = shot?.id
+  useEffect(() => {
+    if (fallback !== 'working' || shotId === undefined) return
+    let stop = false
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async (): Promise<void> => {
+      try {
+        const r = await api.proxy(shotId)
+        if (stop) return
+        if (r.ready) setFallback('ready')
+        else if (r.error) setFallback('failed')
+        else timer = setTimeout(() => void poll(), 2000)
+      } catch {
+        if (!stop) setFallback('failed')
+      }
+    }
+    void poll()
+    return () => {
+      stop = true
+      clearTimeout(timer)
+    }
+  }, [fallback, shotId])
 
   // `z` toggles 100% zoom at the centre.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if ((e.key === 'z' || e.key === 'Z' || e.key === ' ') && !(e.target as HTMLElement).closest('input, textarea, select')) {
+      if ((e.key === 'z' || e.key === 'Z' || e.key === ' ') && !(e.target as HTMLElement).closest('input, textarea, select, video')) {
         e.preventDefault()
         setOrigin({ x: 50, y: 50 })
         setZoom((z) => !z)
@@ -41,6 +68,7 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
 
   if (!shot) return <div className="loupe" />
 
+  const video = shot.files.find((f) => f.kind === 'video')
   const jpeg = shot.files.find((f) => f.kind === 'jpeg')
   // Full-res zoom straight from the camera JPEG when there is one; otherwise the 2560px embedded preview.
   const zoomSrc = jpeg ? api.originalUrl(shot, jpeg.id) : api.previewUrl(shot)
@@ -56,14 +84,36 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
     <div className="loupe">
       <div
         ref={box}
-        className={`loupe-canvas ${zoom ? 'zoomed' : ''} ${fresh ? 'fresh' : ''}`}
-        onClick={(e) => {
-          track(e)
-          setZoom((z) => !z)
-        }}
-        onMouseMove={zoom ? track : undefined}
+        className={`loupe-canvas ${zoom && !video ? 'zoomed' : ''} ${fresh ? 'fresh' : ''}`}
+        onClick={
+          video
+            ? undefined
+            : (e) => {
+                track(e)
+                setZoom((z) => !z)
+              }
+        }
+        onMouseMove={zoom && !video ? track : undefined}
       >
-        {shot.hasPreview ? (
+        {video ? (
+          <>
+            <video
+              key={`${shot.id}-${fallback === 'ready'}`}
+              className="loupe-video"
+              src={fallback === 'ready' ? api.proxyUrl(shot) : api.originalUrl(shot, video.id)}
+              poster={shot.hasPreview ? api.previewUrl(shot) : undefined}
+              controls
+              preload="metadata"
+              onError={() => setFallback((f) => (f === 'off' ? 'working' : f))}
+            />
+            {(fallback === 'working' || fallback === 'failed') && (
+              <div className="video-note">
+                <span>{fallback === 'working' ? 'Preparing a playable copy…' : "Can't play this format here."}</span>
+                <OpenExternal shot={shot} file={video} />
+              </div>
+            )}
+          </>
+        ) : shot.hasPreview ? (
           zoom ? (
             <div className="zoom-layer" style={{ backgroundImage: `url("${zoomSrc}")`, backgroundPosition: `${origin.x}% ${origin.y}%` }} />
           ) : (

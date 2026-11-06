@@ -1,6 +1,7 @@
 import { AnimatePresence } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Label, Shot } from '@shared/types'
+import { analyze, type Cull } from '@shared/cull'
 import { MotionConfig } from 'motion/react'
 import { useLibrary } from './useLibrary'
 import { isRemote } from './api'
@@ -19,7 +20,7 @@ import { Shortcuts } from './components/Shortcuts'
 
 const LABEL_KEYS: Record<string, Label> = { '6': 'red', '7': 'yellow', '8': 'green', '9': 'blue' }
 
-function applyFilter(shots: Shot[], f: Filter, session: string, source: string): Shot[] {
+function applyFilter(shots: Shot[], f: Filter, session: string, source: string, cull: Map<number, Cull>): Shot[] {
   return shots.filter((s) => {
     if (session && s.session !== session) return false
     if (source && s.source !== source) return false
@@ -32,6 +33,12 @@ function applyFilter(shots: Shot[], f: Filter, session: string, source: string):
         return s.flag === -1
       case 'unrejected':
         return s.flag !== -1
+      case 'best':
+        return cull.get(s.id)?.best !== false
+      case 'soft':
+        return cull.get(s.id)?.soft === true
+      case 'blink':
+        return cull.get(s.id)?.blink === true
       default:
         return true
     }
@@ -56,7 +63,8 @@ export default function App() {
     }
   })
   const [helpOpen, setHelpOpen] = useState(false)
-  const [setupOpen, setSetupOpen] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(false) // dialog, opened from Settings
+  const [wizard, setWizard] = useState(false) // full-page first-run flow, held open until the test shot is seen
   const emptyRef = useRef(true)
   const [compare, setCompare] = useState<number[]>([])
   const [freshIds, setFreshIds] = useState<Set<number>>(new Set())
@@ -65,7 +73,7 @@ export default function App() {
 
   const onArrival = useCallback((shot: Shot) => {
     // First shot ever: keep the setup screen up so it can show the test shot.
-    if (emptyRef.current) setSetupOpen(true)
+    if (emptyRef.current) setWizard(true)
     setFreshIds((s) => new Set(s).add(shot.id))
     setTimeout(() => setFreshIds((s) => {
       const n = new Set(s)
@@ -93,7 +101,8 @@ export default function App() {
     setSettingsTab(tab)
     setSettingsOpen(true)
   }
-  const visible = useMemo(() => applyFilter(lib.shots, filter, session, source), [lib.shots, filter, session, source])
+  const cull = useMemo(() => analyze(lib.shots), [lib.shots])
+  const visible = useMemo(() => applyFilter(lib.shots, filter, session, source, cull), [lib.shots, filter, session, source, cull])
   const inSession = useMemo(() => (session ? lib.shots.filter((s) => s.session === session) : lib.shots), [lib.shots, session])
   const compareShots = useMemo(() => compare.flatMap((id) => lib.shots.find((s) => s.id === id) ?? []), [compare, lib.shots])
   const index = visible.findIndex((s) => s.id === selectedId)
@@ -197,12 +206,12 @@ export default function App() {
       />
 
       <div className="main-row">
-        {empty || setupOpen ? (
+        {empty || wizard ? (
           <SetupScreen
             status={lib.status}
             shots={lib.shots}
-            onBack={empty ? null : () => setSetupOpen(false)}
-            onGallery={(id) => { setSetupOpen(false); setSelectedId(id); setView('loupe') }}
+            onBack={empty ? null : () => setWizard(false)}
+            onGallery={(id) => { setWizard(false); setSelectedId(id); setView('loupe') }}
           />
         ) : (
           <div className={`workspace ${infoOpen ? 'with-info' : ''}`}>
@@ -214,7 +223,7 @@ export default function App() {
                   <Filmstrip shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} />
                 </>
               ) : (
-                <Grid shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} />
+                <Grid shots={visible} cull={cull} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} />
               )}
             </main>
             {infoOpen && <InfoPanel shot={selected} status={lib.status} compare={compareShots} onSelect={select} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
@@ -226,6 +235,9 @@ export default function App() {
       </div>
 
       {settingsOpen && !isRemote && <SettingsDrawer status={lib.status} tab={settingsTab} onClose={() => setSettingsOpen(false)} toast={lib.toast} onSetup={() => { setSettingsOpen(false); setSetupOpen(true) }} />}
+      {setupOpen && !empty && !wizard && !isRemote && (
+        <SetupScreen dialog status={lib.status} shots={lib.shots} onBack={() => setSetupOpen(false)} onGallery={() => setSetupOpen(false)} />
+      )}
       {helpOpen && <Shortcuts onClose={() => setHelpOpen(false)} />}
 
       <div className="toasts" aria-live="polite">

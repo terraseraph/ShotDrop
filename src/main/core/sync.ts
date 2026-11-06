@@ -1,14 +1,15 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
-import { copyFile } from 'node:fs/promises'
+import { copyFile, rename, stat, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Destination, FileKind, Settings } from '@shared/types'
 import type { FileRow, Library } from './library'
 import type { Bus } from './events'
 import { toolPath } from './bundled'
+import { isUnreachable, offlineDelay, type SyncError } from './retry'
 
 const CONCURRENCY = 2
-const MAX_ATTEMPTS = 5
+const MAX_ATTEMPTS = 5 // real errors only; an unreachable destination waits without spending these
 
 function run(cmd: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -16,8 +17,17 @@ function run(cmd: string, args: string[]): Promise<void> {
     let stderr = ''
     p.stderr.on('data', (d) => (stderr += d.toString()))
     p.on('error', reject)
-    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(stderr.trim().split('\n').pop() || `exit ${code}`))))
+    p.on('close', (code) => {
+      if (code === 0) return resolve()
+      const e: SyncError = new Error(stderr.trim().split('\n').pop() || `exit ${code}`)
+      e.exitCode = code ?? undefined
+      reject(e)
+    })
   })
+}
+
+function unreachable(message: string): SyncError {
+  return Object.assign(new Error(message), { unreachable: true })
 }
 
 /** Background queue pushing library files to each destination. State lives in SQLite, so it survives restarts. */
@@ -26,6 +36,8 @@ export class SyncService {
   private timer: NodeJS.Timeout | null = null
   rcloneAvailable = false
   private recent: { t: number; dest: string; size: number }[] = []
+  /** Destinations that couldn't be reached: skipped by pump() until `until`; `streak` drives the backoff. */
+  private offline = new Map<string, { until: number; streak: number }>()
 
   constructor(
     private lib: Library,
@@ -98,6 +110,8 @@ export class SyncService {
         n++
       }
     }
+    // An explicit resync is also the user saying "try it now".
+    this.offline.delete(dest.id)
     this.pump()
     return n
   }
@@ -105,7 +119,9 @@ export class SyncService {
   pump(): void {
     const free = CONCURRENCY - this.active
     if (free <= 0) return
-    const jobs = this.lib.nextSyncJobs(free)
+    const now = Date.now()
+    const waiting = [...this.offline].filter(([, o]) => o.until > now).map(([id]) => id)
+    const jobs = this.lib.nextSyncJobs(free, waiting)
     for (const job of jobs) {
       const dest = this.settings().destinations.find((d) => d.id === job.dest_id)
       const file = this.lib.file(job.file_id)
@@ -116,12 +132,20 @@ export class SyncService {
       this.transfer(dest, file)
         .then(() => {
           this.lib.finishSync(job.id)
+          this.offline.delete(dest.id)
           this.recent.push({ t: Date.now(), dest: dest.id, size: file.size })
         })
-        .catch((e: Error) => {
-          // Keep retrying on the next pump until MAX_ATTEMPTS, then leave it in 'error' for the user.
+        .catch((e: SyncError) => {
+          if (isUnreachable(e)) {
+            // Back to pending without spending an attempt; the whole destination pauses and backs off.
+            const streak = (this.offline.get(dest.id)?.streak ?? -1) + 1
+            this.offline.set(dest.id, { until: Date.now() + offlineDelay(streak), streak })
+            this.lib.setSyncStatus(job.id, 'pending', `Waiting for destination: ${e.message}`)
+            return
+          }
+          // Real error: retry this job a few times with a growing delay, then leave it in 'error' for the user.
           this.lib.setSyncStatus(job.id, 'error', e.message)
-          if (job.attempts + 1 < MAX_ATTEMPTS) setTimeout(() => this.lib.retryFailedSync(dest.id), 15000 * (job.attempts + 1))
+          if (job.attempts + 1 < MAX_ATTEMPTS) setTimeout(() => this.lib.retrySyncJob(job.id), 15000 * (job.attempts + 1))
         })
         .finally(() => {
           this.active--
@@ -141,21 +165,52 @@ export class SyncService {
   }
 
   private async transfer(dest: Destination, file: FileRow): Promise<void> {
-    if (dest.type === 'folder') {
-      const out = join(dest.target, ...file.rel_path.split('/'))
-      mkdirSync(dirname(out), { recursive: true })
-      await copyFile(file.path, out)
-      return
-    }
+    if (dest.type === 'folder') return copyToFolder(dest.target, file)
     if (!this.rcloneAvailable) throw new Error('rclone not found. Install it or set its path in Settings.')
     const remote = `${dest.target.replace(/\/+$/, '')}/${file.rel_path}`
-    await run(toolPath(this.settings().rclonePath, 'rclone'), ['copyto', file.path, remote, '--retries', '2'])
+    // rclone already verifies size and, where both ends support it, hash after each upload.
+    // --checksum makes it compare by hash (not modtime) when deciding whether a changed sidecar needs resending.
+    await run(toolPath(this.settings().rclonePath, 'rclone'), [
+      'copyto',
+      file.path,
+      remote,
+      '--checksum',
+      '--retries',
+      '2',
+      '--low-level-retries',
+      '10',
+      '--timeout',
+      '2m',
+      '--contimeout',
+      '20s'
+    ])
   }
 
   private changed(shotId: number): void {
     const shot = this.lib.get(shotId)
     if (shot) this.bus.emit({ type: 'shot:updated', shot })
     this.onState()
+  }
+}
+
+/** Copy into a temp name beside the target, check the size, then rename, so a dropped share never leaves a truncated file that looks done. */
+async function copyToFolder(root: string, file: FileRow): Promise<void> {
+  // If the destination root itself is gone (NAS offline, drive unplugged), wait rather than recreate it on the wrong disk.
+  await stat(root).catch((e: SyncError) => {
+    throw e.code === 'ENOENT' || isUnreachable(e) ? unreachable(`${root} is not reachable`) : e
+  })
+  const out = join(root, ...file.rel_path.split('/'))
+  const tmp = `${out}.shotdrop-part`
+  mkdirSync(dirname(out), { recursive: true })
+  try {
+    const want = (await stat(file.path)).size
+    await copyFile(file.path, tmp)
+    const got = (await stat(tmp)).size
+    if (got !== want) throw new Error(`Size mismatch after copy (${got} of ${want} bytes)`)
+    await rename(tmp, out)
+  } catch (e) {
+    await unlink(tmp).catch(() => {})
+    throw e
   }
 }
 

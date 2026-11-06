@@ -13,6 +13,7 @@ export function Stars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | '
 export function Badges({ shot }: { shot: Shot }) {
   return (
     <span className="badges">
+      {shot.files.some((f) => f.kind === 'video') && <span className="flag" aria-label="Video">▶</span>}
       {shot.label && <span className={`label-dot ${shot.label}`} aria-label={`${shot.label} label`} />}
       <Stars rating={shot.rating} />
       {shot.flag === 1 && <span className="flag pick" aria-label="Pick">●</span>}

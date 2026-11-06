@@ -23,6 +23,11 @@ interface ShotRow {
   has_preview: number
   hist: string | null
   clipped: number | null
+  dark: number | null
+  sharpness: number | null
+  hash: string | null
+  faces: number | null
+  blink: number | null
 }
 
 export interface FileRow {
@@ -38,6 +43,7 @@ export interface FileRow {
 
 export interface ShotQuery {
   session?: string
+  source?: string
   minRating?: number
   flag?: Flag | 'notRejected'
   label?: string
@@ -63,7 +69,7 @@ export interface NewShot {
   source: string | null
 }
 
-const KIND_RANK: Record<FileKind, number> = { jpeg: 0, heif: 1, raw: 2, sidecar: 8, other: 3 }
+const KIND_RANK: Record<FileKind, number> = { jpeg: 0, heif: 1, raw: 2, video: 4, sidecar: 8, other: 3 }
 
 /** All database access for shots, files and sync state. */
 export class Library {
@@ -110,8 +116,28 @@ export class Library {
 
   setPreview(shotId: number, fileId: number, stats: LumaStats): void {
     this.db
-      .prepare(`UPDATE shots SET preview_file_id = ?, has_preview = 1, hist = ?, clipped = ? WHERE id = ?`)
-      .run(fileId, JSON.stringify(stats.hist), stats.clipped, shotId)
+      .prepare(
+        `UPDATE shots SET preview_file_id = ?, has_preview = 1, hist = ?, clipped = ?, dark = ?, sharpness = ?, hash = ? WHERE id = ?`
+      )
+      .run(fileId, JSON.stringify(stats.hist), stats.clipped, stats.dark, stats.sharpness, stats.hash, shotId)
+  }
+
+  /** Shots rendered before scoring existed. */
+  unscoredIds(): number[] {
+    return (this.db.prepare(`SELECT id FROM shots WHERE has_preview = 1 AND sharpness IS NULL`).all() as { id: number }[]).map((r) => r.id)
+  }
+
+  setScores(shotId: number, s: LumaStats): void {
+    this.db.prepare(`UPDATE shots SET dark = ?, sharpness = ?, hash = ? WHERE id = ?`).run(s.dark, s.sharpness, s.hash, shotId)
+  }
+
+  /** Newest first, so live shooting is scanned before the backlog. */
+  unfacedIds(): number[] {
+    return (this.db.prepare(`SELECT id FROM shots WHERE has_preview = 1 AND faces IS NULL ORDER BY id DESC`).all() as { id: number }[]).map((r) => r.id)
+  }
+
+  setFaces(shotId: number, faces: number, blink: number | null): void {
+    this.db.prepare(`UPDATE shots SET faces = ?, blink = ? WHERE id = ?`).run(faces, blink, shotId)
   }
 
   previewFileId(shotId: number): number | null {
@@ -163,6 +189,10 @@ export class Library {
     if (q.session) {
       where.push('session = @session')
       params.session = q.session
+    }
+    if (q.source) {
+      where.push('source = @source')
+      params.source = q.source
     }
     if (q.minRating) {
       where.push('rating >= @minRating')
@@ -230,10 +260,19 @@ export class Library {
       .run(fileId, destId, Date.now())
   }
 
-  nextSyncJobs(limit: number): { id: number; file_id: number; dest_id: string; attempts: number }[] {
+  /** Oldest pending jobs, skipping destinations that are currently unreachable so they don't starve the rest. */
+  nextSyncJobs(limit: number, skipDests: string[] = []): { id: number; file_id: number; dest_id: string; attempts: number }[] {
     return this.db
-      .prepare(`SELECT id, file_id, dest_id, attempts FROM sync_jobs WHERE status = 'pending' ORDER BY id LIMIT ?`)
-      .all(limit) as { id: number; file_id: number; dest_id: string; attempts: number }[]
+      .prepare(
+        `SELECT id, file_id, dest_id, attempts FROM sync_jobs
+         WHERE status = 'pending' AND dest_id NOT IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT ?`
+      )
+      .all(JSON.stringify(skipDests), limit) as { id: number; file_id: number; dest_id: string; attempts: number }[]
+  }
+
+  /** Put one failed job back in the queue (only if nothing else has touched it since). */
+  retrySyncJob(jobId: number): void {
+    this.db.prepare(`UPDATE sync_jobs SET status = 'pending' WHERE id = ? AND status = 'error'`).run(jobId)
   }
 
   setSyncStatus(jobId: number, status: SyncStatus, error: string | null = null): void {
@@ -360,6 +399,11 @@ export class Library {
       hasPreview: !!r.has_preview,
       histogram: r.hist ? (JSON.parse(r.hist) as number[]) : null,
       clipped: r.clipped,
+      dark: r.dark,
+      sharpness: r.sharpness,
+      hash: r.hash,
+      faces: r.faces,
+      blink: r.blink,
       files: files.filter((f) => f.kind !== 'sidecar').map((f) => ({ id: f.id, name: f.name, kind: f.kind, size: f.size })),
       sync
     }

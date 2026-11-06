@@ -72,7 +72,7 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 | GET | `/api/status` | FTP, API, library and sync state |
 | GET | `/api/events` | Server-Sent Events: `shot:added`, `shot:updated`, `shot:removed`, `status`, `ingest:error` |
 | GET | `/api/sessions` | Shoot days with counts |
-| GET | `/api/shots` | `?session=&minRating=&flag=-1\|0\|1\|notRejected&label=&order=asc\|desc&limit=&offset=` |
+| GET | `/api/shots` | `?session=&source=&minRating=&flag=-1\|0\|1\|notRejected&label=&order=asc\|desc&limit=&offset=` |
 | GET | `/api/shots/:id` | One shot |
 | PATCH | `/api/shots/:id` | `{ rating?, flag?, label? }` |
 | PATCH | `/api/shots` | Bulk: `{ ids: [], patch: {...} }` |
@@ -127,7 +127,8 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 - [ ] Optional histogram and highlight-clipping overlay
 - [ ] Side-by-side compare (2 to 4 up)
 - [x] Filter by session, pick, rating, reject
-- [ ] Sort and filter by camera, colour label, file type
+- [x] Filter by camera (FTP login)
+- [ ] Sort and filter by colour label, file type
 - [x] Sessions/shoots: group a day or job into its own collection
 
 ### Culling

@@ -78,11 +78,16 @@ export const api = {
   tunnelInstall: () => req<TunnelState>('POST', '/api/tunnel/install'),
   tunnelStart: () => req<TunnelState>('POST', '/api/tunnel/start'),
   tunnelStop: () => req<TunnelState>('POST', '/api/tunnel/stop'),
+  /** Starts (once) a browser-playable copy of a video; poll until `ready`. */
+  proxy: (id: number) => req<{ ready: boolean; error?: string }>('POST', `/api/shots/${id}/proxy`),
+  filePath: (fileId: number) => req<{ path: string }>('GET', `/api/files/${fileId}/path`),
 
   // Images are served `immutable` and ids restart at 1 per library, so the URL carries a version.
   // File count changes when a better source (JPEG after RAW) re-renders the preview.
   thumbUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/thumb?v=${ver(s)}`),
   previewUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/preview?v=${ver(s)}`),
+  proxyUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/proxy?v=${ver(s)}`),
+  downloadUrl: (s: Shot, fileId: number) => withKey(`${base}/api/shots/${s.id}/original?v=${ver(s)}&file=${fileId}&dl=1`),
   originalUrl: (s: Shot, fileId?: number) =>
     withKey(`${base}/api/shots/${s.id}/original?v=${ver(s)}${fileId ? `&file=${fileId}` : ''}`),
 

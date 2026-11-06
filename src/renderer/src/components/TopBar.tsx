@@ -4,14 +4,17 @@ import { fmtDate } from '../format'
 import { isRemote } from '../api'
 import { Icon } from './Icon'
 
-export type Filter = 'all' | 'unrejected' | 'picks' | 'rated' | 'rejects'
+export type Filter = 'all' | 'unrejected' | 'picks' | 'rated' | 'rejects' | 'best' | 'soft' | 'blink'
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'unrejected', label: 'Hide rejects' },
   { id: 'picks', label: 'Picks' },
   { id: 'rated', label: 'Rated' },
-  { id: 'rejects', label: 'Rejects' }
+  { id: 'rejects', label: 'Rejects' },
+  { id: 'best', label: 'Best of burst' },
+  { id: 'soft', label: 'Soft' },
+  { id: 'blink', label: 'Eyes closed' }
 ]
 
 interface Props {

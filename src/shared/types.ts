@@ -2,7 +2,7 @@
 
 export type Flag = -1 | 0 | 1 // reject | none | pick
 export type Label = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | null
-export type FileKind = 'jpeg' | 'heif' | 'raw' | 'sidecar' | 'other'
+export type FileKind = 'jpeg' | 'heif' | 'raw' | 'video' | 'sidecar' | 'other'
 export type SyncStatus = 'pending' | 'running' | 'done' | 'error'
 
 export interface ShotFile {
@@ -33,6 +33,11 @@ export interface Shot {
   hasPreview: boolean
   histogram: number[] | null // 64 luminance bins, 0-100
   clipped: number | null // % of pixels at pure white
+  dark: number | null // % of pixels at pure black
+  sharpness: number | null // Laplacian variance of the thumbnail; compare within a burst only
+  hash: string | null // 64-bit perceptual hash (hex) for grouping near-duplicate frames
+  faces: number | null // faces found; null = not scanned yet
+  blink: number | null // worst eye closure among faces, 0 open .. 1 shut; null = none/unscanned
   files: ShotFile[]
   sync: Record<string, SyncStatus> // destinationId -> aggregate status
 }

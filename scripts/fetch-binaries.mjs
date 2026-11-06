@@ -1,4 +1,4 @@
-// Downloads the pinned rclone + cloudflared Windows builds (and their licences) into resources/bin/win-x64,
+// Downloads the pinned rclone + cloudflared + ffmpeg Windows builds (and their licences) into resources/bin/win-x64,
 // which electron-builder ships as <resources>/bin. Checksums are pinned, so a tampered download fails the build.
 // Bump a version: change it here, then copy the new sha256 from the release's SHA256SUMS / asset digest.
 import { createHash } from 'node:crypto'
@@ -11,7 +11,15 @@ const OUT = join(import.meta.dirname, '..', 'resources', 'bin', 'win-x64')
 
 const RCLONE = '1.75.2'
 const CLOUDFLARED = '2026.10.7'
+const FFMPEG = '2026-11-05-git-0893feba65' // gyan.dev "essentials" GPL build; only used to grab a frame for video thumbnails
 const ITEMS = [
+  {
+    file: 'ffmpeg.exe',
+    url: `https://github.com/GyanD/codexffmpeg/releases/download/${FFMPEG}/ffmpeg-${FFMPEG}-essentials_build.zip`,
+    sha256: '763ca14d6896b4d8aabde8ff90be4f1428f8a21bd43e438a371be6d7ebf891a6',
+    zipEntry: `ffmpeg-${FFMPEG}-essentials_build/bin/ffmpeg.exe`,
+    license: { file: 'LICENSE-ffmpeg.txt', url: 'https://raw.githubusercontent.com/FFmpeg/FFmpeg/n7.1/COPYING.GPLv3' }
+  },
   {
     file: 'rclone.exe',
     url: `https://downloads.rclone.org/v${RCLONE}/rclone-v${RCLONE}-windows-amd64.zip`,
@@ -35,7 +43,7 @@ async function get(url) {
 
 mkdirSync(OUT, { recursive: true })
 const stamp = join(OUT, 'versions.json')
-const want = JSON.stringify({ rclone: RCLONE, cloudflared: CLOUDFLARED })
+const want = JSON.stringify({ rclone: RCLONE, cloudflared: CLOUDFLARED, ffmpeg: FFMPEG })
 const have = existsSync(stamp) ? readFileSync(stamp, 'utf8') : ''
 
 for (const it of ITEMS) {

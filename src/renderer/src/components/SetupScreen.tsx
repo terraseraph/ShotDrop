@@ -96,12 +96,34 @@ interface Props {
   /** Set when reached from the app rather than as the empty state. */
   onBack: (() => void) | null
   onGallery: (id: number) => void
+  /** Modal over the gallery (from Settings): no stepper, no pre-ticked steps. */
+  dialog?: boolean
 }
 
-export function SetupScreen({ status, shots, onBack, onGallery }: Props) {
+const BRAND_KEY = 'shotdrop.brand'
+const savedBrand = (): string | null => {
+  try {
+    const b = localStorage.getItem(BRAND_KEY)
+    return BRAND_STEPS.some((s) => s.brand === b) ? b : null
+  } catch {
+    return null
+  }
+}
+
+export function SetupScreen({ status, shots, onBack, onGallery, dialog }: Props) {
   const reduced = useReducedMotion()
   const [settings, setSettings] = useState<Settings | null>(null)
-  const [brand, setBrand] = useState('Sony')
+  const [picked, setPicked] = useState(() => savedBrand() !== null)
+  const [brand, setBrand] = useState(() => savedBrand() ?? 'Sony')
+  const pickBrand = (b: string): void => {
+    setBrand(b)
+    setPicked(true)
+    try {
+      localStorage.setItem(BRAND_KEY, b)
+    } catch {
+      /* not remembered */
+    }
+  }
   const [userIdx, setUserIdx] = useState(0)
   const [qr, setQr] = useState('')
   const [log, setLog] = useState<LogLine[]>([])
@@ -141,10 +163,20 @@ export function SetupScreen({ status, shots, onBack, onGallery }: Props) {
     if (first) push(`Received ${first.files.map((f) => f.name).join(' + ')}`, 'rx')
   }, [first?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const done = [true, !!host, connected || !!first, !!first]
+  useEffect(() => {
+    if (!dialog || !onBack) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onBack()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dialog, onBack])
+
+  // Only tick what has actually happened: a brand the user chose, and a camera that really connected.
+  const done = [picked, connected || !!first, connected || !!first, !!first]
   const active = done.indexOf(false)
   const stepRows = [
-    { title: 'Pick your brand', sub: brand },
+    { title: 'Pick your brand', sub: picked ? brand : 'Choose one' },
     { title: 'Same Wi-Fi', sub: host ? `PC is at ${host}` : 'No network found' },
     { title: 'Enter these on the camera', sub: 'Or scan the QR' },
     { title: 'Take a test shot', sub: "We'll wait for it" }
@@ -155,9 +187,9 @@ export function SetupScreen({ status, shots, onBack, onGallery }: Props) {
 
   const col = (i: number) => ({ initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: [0.2, 0.8, 0.2, 1] as const, delay: i * 0.08 } })
 
-  return (
-    <MotionConfig reducedMotion="user">
-      <div className="setup">
+  const body = (
+      <div className={`setup ${dialog ? 'in-dialog' : ''}`} role={dialog ? 'dialog' : undefined} aria-label={dialog ? 'Add a camera' : undefined} onClick={dialog ? (e) => e.stopPropagation() : undefined}>
+        {!dialog && (
         <motion.aside className="setup-steps" {...col(0)}>
           <h2>Add a camera</h2>
           {stepRows.map((s, i) => (
@@ -168,14 +200,18 @@ export function SetupScreen({ status, shots, onBack, onGallery }: Props) {
           ))}
           {onBack && <button className="link setup-skip" onClick={onBack}>I've done this before →</button>}
         </motion.aside>
+        )}
 
         <motion.main className="setup-main" {...col(1)}>
-          <h2>Type this into the camera's FTP menu</h2>
+          {dialog && onBack && (
+            <button className="icon-btn setup-close" onClick={onBack} aria-label="Close"><Icon name="close" /></button>
+          )}
+          <h2>{dialog ? 'Add a camera' : "Type this into the camera's FTP menu"}</h2>
           <p className="muted">Big on purpose. Menu names vary by model and firmware; these are a starting point.</p>
 
           <div className="setup-brands" role="tablist" aria-label="Camera brand">
             {BRAND_STEPS.map((b) => (
-              <button key={b.brand} role="tab" aria-selected={brand === b.brand} className={brand === b.brand ? 'on' : ''} onClick={() => setBrand(b.brand)}>
+              <button key={b.brand} role="tab" aria-selected={brand === b.brand} className={brand === b.brand ? 'on' : ''} onClick={() => pickBrand(b.brand)}>
                 {b.brand}
               </button>
             ))}
@@ -268,12 +304,21 @@ export function SetupScreen({ status, shots, onBack, onGallery }: Props) {
                 </motion.div>
               )}
             </AnimatePresence>
-            <button className="btn primary" disabled={!first && !shots.length} onClick={() => onGallery((first ?? shots[shots.length - 1]).id)}>
-              Open the gallery →
-            </button>
+            {dialog && onBack ? (
+              <button className="btn primary" onClick={onBack}>Done</button>
+            ) : (
+              <button className="btn primary" disabled={!first && !shots.length} onClick={() => onGallery((first ?? shots[shots.length - 1]).id)}>
+                Open the gallery →
+              </button>
+            )}
           </div>
         </motion.aside>
       </div>
+  )
+
+  return (
+    <MotionConfig reducedMotion="user">
+      {dialog ? <div className="modal-backdrop setup-backdrop" onClick={onBack ?? undefined}>{body}</div> : body}
     </MotionConfig>
   )
 }

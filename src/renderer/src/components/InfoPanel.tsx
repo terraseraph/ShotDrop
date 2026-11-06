@@ -4,6 +4,7 @@ import { motion } from 'motion/react'
 import { api } from '../api'
 import { fmtAperture, fmtFocal, fmtShutter, fmtSize, fmtTime, fmtDate } from '../format'
 import { Icon } from './Icon'
+import { OpenExternal } from './OpenExternal'
 
 const LABELS: Exclude<Label, null>[] = ['red', 'yellow', 'green', 'blue', 'purple']
 const SYNC_TEXT: Record<SyncStatus, string> = { pending: 'Queued', running: 'Uploading', done: 'Synced', error: 'Failed' }
@@ -109,6 +110,7 @@ export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
                 {f.name}
               </a>
               <span className="muted">{fmtSize(f.size)}</span>
+              {f.kind === 'video' && <OpenExternal shot={shot} file={f} />}
             </li>
           ))}
         </ul>

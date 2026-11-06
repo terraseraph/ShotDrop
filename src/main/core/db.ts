@@ -53,7 +53,7 @@ export function openDb(dataDir: string): DB {
     CREATE INDEX IF NOT EXISTS sync_status ON sync_jobs(status);
   `)
   // Columns added after v0.1; CREATE TABLE IF NOT EXISTS won't add them to an existing library.
-  for (const col of ['hist TEXT', 'clipped REAL']) {
+  for (const col of ['hist TEXT', 'clipped REAL', 'dark REAL', 'sharpness REAL', 'hash TEXT', 'faces INTEGER', 'blink REAL']) {
     try {
       db.exec(`ALTER TABLE shots ADD COLUMN ${col}`)
     } catch {
