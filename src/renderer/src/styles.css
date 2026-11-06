@@ -226,9 +226,14 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .frame.rejected img { opacity: 0.35; filter: grayscale(1); }
 .frame.fresh { animation: slide-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .frame.fresh::after, .cell.fresh .cell-img::after {
-  content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%;
+  content: ''; position: absolute; top: 5px; left: 5px; width: 7px; height: 7px; border-radius: 50%;
   background: var(--tally); box-shadow: 0 0 8px var(--tally-glow);
 }
+.sync-dots { position: absolute; right: 5px; top: 5px; display: flex; gap: 3px; }
+.sync-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); }
+.sync-dots i.done { background: var(--live); }
+.sync-dots i.running { background: var(--star); animation: pulse 0.9s infinite; }
+.sync-dots i.error { background: var(--reject); }
 .frame-badges { position: absolute; left: 4px; bottom: 3px; text-shadow: 0 1px 2px #000; }
 .frame-empty { display: grid; place-items: center; height: 100%; font-size: 10px; color: var(--muted); padding: 4px; word-break: break-all; }
 

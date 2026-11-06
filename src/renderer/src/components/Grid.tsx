@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { Shot } from '@shared/types'
 import { api } from '../api'
 import { fmtTime } from '../format'
-import { Badges } from './Badges'
+import { Badges, SyncDots } from './Badges'
 
 interface Props {
   shots: Shot[]
@@ -33,6 +33,7 @@ export function Grid({ shots, selectedId, freshIds, onSelect, onOpen }: Props) {
           >
             <span className="cell-img">
               {s.hasPreview ? <img src={api.thumbUrl(s.id)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
+            <SyncDots sync={s.sync} />
             </span>
             <span className="cell-meta">
               <span className="cell-name">{s.name}</span>
