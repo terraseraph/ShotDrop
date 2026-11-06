@@ -6,6 +6,7 @@ import { TopBar, type Filter } from './components/TopBar'
 import { Loupe } from './components/Loupe'
 import { Filmstrip } from './components/Filmstrip'
 import { Grid } from './components/Grid'
+import { SessionHeader } from './components/SessionHeader'
 import { InfoPanel } from './components/InfoPanel'
 import { EmptyState } from './components/EmptyState'
 import { SettingsDrawer } from './components/SettingsDrawer'
@@ -14,9 +15,10 @@ import { Shortcuts } from './components/Shortcuts'
 
 const LABEL_KEYS: Record<string, Label> = { '6': 'red', '7': 'yellow', '8': 'green', '9': 'blue' }
 
-function applyFilter(shots: Shot[], f: Filter, session: string): Shot[] {
+function applyFilter(shots: Shot[], f: Filter, session: string, source: string): Shot[] {
   return shots.filter((s) => {
     if (session && s.session !== session) return false
+    if (source && s.source !== source) return false
     switch (f) {
       case 'picks':
         return s.flag === 1
@@ -37,6 +39,7 @@ export default function App() {
   const [follow, setFollow] = useState(true)
   const [filter, setFilter] = useState<Filter>('all')
   const [session, setSession] = useState('')
+  const [source, setSource] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [infoOpen, setInfoOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -59,7 +62,8 @@ export default function App() {
   }, [])
 
   const lib = useLibrary(onArrival)
-  const visible = useMemo(() => applyFilter(lib.shots, filter, session), [lib.shots, filter, session])
+  const visible = useMemo(() => applyFilter(lib.shots, filter, session, source), [lib.shots, filter, session, source])
+  const inSession = useMemo(() => (session ? lib.shots.filter((s) => s.session === session) : lib.shots), [lib.shots, session])
   const index = visible.findIndex((s) => s.id === selectedId)
   const selected = index >= 0 ? visible[index] : null
 
@@ -158,6 +162,7 @@ export default function App() {
       ) : (
         <div className={`workspace ${infoOpen ? 'with-info' : ''}`}>
           <main className="stage">
+            <SessionHeader shots={inSession} session={session} source={source} onSource={setSource} />
             {view === 'loupe' ? (
               <>
                 <Loupe shot={selected} fresh={selected ? freshIds.has(selected.id) : false} follow={follow} onPrev={() => move(-1)} onNext={() => move(1)} />
