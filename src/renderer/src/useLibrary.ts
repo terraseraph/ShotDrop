@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ServerEvent, Shot, ShotPatch, Status } from '@shared/types'
 import { api, AuthError } from './api'
+import { fmtSize } from './format'
 
 export interface Toast {
   id: number
   text: string
   tone: 'info' | 'error'
+}
+
+export interface Activity {
+  id: number
+  t: number
+  text: string
+  tone?: 'bad'
 }
 
 /** Loads the library once, then keeps it live from the server's SSE stream. */
@@ -16,6 +24,8 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
   const [loaded, setLoaded] = useState(false)
   const [connected, setConnected] = useState(true)
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [activity, setActivity] = useState<Activity[]>([])
+  const prev = useRef<Status | null>(null)
   const [loadKey, setLoadKey] = useState(0)
   const arrival = useRef(onArrival)
   arrival.current = onArrival
@@ -24,6 +34,10 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
     const id = Date.now() + Math.random()
     setToasts((t) => [...t.slice(-3), { id, text, tone }])
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000)
+  }, [])
+
+  const log = useCallback((text: string, tone?: 'bad') => {
+    setActivity((a) => [{ id: Date.now() + Math.random(), t: Date.now(), text, tone }, ...a].slice(0, 20))
   }, [])
 
   useEffect(() => {
@@ -38,6 +52,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
         case 'shot:added':
           setShots((s) => (s.some((x) => x.id === e.shot.id) ? s : insertSorted(s, e.shot)))
           arrival.current(e.shot)
+          log(`${e.shot.name} from ${e.shot.source ?? 'import'} · ${fmtSize(e.shot.files.reduce((n, f) => n + f.size, 0))}`)
           break
         case 'shot:updated':
           setShots((s) => (s.some((x) => x.id === e.shot.id) ? s.map((x) => (x.id === e.shot.id ? e.shot : x)) : insertSorted(s, e.shot)))
@@ -45,8 +60,20 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
         case 'shot:removed':
           setShots((s) => s.filter((x) => x.id !== e.id))
           break
-        case 'status':
+        case 'status': {
+          const p = prev.current
+          if (p) {
+            for (const c of e.status.cameras) if (c.connected && !p.cameras.find((x) => x.username === c.username)?.connected) log(`${c.label || c.username} connected`)
+            for (const d of e.status.destinations) {
+              const o = p.destinations.find((x) => x.id === d.id)
+              if (o && d.done > o.done) log(`${d.name}: ${d.done - o.done} file${d.done - o.done > 1 ? 's' : ''} done`)
+              if (o && d.errors > o.errors) log(`${d.name}: ${d.errors - o.errors} failed`, 'bad')
+            }
+          }
+          prev.current = e.status
           setStatus(e.status)
+          break
+        }
           break
         case 'ingest:error':
           toast(`Couldn't import ${e.file.split(/[\\/]/).pop()}: ${e.error}`, 'error')
@@ -69,7 +96,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
           c.events.forEach(apply)
           seq = c.seq
         }
-        setStatus(c.status)
+        apply({ type: 'status', status: c.status })
       } catch {
         setConnected(false)
       }
@@ -87,6 +114,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
         if (cancelled) return
         seq = s
         setShots(items)
+        prev.current = st
         setStatus(st)
         setNeedsPin(false)
         setLoaded(true)
@@ -115,7 +143,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
       if (pollTimer) clearTimeout(pollTimer)
       if (watchdog) clearTimeout(watchdog)
     }
-  }, [loadKey, toast])
+  }, [loadKey, toast, log])
 
   const patch = useCallback(async (ids: number[], p: ShotPatch) => {
     // Optimistic: culling must feel instant.
@@ -132,7 +160,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
     await api.deleteShot(id).catch((e: Error) => toast(`Couldn't delete: ${e.message}`, 'error'))
   }, [toast])
 
-  return { shots, status, loaded, needsPin, connected, toasts, toast, patch, remove, reload: () => setLoadKey((k) => k + 1) }
+  return { shots, status, activity, loaded, needsPin, connected, toasts, toast, patch, remove, reload: () => setLoadKey((k) => k + 1) }
 }
 
 function insertSorted(list: Shot[], shot: Shot): Shot[] {

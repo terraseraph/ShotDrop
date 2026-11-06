@@ -5,10 +5,11 @@ import { NetworkCheck } from './NetworkCheck'
 import { TunnelPanel } from './TunnelPanel'
 import { Icon } from './Icon'
 
-type Tab = 'camera' | 'sync' | 'library' | 'remote'
+export type Tab = 'camera' | 'sync' | 'library' | 'remote'
 
 interface Props {
   status: Status | null
+  tab?: Tab
   onClose: () => void
   toast: (t: string, tone?: 'info' | 'error') => void
   onSetup: () => void
@@ -19,8 +20,8 @@ const PORT_HINT = isWindows
   ? 'Any free port works; set the same number in the camera. Use a free port in the connection check if this one is taken.'
   : 'Any free port works. Ports below 1024 need root on macOS/Linux.'
 
-export function SettingsDrawer({ status, onClose, toast, onSetup }: Props) {
-  const [tab, setTab] = useState<Tab>('camera')
+export function SettingsDrawer({ status, tab: initialTab, onClose, toast, onSetup }: Props) {
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'camera')
   const [s, setS] = useState<Settings | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)

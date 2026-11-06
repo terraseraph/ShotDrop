@@ -1,3 +1,4 @@
+import { AnimatePresence } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Label, Shot } from '@shared/types'
 import { useLibrary } from './useLibrary'
@@ -9,6 +10,8 @@ import { Grid } from './components/Grid'
 import { InfoPanel } from './components/InfoPanel'
 import { SetupScreen } from './components/SetupScreen'
 import { SettingsDrawer } from './components/SettingsDrawer'
+import { Dock } from './components/Dock'
+import { type Tab } from './components/SettingsDrawer'
 import { PinGate } from './components/PinGate'
 import { Shortcuts } from './components/Shortcuts'
 
@@ -40,6 +43,14 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [infoOpen, setInfoOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<Tab>('camera')
+  const [dockOpen, setDockOpen] = useState(() => {
+    try {
+      return localStorage.getItem('shotdrop.dock') === '1'
+    } catch {
+      return false
+    }
+  })
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false)
   const emptyRef = useRef(true)
@@ -63,6 +74,20 @@ export default function App() {
   }, [])
 
   const lib = useLibrary(onArrival)
+  const toggleDock = useCallback(() => {
+    setDockOpen((o) => {
+      try {
+        localStorage.setItem('shotdrop.dock', o ? '0' : '1')
+      } catch {
+        /* storage blocked: the dock just won't be remembered */
+      }
+      return !o
+    })
+  }, [])
+  const openSettings = (tab: Tab = 'camera'): void => {
+    setSettingsTab(tab)
+    setSettingsOpen(true)
+  }
   const visible = useMemo(() => applyFilter(lib.shots, filter, session), [lib.shots, filter, session])
   const index = visible.findIndex((s) => s.id === selectedId)
   const selected = index >= 0 ? visible[index] : null
@@ -120,6 +145,7 @@ export default function App() {
       else if (k === 'Escape' && view === 'loupe') setView('grid')
       else if (k === 'i' || k === 'I') setInfoOpen((o) => !o)
       else if (k === '?') setHelpOpen((o) => !o)
+      else if (k === ',' && !isRemote) toggleDock()
       else if (k === 'Delete' && id && selected) {
         if (confirm(`Move ${selected.files.map((f) => f.name).join(' + ')} to the recycle bin?`)) {
           move(1)
@@ -130,7 +156,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, visible, view, move, lib, settingsOpen])
+  }, [selected, visible, view, move, lib, settingsOpen, toggleDock])
 
   if (lib.needsPin) return <PinGate onUnlocked={lib.reload} />
   // Nothing until the first load settles, so remote visitors don't see the empty state flash before the PIN prompt.
@@ -153,35 +179,42 @@ export default function App() {
         onFollow={setFollow}
         view={view}
         onView={setView}
-        onSettings={() => setSettingsOpen(true)}
+        onSettings={() => openSettings()}
+        dockOpen={dockOpen}
+        onDock={toggleDock}
         onHelp={() => setHelpOpen(true)}
         visibleCount={visible.length}
       />
 
-      {empty || setupOpen ? (
-        <SetupScreen
-          status={lib.status}
-          shots={lib.shots}
-          onBack={empty ? null : () => setSetupOpen(false)}
-          onGallery={(id) => { setSetupOpen(false); setSelectedId(id); setView('loupe') }}
-        />
-      ) : (
-        <div className={`workspace ${infoOpen ? 'with-info' : ''}`}>
-          <main className="stage">
-            {view === 'loupe' ? (
-              <>
-                <Loupe shot={selected} fresh={selected ? freshIds.has(selected.id) : false} follow={follow} onPrev={() => move(-1)} onNext={() => move(1)} />
-                <Filmstrip shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} />
-              </>
-            ) : (
-              <Grid shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} />
-            )}
-          </main>
-          {infoOpen && <InfoPanel shot={selected} status={lib.status} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
-        </div>
-      )}
+      <div className="main-row">
+        {empty || setupOpen ? (
+          <SetupScreen
+            status={lib.status}
+            shots={lib.shots}
+            onBack={empty ? null : () => setSetupOpen(false)}
+            onGallery={(id) => { setSetupOpen(false); setSelectedId(id); setView('loupe') }}
+          />
+        ) : (
+          <div className={`workspace ${infoOpen ? 'with-info' : ''}`}>
+            <main className="stage">
+              {view === 'loupe' ? (
+                <>
+                  <Loupe shot={selected} fresh={selected ? freshIds.has(selected.id) : false} follow={follow} onPrev={() => move(-1)} onNext={() => move(1)} />
+                  <Filmstrip shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} />
+                </>
+              ) : (
+                <Grid shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} />
+              )}
+            </main>
+            {infoOpen && <InfoPanel shot={selected} status={lib.status} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
+          </div>
+        )}
+        <AnimatePresence>
+          {dockOpen && !isRemote && <Dock status={lib.status} activity={lib.activity} onSettings={openSettings} toast={lib.toast} />}
+        </AnimatePresence>
+      </div>
 
-      {settingsOpen && !isRemote && <SettingsDrawer status={lib.status} onClose={() => setSettingsOpen(false)} toast={lib.toast} onSetup={() => { setSettingsOpen(false); setSetupOpen(true) }} />}
+      {settingsOpen && !isRemote && <SettingsDrawer status={lib.status} tab={settingsTab} onClose={() => setSettingsOpen(false)} toast={lib.toast} onSetup={() => { setSettingsOpen(false); setSetupOpen(true) }} />}
       {helpOpen && <Shortcuts onClose={() => setHelpOpen(false)} />}
 
       <div className="toasts" aria-live="polite">
