@@ -45,12 +45,17 @@ const guid = readFileSync(guidFile, 'utf8').trim()
 const name = `ShotDrop-${hostname()}`.slice(0, 30)
 
 async function connect(): Promise<{ c: PtpIpClient; info: DeviceInfo }> {
-  const c = new PtpIpClient({ host, guid, name })
-  await c.connect()
-  await c.openSession()
+  const c = await session()
   const info = await c.deviceInfo()
   console.log(`connected: ${info.manufacturer} ${info.model} fw ${info.version} (camera calls itself "${c.cameraName}")`)
   return { c, info }
+}
+
+async function session(): Promise<PtpIpClient> {
+  const c = new PtpIpClient({ host, guid, name })
+  await c.connect()
+  await c.openSession()
+  return c
 }
 
 const has = (info: DeviceInfo, op: number): boolean => info.operations.includes(op)
@@ -63,22 +68,12 @@ async function cmdInfo(): Promise<void> {
   console.log(`props: ${info.properties.length}`)
   console.log(`live view ops listed: ${has(info, Op.NikonStartLiveView) && has(info, Op.NikonGetLiveViewImg)}`)
   console.log(`pairing op listed (0x952B): ${has(info, Op.NikonGetPairingCode)}`)
-  // Nikon Z lists a restricted op set even when paired (see issue #1314), so try live view rather than trusting the list.
-  try {
-    await c.transaction(Op.NikonStartLiveView)
-    await nikonWaitReady(c)
-    const { data } = await c.transaction(Op.NikonGetLiveViewImg)
-    const jpg = extractJpeg(data)
-    console.log(`live view probe: frame ${data.length} B, JPEG ${jpg ? jpg.length + ' B at offset ' + data.indexOf(jpg) : 'not found'}`)
-    await c.transaction(Op.NikonEndLiveView).catch(() => {})
-  } catch (e) {
-    console.log(`live view probe failed: ${(e as Error).message}`)
-  }
+  // No live-view probe here: an unpaired Z50II drops off Wi-Fi entirely when asked for it. Use "live" once paired.
   await c.close()
 }
 
 async function cmdPair(): Promise<void> {
-  const { c } = await connect()
+  const c = await session() // Nikon wants 0x952B straight after OpenSession, before any other op
   console.log('requesting pairing code…')
   await nikonPair(c, (code) => console.log(`\n  PAIRING CODE: ${code}\n  Check the camera shows the same code, then confirm on the camera.\n`))
   console.log('camera confirmed. It will restart Wi-Fi now; reconnecting…')
@@ -155,7 +150,12 @@ async function cmdLive(): Promise<void> {
   let t = Date.now()
   let stopping = false
   process.on('SIGINT', () => (stopping = true))
+  let last = 0
   while (!stopping) {
+    // The camera answers ~95 req/s with repeats of the same frame; ~30 fps is all it renders and spares the link.
+    const wait = 33 - (Date.now() - last)
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait))
+    last = Date.now()
     let frame
     try {
       frame = await c.transaction(Op.NikonGetLiveViewImg)
