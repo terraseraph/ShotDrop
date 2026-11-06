@@ -29,6 +29,8 @@ export class FtpService {
   state: FtpState = { running: false, error: null, activeConnections: 0 }
   /** Recent logins (good and bad), newest last. A refused login is the commonest camera setup mistake. */
   attempts: LoginAttempt[] = []
+  /** Kept current by Core so changing it never restarts the server. */
+  preferredAddress: string | null = null
 
   constructor(
     private incomingDir: () => string,
@@ -42,7 +44,7 @@ export class FtpService {
 
     const server = new FtpSrv({
       url: `ftp://0.0.0.0:${cfg.port}`,
-      pasv_url: (clientIp: string) => addressFacing(clientIp),
+      pasv_url: (clientIp: string) => addressFacing(clientIp, this.preferredAddress),
       pasv_min: cfg.pasvMin,
       pasv_max: cfg.pasvMax,
       anonymous: false,

@@ -10,7 +10,7 @@ import { Ingestor } from './ingest'
 import { FtpService } from './ftp'
 import { SyncService } from './sync'
 import { Bus } from './events'
-import { lanAddresses } from './net'
+import { listInterfaces } from './net'
 import { TunnelService } from './tunnel'
 import { XmpService } from './xmp'
 
@@ -78,6 +78,7 @@ export class Core {
 
   async start(): Promise<void> {
     mkdirSync(this.settings.libraryDir, { recursive: true })
+    this.ftp.preferredAddress = this.settings.ftp.preferredAddress
     await this.ingest.start(this.settings.watchFolders)
     if (this.settings.ftp.enabled) await this.ftp.start(this.settings.ftp)
     await this.sync.start()
@@ -101,7 +102,10 @@ export class Core {
 
   status(): Status {
     const s = this.settings
-    const addrs = lanAddresses()
+    const pref = s.ftp.preferredAddress
+    const interfaces = listInterfaces(pref)
+    const addrs = interfaces.map((i) => i.address)
+    const preferredMissing = pref && !addrs.includes(pref) ? pref : null
     const midnight = new Date().setHours(0, 0, 0, 0)
     const stats = this.lib.sourceStats(midnight)
     const prog = this.lib.destProgress()
@@ -117,7 +121,7 @@ export class Core {
     }
     return {
       version: this.opts.version,
-      ftp: { ...this.ftp.state, port: s.ftp.port, addresses: addrs },
+      ftp: { ...this.ftp.state, port: s.ftp.port, addresses: addrs, interfaces, preferredMissing },
       api: {
         port: this.apiState.port,
         remote: this.apiState.remote,
@@ -157,7 +161,10 @@ export class Core {
     const after = this.config.update(patch)
     const changed = (k: keyof Settings): boolean => JSON.stringify(before[k]) !== JSON.stringify(after[k])
 
-    if (changed('ftp')) {
+    this.ftp.preferredAddress = after.ftp.preferredAddress
+    // Picking a different host address must not drop camera connections, so it doesn't count as an FTP change.
+    const ftpOf = (f: Settings['ftp']): string => JSON.stringify({ ...f, preferredAddress: null })
+    if (ftpOf(before.ftp) !== ftpOf(after.ftp)) {
       if (after.ftp.enabled) await this.ftp.start(after.ftp)
       else await this.ftp.stop()
     }

@@ -69,6 +69,8 @@ export interface Settings {
     pasvMin: number
     pasvMax: number
     users: FtpUser[]
+    /** LAN address the user chose to show cameras; null = automatic. */
+    preferredAddress: string | null
   }
   api: { port: number }
   remote: { enabled: boolean; pin: string }
@@ -107,9 +109,26 @@ export interface DestStatus {
   bps: number // bytes/s over the last 10 s
 }
 
+export interface NetInterface {
+  address: string
+  adapter: string
+  kind: 'wifi' | 'ethernet' | 'vpn-virtual' | 'other'
+  preferred: boolean
+}
+
 export interface Status {
   version: string
-  ftp: { running: boolean; port: number; addresses: string[]; error: string | null; activeConnections: number }
+  ftp: {
+    running: boolean
+    port: number
+    /** Preferred address first. */
+    addresses: string[]
+    interfaces: NetInterface[]
+    /** The saved preferred address is no longer on this PC (network changed); we fell back. */
+    preferredMissing: string | null
+    error: string | null
+    activeConnections: number
+  }
   api: { port: number; urls: string[]; remote: boolean }
   library: { dir: string; shots: number; free: number | null; total: number | null }
   sync: { pending: number; running: number; errors: number; rcloneAvailable: boolean }
