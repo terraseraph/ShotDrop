@@ -13,6 +13,7 @@ export function defaultSettings(picturesDir: string): Settings {
       port: 2121,
       pasvMin: 50000,
       pasvMax: 50100,
+      preferredAddress: null,
       users: [{ username: 'camera', password: randomPassword(), label: 'Camera 1' }]
     },
     api: { port: 8787 },

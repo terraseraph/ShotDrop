@@ -66,6 +66,35 @@ export interface Destination {
   enabled: boolean
 }
 
+export type CloudProvider = 'drive' | 'dropbox'
+
+export interface CloudAccount {
+  name: string // rclone remote name in ShotDrop's own rclone.conf, e.g. "gdrive-a1b2"
+  provider: CloudProvider
+  fullAccess: boolean // false = Drive scope drive.file: only sees folders ShotDrop created
+  ownClient: boolean // linked with the user's own client ID
+}
+
+export interface CloudLinkOptions {
+  fullAccess?: boolean
+  clientId?: string
+  clientSecret?: string
+}
+
+export interface CloudState {
+  linking: { provider: CloudProvider; authUrl?: string; startedAt: number } | null
+}
+
+export interface CloudFolder {
+  name: string
+}
+
+export interface CloudQuota {
+  total?: number
+  used?: number
+  free?: number
+}
+
 export interface Settings {
   libraryDir: string
   ftp: {
@@ -74,6 +103,8 @@ export interface Settings {
     pasvMin: number
     pasvMax: number
     users: FtpUser[]
+    /** LAN address the user chose to show cameras; null = automatic. */
+    preferredAddress: string | null
   }
   api: { port: number }
   remote: { enabled: boolean; pin: string }
@@ -112,9 +143,26 @@ export interface DestStatus {
   bps: number // bytes/s over the last 10 s
 }
 
+export interface NetInterface {
+  address: string
+  adapter: string
+  kind: 'wifi' | 'ethernet' | 'vpn-virtual' | 'other'
+  preferred: boolean
+}
+
 export interface Status {
   version: string
-  ftp: { running: boolean; port: number; addresses: string[]; error: string | null; activeConnections: number }
+  ftp: {
+    running: boolean
+    port: number
+    /** Preferred address first. */
+    addresses: string[]
+    interfaces: NetInterface[]
+    /** The saved preferred address is no longer on this PC (network changed); we fell back. */
+    preferredMissing: string | null
+    error: string | null
+    activeConnections: number
+  }
   api: { port: number; urls: string[]; remote: boolean }
   library: { dir: string; shots: number; free: number | null; total: number | null }
   sync: { pending: number; running: number; errors: number; rcloneAvailable: boolean }
@@ -134,3 +182,53 @@ export type ServerEvent =
   | { type: 'shot:removed'; id: number }
   | { type: 'status'; status: Status }
   | { type: 'ingest:error'; file: string; error: string }
+
+// ---- RAW sources, metadata, export ----
+
+/** One way to look at a shot: the camera JPEG, the RAW's embedded preview, or a real RAW decode. */
+export interface ShotSource {
+  key: 'jpeg' | 'embedded' | 'raw'
+  label: string // "Camera JPEG", "Camera preview", "RAW decode"
+  width: number | null // null until known (RAW decode is sized when developed)
+  height: number | null
+  ready: boolean // false: needs developing first (RAW decode only)
+  detail?: string // e.g. which embedded tag the preview came from
+  bytes?: number
+}
+
+export interface ShotSources {
+  sources: ShotSource[]
+  canDevelop: boolean // a RAW decoder is available on this machine
+}
+
+export interface MetaItem {
+  group: string // exiftool family-1 group, e.g. "ExifIFD", "Nikon"
+  tag: string
+  value: string
+}
+
+export interface MetaGroup {
+  name: 'EXIF' | 'MakerNotes' | 'XMP' | 'IPTC' | 'GPS' | 'File' | 'Other'
+  items: MetaItem[]
+}
+
+export interface ShotMetadata {
+  fileId: number
+  fileName: string
+  summary: { label: string; value: string }[] // useful maker-note fields
+  gps: { lat: number; lon: number; alt: number | null; mapUrl: string } | null
+  groups: MetaGroup[]
+}
+
+export interface ExportOptions {
+  dir: string
+  size: 'original' | number // long edge in px
+  quality: number // 1-100
+  metadata: 'all' | 'noGps' | 'none'
+  source?: 'auto' | ShotSource['key']
+}
+
+export interface Editor {
+  id: string
+  name: string
+}

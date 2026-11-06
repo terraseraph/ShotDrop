@@ -7,6 +7,7 @@ import type { FileRow, Library } from './library'
 import type { Bus } from './events'
 import { toolPath } from './bundled'
 import { isUnreachable, offlineDelay, type SyncError } from './retry'
+import type { CloudAccounts } from './cloud'
 
 const CONCURRENCY = 2
 const MAX_ATTEMPTS = 5 // real errors only; an unreachable destination waits without spending these
@@ -43,7 +44,8 @@ export class SyncService {
     private lib: Library,
     private bus: Bus,
     private settings: () => Settings,
-    private onState: () => void
+    private onState: () => void,
+    private cloud: CloudAccounts
   ) {}
 
   async start(): Promise<void> {
@@ -170,6 +172,8 @@ export class SyncService {
     const remote = `${dest.target.replace(/\/+$/, '')}/${file.rel_path}`
     // rclone already verifies size and, where both ends support it, hash after each upload.
     // --checksum makes it compare by hash (not modtime) when deciding whether a changed sidecar needs resending.
+    // Remotes linked in the app live in ShotDrop's own rclone.conf; anything else (Advanced) uses the user's.
+    const cfg = this.cloud.has(dest.target.split(':')[0]) ? this.cloud.cfgArgs() : []
     await run(toolPath(this.settings().rclonePath, 'rclone'), [
       'copyto',
       file.path,
@@ -182,7 +186,8 @@ export class SyncService {
       '--timeout',
       '2m',
       '--contimeout',
-      '20s'
+      '20s',
+      ...cfg
     ])
   }
 

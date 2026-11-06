@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Shot } from '@shared/types'
 import type { Cull } from '@shared/cull'
-import { api } from '../api'
+import { api, dragProps } from '../api'
 import { fmtTime } from '../format'
 import { Badges, SyncDots } from './Badges'
 
@@ -12,9 +12,10 @@ interface Props {
   freshIds: Set<number>
   onSelect: (id: number) => void
   onOpen: (id: number) => void
+  tapOpens?: boolean // touch: no double-click, a tap opens the loupe
 }
 
-export function Grid({ shots, cull, selectedId, freshIds, onSelect, onOpen }: Props) {
+export function Grid({ shots, cull, selectedId, freshIds, onSelect, onOpen, tapOpens }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -30,11 +31,11 @@ export function Grid({ shots, cull, selectedId, freshIds, onSelect, onOpen }: Pr
           <button
             key={s.id}
             className={`cell ${s.id === selectedId ? 'selected' : ''} ${s.flag === -1 ? 'rejected' : ''} ${freshIds.has(s.id) ? 'fresh' : ''}`}
-            onClick={() => onSelect(s.id)}
+            onClick={() => (tapOpens ? onOpen(s.id) : onSelect(s.id))}
             onDoubleClick={() => onOpen(s.id)}
           >
             <span className="cell-img">
-              {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
+              {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" {...dragProps(s.id)} /> : <span className="frame-empty">{s.name}</span>}
             <SyncDots sync={s.sync} />
               {cull.get(s.id)?.soft && <span className="cull-tag soft">soft</span>}
               {cull.get(s.id)?.blink && <span className="cull-tag soft cull-blink">eyes closed</span>}

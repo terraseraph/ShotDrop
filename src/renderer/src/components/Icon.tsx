@@ -18,7 +18,8 @@ const PATHS: Record<string, string> = {
   dock: 'M4 5h16v14H4zM14 5v14',
   flag: 'M5 21V4h11l-2 4 2 4H5',
   alert: 'M12 8v5M12 16.5v.01',
-  info: 'M12 11v6M12 7.5v.01'
+  info: 'M12 11v6M12 7.5v.01',
+  phone: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM11 18h2'
 }
 
 export function Icon({ name, size = 16 }: { name: keyof typeof PATHS | string; size?: number }) {

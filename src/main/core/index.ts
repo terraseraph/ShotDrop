@@ -6,11 +6,14 @@ import { ConfigStore } from './config'
 import { openDb, type DB } from './db'
 import { Library } from './library'
 import { Previewer, lumaStats, shutdownMedia } from './media'
+import { MetadataStore } from './metadata'
 import { Ingestor } from './ingest'
 import { FtpService } from './ftp'
 import { SyncService } from './sync'
+import { CloudAccounts } from './cloud'
+import { toolPath } from './bundled'
 import { Bus } from './events'
-import { lanAddresses } from './net'
+import { listInterfaces } from './net'
 import { TunnelService } from './tunnel'
 import { XmpService } from './xmp'
 
@@ -34,9 +37,11 @@ export class Core {
   readonly db: DB
   readonly lib: Library
   readonly previews: Previewer
+  readonly meta: MetadataStore
   readonly ingest: Ingestor
   readonly ftp: FtpService
   readonly sync: SyncService
+  readonly cloud: CloudAccounts
   readonly xmp: XmpService
   readonly tunnel: TunnelService
   apiState = { port: 0, remote: false }
@@ -47,7 +52,9 @@ export class Core {
     this.db = openDb(opts.dataDir)
     this.lib = new Library(this.db)
     this.previews = new Previewer(join(opts.dataDir, 'cache'))
-    this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus())
+    this.cloud = new CloudAccounts(join(opts.dataDir, 'rclone.conf'), () => toolPath(this.settings.rclonePath, 'rclone'))
+    this.meta = new MetadataStore(join(opts.dataDir, 'cache'))
+    this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud)
     this.xmp = new XmpService(
       this.lib,
       this.bus,
@@ -83,6 +90,7 @@ export class Core {
 
   async start(): Promise<void> {
     mkdirSync(this.settings.libraryDir, { recursive: true })
+    this.ftp.preferredAddress = this.settings.ftp.preferredAddress
     await this.ingest.start(this.settings.watchFolders)
     if (this.settings.ftp.enabled) await this.ftp.start(this.settings.ftp)
     await this.sync.start()
@@ -144,7 +152,10 @@ export class Core {
 
   status(): Status {
     const s = this.settings
-    const addrs = lanAddresses()
+    const pref = s.ftp.preferredAddress
+    const interfaces = listInterfaces(pref)
+    const addrs = interfaces.map((i) => i.address)
+    const preferredMissing = pref && !addrs.includes(pref) ? pref : null
     const midnight = new Date().setHours(0, 0, 0, 0)
     const stats = this.lib.sourceStats(midnight)
     const prog = this.lib.destProgress()
@@ -160,7 +171,7 @@ export class Core {
     }
     return {
       version: this.opts.version,
-      ftp: { ...this.ftp.state, port: s.ftp.port, addresses: addrs },
+      ftp: { ...this.ftp.state, port: s.ftp.port, addresses: addrs, interfaces, preferredMissing },
       api: {
         port: this.apiState.port,
         remote: this.apiState.remote,
@@ -200,7 +211,10 @@ export class Core {
     const after = this.config.update(patch)
     const changed = (k: keyof Settings): boolean => JSON.stringify(before[k]) !== JSON.stringify(after[k])
 
-    if (changed('ftp')) {
+    this.ftp.preferredAddress = after.ftp.preferredAddress
+    // Picking a different host address must not drop camera connections, so it doesn't count as an FTP change.
+    const ftpOf = (f: Settings['ftp']): string => JSON.stringify({ ...f, preferredAddress: null })
+    if (ftpOf(before.ftp) !== ftpOf(after.ftp)) {
       if (after.ftp.enabled) await this.ftp.start(after.ftp)
       else await this.ftp.stop()
     }
@@ -240,6 +254,7 @@ export class Core {
     }
     this.lib.remove(id)
     this.previews.clear(id)
+    for (const f of files) this.meta.clear(f.id)
     this.bus.emit({ type: 'shot:removed', id })
     this.emitStatus()
     return true

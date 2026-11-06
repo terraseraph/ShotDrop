@@ -17,6 +17,25 @@ import { Dock } from './components/Dock'
 import { type Tab } from './components/SettingsDrawer'
 import { PinGate } from './components/PinGate'
 import { Shortcuts } from './components/Shortcuts'
+import { MobileLoupe } from './components/MobileLoupe'
+import { ActionBar } from './components/ActionBar'
+import { ViewOnPhone } from './components/ViewOnPhone'
+
+/** Phone layout: remote browsers at phone widths. The desktop window never switches. */
+function useMobile(): boolean {
+  const [m, setM] = useState(() => window.matchMedia('(max-width: 640px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const f = (): void => setM(mq.matches)
+    mq.addEventListener('change', f)
+    return () => mq.removeEventListener('change', f)
+  }, [])
+  const on = isRemote && m
+  useEffect(() => {
+    document.documentElement.classList.toggle('mobile', on)
+  }, [on])
+  return on
+}
 
 const LABEL_KEYS: Record<string, Label> = { '6': 'red', '7': 'yellow', '8': 'green', '9': 'blue' }
 
@@ -65,6 +84,9 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [setupOpen, setSetupOpen] = useState(false) // dialog, opened from Settings
   const [wizard, setWizard] = useState(false) // full-page first-run flow, held open until the test shot is seen
+  const [phoneOpen, setPhoneOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const mobile = useMobile()
   const emptyRef = useRef(true)
   const [compare, setCompare] = useState<number[]>([])
   const [freshIds, setFreshIds] = useState<Set<number>>(new Set())
@@ -202,6 +224,8 @@ export default function App() {
         dockOpen={dockOpen}
         onDock={toggleDock}
         onHelp={() => setHelpOpen(true)}
+        onPhone={() => setPhoneOpen(true)}
+        mobile={mobile}
         visibleCount={visible.length}
       />
 
@@ -214,19 +238,26 @@ export default function App() {
             onGallery={(id) => { setWizard(false); setSelectedId(id); setView('loupe') }}
           />
         ) : (
-          <div className={`workspace ${infoOpen ? 'with-info' : ''}`}>
+          <div className={`workspace ${infoOpen && !mobile ? 'with-info' : ''}`}>
             <main className="stage">
               <SessionHeader shots={inSession} session={session} source={source} onSource={setSource} />
               {view === 'loupe' ? (
+                mobile ? (
+                  <>
+                    <MobileLoupe shot={selected} onPrev={() => move(-1)} onNext={() => move(1)} />
+                    <ActionBar shot={selected} onPatch={(p) => selected && lib.patch([selected.id], p)} onInfo={() => setSheetOpen(true)} />
+                  </>
+                ) : (
                 <>
                   <Loupe shot={selected} fresh={selected ? freshIds.has(selected.id) : false} follow={follow} onPrev={() => move(-1)} onNext={() => move(1)} />
                   <Filmstrip shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} />
                 </>
+                )
               ) : (
-                <Grid shots={visible} cull={cull} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} />
+                <Grid shots={visible} cull={cull} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} tapOpens={mobile} />
               )}
             </main>
-            {infoOpen && <InfoPanel shot={selected} status={lib.status} compare={compareShots} onSelect={select} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
+            {infoOpen && !mobile && <InfoPanel shot={selected} status={lib.status} compare={compareShots} onSelect={select} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
           </div>
         )}
         <AnimatePresence>
@@ -238,6 +269,15 @@ export default function App() {
       {setupOpen && !empty && !wizard && !isRemote && (
         <SetupScreen dialog status={lib.status} shots={lib.shots} onBack={() => setSetupOpen(false)} onGallery={() => setSetupOpen(false)} />
       )}
+      {mobile && sheetOpen && (
+        <div className="sheet-backdrop" onClick={() => setSheetOpen(false)}>
+          <div className="sheet" role="dialog" aria-label="Photo info" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-grab" />
+            <InfoPanel shot={selected} status={lib.status} compare={[]} onSelect={select} onPatch={(p) => selected && lib.patch([selected.id], p)} />
+          </div>
+        </div>
+      )}
+      {phoneOpen && !isRemote && <ViewOnPhone status={lib.status} onClose={() => setPhoneOpen(false)} />}
       {helpOpen && <Shortcuts onClose={() => setHelpOpen(false)} />}
 
       <div className="toasts" aria-live="polite">

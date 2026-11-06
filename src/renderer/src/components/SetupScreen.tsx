@@ -5,6 +5,7 @@ import type { Settings, Shot, Status } from '@shared/types'
 import { api, desktop } from '../api'
 import { NetworkCheck } from './NetworkCheck'
 import { Icon } from './Icon'
+import { AddressPicker } from './ConnectionCard'
 
 const BRAND_STEPS: { brand: string; where: string; steps: string[] }[] = [
   {
@@ -253,9 +254,7 @@ export function SetupScreen({ status, shots, onBack, onGallery, dialog }: Props)
             </div>
           )}
           {desktop && <NetworkCheck compact watch={`${ftp?.running}-${ftp?.port}`} />}
-          {ftp && ftp.addresses.length > 1 && (
-            <p className="muted small">Other addresses on this PC: {ftp.addresses.slice(1).join(', ')}. Use the one on the same Wi-Fi as the camera.</p>
-          )}
+          {ftp && <AddressPicker ftp={ftp} />}
 
           <div className="setup-guide">
             <header>

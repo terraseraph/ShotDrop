@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Shot } from '@shared/types'
-import { api } from '../api'
+import type { Shot, ShotSource, ShotSources } from '@shared/types'
+import { api, isRemote } from '../api'
 import { fmtAperture, fmtFocal, fmtIso, fmtShutter, fmtTime } from '../format'
 import { motion } from 'motion/react'
 import { Icon } from './Icon'
@@ -24,11 +24,31 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
   const [fallback, setFallback] = useState<'off' | 'working' | 'ready' | 'failed'>('off')
   const box = useRef<HTMLDivElement>(null)
 
+  // Which rendition is on screen: 'auto' = the quick 2560px preview of the best file; otherwise a full-size source.
+  const [src, setSrc] = useState<'auto' | ShotSource['key']>('auto')
+  const [sources, setSources] = useState<ShotSources | null>(null)
+  const [developing, setDeveloping] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const idRef = useRef<number | null>(null)
+  idRef.current = shot?.id ?? null
+
   useEffect(() => {
     setZoom(false)
     setLoaded(false)
     setFallback('off')
-  }, [shot?.id])
+    setSrc('auto')
+    setErr(null)
+    setDeveloping(false)
+    setSources(null)
+    if (!shot) return
+    let live = true
+    api.sources(shot.id).then((s) => live && setSources(s)).catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [shot?.id, shot?.files.length])
+
+  useEffect(() => setLoaded(false), [src])
 
   const shotId = shot?.id
   useEffect(() => {
@@ -70,8 +90,34 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
 
   const video = shot.files.find((f) => f.kind === 'video')
   const jpeg = shot.files.find((f) => f.kind === 'jpeg')
-  // Full-res zoom straight from the camera JPEG when there is one; otherwise the 2560px embedded preview.
-  const zoomSrc = jpeg ? api.originalUrl(shot, jpeg.id) : api.previewUrl(shot)
+  const list = sources?.sources ?? []
+  const byKey = (k: ShotSource['key']): ShotSource | undefined => list.find((s) => s.key === k)
+  const autoKey = byKey('jpeg') ? 'jpeg' : byKey('embedded') ? 'embedded' : null
+  const active = src === 'auto' ? autoKey : src
+  const info = active ? byKey(active) : undefined
+  const sourceName = (s: ShotSource): string => (s.key === 'embedded' && byKey('jpeg') ? 'RAW preview' : s.label)
+
+  // Full-res zoom: the chosen source; else the camera JPEG, else the RAW's full-size embedded preview, else the 2560px preview.
+  const zoomSrc =
+    src !== 'auto' ? api.fullUrl(shot, src) : jpeg ? api.originalUrl(shot, jpeg.id) : byKey('embedded') ? api.fullUrl(shot, 'embedded') : api.previewUrl(shot)
+  const fitSrc = src === 'auto' ? api.previewUrl(shot) : api.fullUrl(shot, src)
+
+  const choose = async (s: ShotSource): Promise<void> => {
+    if (s.key !== 'raw' || s.ready) return setSrc(s.key === autoKey ? 'auto' : s.key)
+    const id = shot.id
+    setDeveloping(true)
+    setErr(null)
+    try {
+      const done = await api.develop(id)
+      if (idRef.current !== id) return
+      setSources((cur) => cur && { ...cur, sources: cur.sources.map((x) => (x.key === 'raw' ? done : x)) })
+      setSrc('raw')
+    } catch (e) {
+      if (idRef.current === id) setErr((e as Error).message)
+    } finally {
+      if (idRef.current === id) setDeveloping(false)
+    }
+  }
 
   const track = (e: React.MouseEvent): void => {
     const r = box.current!.getBoundingClientRect()
@@ -120,9 +166,9 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
             <>
               <img className="loupe-thumb" src={api.thumbUrl(shot)} alt="" aria-hidden />
               <img
-                key={shot.id}
+                key={`${shot.id}-${src}`}
                 className={`loupe-img ${loaded ? 'ready' : ''}`}
-                src={api.previewUrl(shot)}
+                src={fitSrc}
                 alt={shot.name}
                 onLoad={() => setLoaded(true)}
                 draggable={false}
@@ -136,6 +182,39 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
           </div>
         )}
       </div>
+
+      {shot.hasPreview && (
+        <div className="loupe-src" onClick={(e) => e.stopPropagation()}>
+          {list.length > 1 && (
+            <div className="seg" role="radiogroup" aria-label="Image source">
+              {list.map((s) => {
+                const needsDevelop = s.key === 'raw' && !s.ready
+                return (
+                  <button
+                    key={s.key}
+                    role="radio"
+                    aria-checked={active === s.key}
+                    className={active === s.key ? 'on' : ''}
+                    disabled={developing || (needsDevelop && (!sources?.canDevelop || isRemote))}
+                    title={needsDevelop ? 'Decode the RAW file at full resolution (takes a few seconds)' : s.detail}
+                    onClick={() => void choose(s)}
+                  >
+                    {needsDevelop ? 'Develop RAW' : sourceName(s)}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {developing ? (
+            <span className="pill warn">Developing RAW…</span>
+          ) : info && info.width && info.height ? (
+            <span className="pill" title={info.detail}>
+              {sourceName(info)} {info.width}×{info.height}
+            </span>
+          ) : null}
+          {err && <span className="pill warn">{err}</span>}
+        </div>
+      )}
 
       {showHist && shot.histogram && !zoom && <Histogram bins={shot.histogram} clipped={shot.clipped} />}
 

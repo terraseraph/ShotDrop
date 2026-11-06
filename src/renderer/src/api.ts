@@ -1,4 +1,4 @@
-import type { Destination, ServerEvent, Session, Settings, Shot, ShotPatch, Status, TunnelState } from '@shared/types'
+import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, Destination, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
 
 interface DesktopBridge {
   apiBase: string
@@ -6,6 +6,9 @@ interface DesktopBridge {
   pickFolder: () => Promise<string | null>
   reveal: (path: string) => Promise<void>
   openPath: (path: string) => Promise<string>
+  editors: () => Promise<{ id: string; name: string }[]>
+  shotAction: (id: number, action: 'reveal' | 'open' | 'openWith' | 'copyImage', arg?: string) => Promise<string | null>
+  dragShot: (id: number) => void
 }
 
 declare global {
@@ -74,6 +77,13 @@ export const api = {
   patchDestination: (id: string, d: Partial<Destination>) => req<Destination>('PATCH', `/api/destinations/${id}`, d),
   deleteDestination: (id: string) => req<void>('DELETE', `/api/destinations/${id}`),
   resync: (id: string) => req<{ queued: number }>('POST', `/api/destinations/${id}/resync`),
+  cloudAccounts: () => req<{ accounts: CloudAccount[]; linking: CloudState['linking'] }>('GET', '/api/cloud/accounts'),
+  cloudLink: (provider: CloudProvider, o: CloudLinkOptions = {}) => req<CloudAccount>('POST', '/api/cloud/link', { provider, ...o }),
+  cloudCancel: () => req<void>('DELETE', '/api/cloud/link'),
+  cloudFolders: (name: string, path: string) => req<CloudFolder[]>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/folders?path=${encodeURIComponent(path)}`),
+  cloudMkdir: (name: string, path: string) => req<void>('POST', `/api/cloud/accounts/${encodeURIComponent(name)}/folders`, { path }),
+  cloudInfo: (name: string) => req<{ email: string | null; quota: CloudQuota | null }>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/info`),
+  cloudDisconnect: (name: string) => req<void>('DELETE', `/api/cloud/accounts/${encodeURIComponent(name)}`),
   retrySync: () => req<{ retried: number }>('POST', '/api/sync/retry'),
   tunnelInstall: () => req<TunnelState>('POST', '/api/tunnel/install'),
   tunnelStart: () => req<TunnelState>('POST', '/api/tunnel/start'),
@@ -81,6 +91,11 @@ export const api = {
   /** Starts (once) a browser-playable copy of a video; poll until `ready`. */
   proxy: (id: number) => req<{ ready: boolean; error?: string }>('POST', `/api/shots/${id}/proxy`),
   filePath: (fileId: number) => req<{ path: string }>('GET', `/api/files/${fileId}/path`),
+  sources: (id: number) => req<ShotSources>('GET', `/api/shots/${id}/sources`),
+  develop: (id: number) => req<ShotSource>('POST', `/api/shots/${id}/develop`),
+  metadata: (id: number) => req<ShotMetadata>('GET', `/api/shots/${id}/metadata`),
+  exportJpeg: (id: number, o: ExportOptions) => req<{ path: string }>('POST', `/api/shots/${id}/export`, o),
+  shareLink: (id: number) => req<{ url: string | null; reason?: string; via?: string }>('GET', `/api/shots/${id}/link`),
 
   // Images are served `immutable` and ids restart at 1 per library, so the URL carries a version.
   // File count changes when a better source (JPEG after RAW) re-renders the preview.
@@ -88,6 +103,7 @@ export const api = {
   previewUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/preview?v=${ver(s)}`),
   proxyUrl: (s: Shot) => withKey(`${base}/api/shots/${s.id}/proxy?v=${ver(s)}`),
   downloadUrl: (s: Shot, fileId: number) => withKey(`${base}/api/shots/${s.id}/original?v=${ver(s)}&file=${fileId}&dl=1`),
+  fullUrl: (s: Shot, src: ShotSource['key'], tag = ''): string => withKey(`${base}/api/shots/${s.id}/full?src=${src}&v=${ver(s)}${tag}`),
   originalUrl: (s: Shot, fileId?: number) =>
     withKey(`${base}/api/shots/${s.id}/original?v=${ver(s)}${fileId ? `&file=${fileId}` : ''}`),
 
@@ -99,3 +115,7 @@ export const api = {
     return () => es.close()
   }
 }
+
+/** Spread on a thumbnail <img>: in the desktop app, dragging it hands the photo to the OS (Explorer, mail, Lightroom...). */
+export const dragProps = (id: number): { draggable: boolean; onDragStart?: (e: import("react").DragEvent) => void } =>
+  desktop ? { draggable: true, onDragStart: (e) => { e.preventDefault(); desktop.dragShot(id) } } : { draggable: false }

@@ -1,9 +1,12 @@
-import { app, BrowserWindow, shell, Menu, dialog, ipcMain } from 'electron'
-import { existsSync } from 'node:fs'
+import { app, BrowserWindow, shell, Menu, dialog, ipcMain, clipboard, ClipboardItem, nativeImage } from 'electron'
+import { existsSync, mkdirSync, copyFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { Core } from './core'
 import { startApi } from './api/server'
 import { BlinkDetector } from './blink/detector'
+import { findEditors } from './editors'
+import { primaryFile, resolveImage } from './core/sources'
 
 let core: Core | null = null
 let api: { stop: () => Promise<void> } | null = null
@@ -42,6 +45,44 @@ ipcMain.handle('pick-folder', async () => {
 })
 ipcMain.handle('reveal', (_e, path: string) => shell.showItemInFolder(path))
 ipcMain.handle('open-path', (_e, path: string) => shell.openPath(path))
+
+// Shot-level desktop actions. The renderer only knows shot ids; paths stay in the main process.
+ipcMain.handle('editors', () => findEditors().map(({ id, name }) => ({ id, name })))
+
+ipcMain.handle('shot-action', async (_e, id: number, action: 'reveal' | 'open' | 'openWith' | 'copyImage', arg?: string) => {
+  const file = core && primaryFile(core, id)
+  if (!core || !file) throw new Error('Shot not found')
+  if (action === 'reveal') shell.showItemInFolder(file.path)
+  else if (action === 'open') return (await shell.openPath(file.path)) || null
+  else if (action === 'openWith') {
+    const editor = findEditors().find((x) => x.id === arg)
+    // No known editor: Windows' own "Open with" chooser.
+    const [cmd, args] = editor ? [editor.exe, [file.path]] : ['rundll32.exe', ['shell32.dll,OpenAs_RunDLL', file.path]]
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref()
+  } else {
+    const key = arg === 'jpeg' || arg === 'embedded' || arg === 'raw' ? arg : null
+    const full = key ? await resolveImage(core, id, key, false) : null
+    const img = nativeImage.createFromPath(full?.path ?? core.previews.previewPath(id))
+    if (img.isEmpty()) throw new Error('No image to copy yet')
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([new Uint8Array(img.toPNG())], { type: 'image/png' }) })])
+  }
+  return null
+})
+
+// Drag a thumbnail into Explorer, mail, Lightroom… The camera JPEG if there is one, else the 2560px preview under the shot's name.
+ipcMain.on('drag-shot', (e, id: number) => {
+  if (!core) return
+  const shot = core.lib.get(id)
+  const jpeg = core.lib.files(id).find((f) => f.kind === 'jpeg')
+  let file = jpeg?.path
+  if (!file && shot) {
+    const dir = join(core.previews.previewDir, '..', 'drag')
+    mkdirSync(dir, { recursive: true })
+    file = join(dir, `${shot.name}.jpg`)
+    copyFileSync(core.previews.previewPath(id), file)
+  }
+  if (file) e.sender.startDrag({ file, icon: nativeImage.createFromPath(core.previews.thumbPath(id)).resize({ width: 96 }) })
+})
 
 // Portable mode: a `data` folder beside the exe holds settings, DB, cache and the library instead of %APPDATA%/Pictures.
 // The portable .exe unpacks to %TEMP%, so look beside the launched file, not the unpacked one.
