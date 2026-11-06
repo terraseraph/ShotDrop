@@ -4,6 +4,7 @@ import { api, desktop } from '../api'
 import { NetworkCheck } from './NetworkCheck'
 import { TunnelPanel } from './TunnelPanel'
 import { Icon } from './Icon'
+import { CloudPicker } from './CloudPicker'
 
 export type Tab = 'camera' | 'sync' | 'library' | 'remote'
 
@@ -192,6 +193,8 @@ function CameraTab({ s, status, edit, toast, onSetup }: { s: Settings; status: S
 function SyncTab({ s, status, reload, toast }: { s: Settings; status: Status | null; reload: () => void; toast: Props['toast'] }) {
   const empty = { name: '', type: 'rclone' as DestinationType, target: '', filter: 'all' as DestinationFilter }
   const [draft, setDraft] = useState(empty)
+  // 'cloud' = linked Google Drive / Dropbox; 'advanced' = type your own rclone remote path.
+  const [cloudMode, setCloudMode] = useState(true)
   const run = async (fn: () => Promise<unknown>, ok?: string): Promise<void> => {
     try {
       await fn()
@@ -239,18 +242,23 @@ function SyncTab({ s, status, reload, toast }: { s: Settings; status: Status | n
       <section className="panel">
         <h3>Add destination</h3>
         <div className="seg wide">
-          <button className={draft.type === 'rclone' ? 'on' : ''} onClick={() => setDraft({ ...draft, type: 'rclone' })}>Cloud (rclone)</button>
+          <button className={draft.type === 'rclone' && cloudMode ? 'on' : ''} onClick={() => (setCloudMode(true), setDraft({ ...draft, type: 'rclone' }))}>Google Drive / Dropbox</button>
           <button className={draft.type === 'folder' ? 'on' : ''} onClick={() => setDraft({ ...draft, type: 'folder' })}>Folder / NAS</button>
+          <button className={draft.type === 'rclone' && !cloudMode ? 'on' : ''} onClick={() => (setCloudMode(false), setDraft({ ...draft, type: 'rclone' }))}>Advanced: custom rclone remote</button>
         </div>
+        {draft.type === 'rclone' && cloudMode && (
+          <CloudPicker toast={toast} onPick={(target, name) => setDraft((d) => ({ ...d, target, name: d.name || name }))} />
+        )}
         <Field label="Name">
           <input className="input" value={draft.name} placeholder={draft.type === 'rclone' ? 'Google Drive' : 'NAS'} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
         </Field>
+        {!(draft.type === 'rclone' && cloudMode && !draft.target) && (
         <Field
-          label={draft.type === 'rclone' ? 'rclone remote path' : 'Folder'}
-          hint={draft.type === 'rclone' ? 'e.g. gdrive:Photos/ShotDrop. Set up remotes once with `rclone config`.' : 'Local folder or network share, e.g. \\\\nas\\photos'}
+          label={draft.type === 'rclone' ? (cloudMode ? 'Sync into' : 'rclone remote path') : 'Folder'}
+          hint={draft.type === 'rclone' ? (cloudMode ? 'Pick a different folder above to change this.' : 'e.g. gdrive:Photos/ShotDrop, from your own rclone.conf (`rclone config`).') : 'Local folder or network share, e.g. \\\\nas\\photos'}
         >
           <div className="row tight">
-            <input className="input mono" value={draft.target} onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
+            <input className="input mono" value={draft.target} readOnly={draft.type === 'rclone' && cloudMode} onChange={(e) => setDraft({ ...draft, target: e.target.value })} />
             {draft.type === 'folder' && desktop && (
               <button className="btn" onClick={async () => {
                 const p = await desktop!.pickFolder()
@@ -261,6 +269,7 @@ function SyncTab({ s, status, reload, toast }: { s: Settings; status: Status | n
             )}
           </div>
         </Field>
+        )}
         <Field label="What to sync">
           <select className="select" value={draft.filter} onChange={(e) => setDraft({ ...draft, filter: e.target.value as DestinationFilter })}>
             {Object.entries(FILTER_TEXT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

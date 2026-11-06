@@ -61,6 +61,35 @@ export interface Destination {
   enabled: boolean
 }
 
+export type CloudProvider = 'drive' | 'dropbox'
+
+export interface CloudAccount {
+  name: string // rclone remote name in ShotDrop's own rclone.conf, e.g. "gdrive-a1b2"
+  provider: CloudProvider
+  fullAccess: boolean // false = Drive scope drive.file: only sees folders ShotDrop created
+  ownClient: boolean // linked with the user's own client ID
+}
+
+export interface CloudLinkOptions {
+  fullAccess?: boolean
+  clientId?: string
+  clientSecret?: string
+}
+
+export interface CloudState {
+  linking: { provider: CloudProvider; authUrl?: string; startedAt: number } | null
+}
+
+export interface CloudFolder {
+  name: string
+}
+
+export interface CloudQuota {
+  total?: number
+  used?: number
+  free?: number
+}
+
 export interface Settings {
   libraryDir: string
   ftp: {

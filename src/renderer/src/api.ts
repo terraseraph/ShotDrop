@@ -1,4 +1,4 @@
-import type { Destination, ServerEvent, Session, Settings, Shot, ShotPatch, Status, TunnelState } from '@shared/types'
+import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, Destination, ServerEvent, Session, Settings, Shot, ShotPatch, Status, TunnelState } from '@shared/types'
 
 interface DesktopBridge {
   apiBase: string
@@ -74,6 +74,13 @@ export const api = {
   patchDestination: (id: string, d: Partial<Destination>) => req<Destination>('PATCH', `/api/destinations/${id}`, d),
   deleteDestination: (id: string) => req<void>('DELETE', `/api/destinations/${id}`),
   resync: (id: string) => req<{ queued: number }>('POST', `/api/destinations/${id}/resync`),
+  cloudAccounts: () => req<{ accounts: CloudAccount[]; linking: CloudState['linking'] }>('GET', '/api/cloud/accounts'),
+  cloudLink: (provider: CloudProvider, o: CloudLinkOptions = {}) => req<CloudAccount>('POST', '/api/cloud/link', { provider, ...o }),
+  cloudCancel: () => req<void>('DELETE', '/api/cloud/link'),
+  cloudFolders: (name: string, path: string) => req<CloudFolder[]>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/folders?path=${encodeURIComponent(path)}`),
+  cloudMkdir: (name: string, path: string) => req<void>('POST', `/api/cloud/accounts/${encodeURIComponent(name)}/folders`, { path }),
+  cloudInfo: (name: string) => req<{ email: string | null; quota: CloudQuota | null }>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/info`),
+  cloudDisconnect: (name: string) => req<void>('DELETE', `/api/cloud/accounts/${encodeURIComponent(name)}`),
   retrySync: () => req<{ retried: number }>('POST', '/api/sync/retry'),
   tunnelInstall: () => req<TunnelState>('POST', '/api/tunnel/install'),
   tunnelStart: () => req<TunnelState>('POST', '/api/tunnel/start'),

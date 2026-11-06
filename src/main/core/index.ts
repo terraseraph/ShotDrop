@@ -9,6 +9,8 @@ import { Previewer, shutdownMedia } from './media'
 import { Ingestor } from './ingest'
 import { FtpService } from './ftp'
 import { SyncService } from './sync'
+import { CloudAccounts } from './cloud'
+import { toolPath } from './bundled'
 import { Bus } from './events'
 import { lanAddresses } from './net'
 import { TunnelService } from './tunnel'
@@ -35,6 +37,7 @@ export class Core {
   readonly ingest: Ingestor
   readonly ftp: FtpService
   readonly sync: SyncService
+  readonly cloud: CloudAccounts
   readonly xmp: XmpService
   readonly tunnel: TunnelService
   apiState = { port: 0, remote: false }
@@ -45,7 +48,8 @@ export class Core {
     this.db = openDb(opts.dataDir)
     this.lib = new Library(this.db)
     this.previews = new Previewer(join(opts.dataDir, 'cache'))
-    this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus())
+    this.cloud = new CloudAccounts(join(opts.dataDir, 'rclone.conf'), () => toolPath(this.settings.rclonePath, 'rclone'))
+    this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud)
     this.xmp = new XmpService(
       this.lib,
       this.bus,
