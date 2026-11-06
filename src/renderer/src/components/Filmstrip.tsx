@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Shot } from '@shared/types'
 import { motion } from 'motion/react'
-import { api } from '../api'
+import { api, dragProps } from '../api'
 import { Badges, SyncDots } from './Badges'
 
 interface Props {
@@ -44,7 +44,7 @@ export function Filmstrip({ shots, selectedId, freshIds, onSelect }: Props) {
           onClick={() => onSelect(s.id)}
           title={s.name}
         >
-          {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" draggable={false} /> : <span className="frame-empty">{s.name}</span>}
+          {s.hasPreview ? <img src={api.thumbUrl(s)} alt={s.name} loading="lazy" {...dragProps(s.id)} /> : <span className="frame-empty">{s.name}</span>}
           <SyncDots sync={s.sync} />
           <span className="frame-badges">
             <Badges shot={s} />

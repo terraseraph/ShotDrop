@@ -516,3 +516,29 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--panel-3); bor
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.loupe-src { position: absolute; top: 24px; left: 24px; z-index: 2; display: flex; align-items: center; gap: 8px; }
+.loupe-src .pill { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(8px); }
+
+/* ---------- metadata & sharing (info panel) ---------- */
+.btn.small { height: 26px; padding: 0 9px; font-size: 12px; text-decoration: none; color: inherit; }
+.row-actions { display: flex; gap: 6px; align-items: center; }
+.row-actions .input { height: 26px; font-size: 12px; }
+.disclose { display: flex; align-items: center; gap: 6px; font-weight: 600; text-align: left; }
+.caret { display: grid; transition: transform 0.15s; color: var(--muted); }
+.caret.open { transform: rotate(90deg); }
+.meta-groups { display: grid; gap: 6px; max-height: 420px; overflow-y: auto; }
+.meta-groups summary { cursor: pointer; font-weight: 600; padding: 3px 0; }
+.meta-groups dl { gap: 3px; margin-top: 4px; }
+.meta-groups dl div { grid-template-columns: 104px 1fr; font-size: 12px; cursor: copy; }
+.meta-groups dl div:hover { background: var(--panel-2); }
+.meta-groups dt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-grid, .export-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.export-form { margin-top: 4px; }
+.export-form label { display: grid; gap: 3px; color: var(--muted); font-size: 12px; min-width: 0; }
+.export-form .select, .share-grid .select, .export-form .input { width: 100%; min-width: 0; height: 28px; }
+.share-grid > *, .export-form > * { min-width: 0; }
+.info { overflow-x: hidden; }
+.span2 { grid-column: span 2; }
+.share-msg { font-size: 12px; color: var(--live); overflow-wrap: anywhere; }
+.share-msg.bad { color: var(--reject); }
+.share-msg a { color: var(--focus); }
