@@ -60,7 +60,7 @@ export class FtpService {
       const root = join(this.incomingDir(), user.username)
       mkdirSync(root, { recursive: true })
       this.conns.set(user.username, (this.conns.get(user.username) ?? 0) + 1)
-      connection.commandSocket.on('close', () => {
+      ;(connection as unknown as { commandSocket: NodeJS.EventEmitter }).commandSocket.on('close', () => {
         this.conns.set(user.username, Math.max(0, (this.conns.get(user.username) ?? 1) - 1))
         this.onState()
       })

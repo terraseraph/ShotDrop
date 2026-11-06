@@ -94,6 +94,9 @@ export interface CameraStatus {
 
 export interface DestStatus {
   id: string
+  name: string
+  target: string
+  filter: DestinationFilter
   done: number
   total: number
   running: number

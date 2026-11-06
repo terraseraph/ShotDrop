@@ -124,6 +124,9 @@ export class Core {
       })),
       destinations: s.destinations.map((d) => ({
         id: d.id,
+        name: d.name,
+        target: d.target,
+        filter: d.filter,
         done: prog[d.id]?.done ?? 0,
         total: prog[d.id]?.total ?? 0,
         running: prog[d.id]?.running ?? 0,
