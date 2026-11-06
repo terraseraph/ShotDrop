@@ -1,12 +1,14 @@
 import type { Shot } from '@shared/types'
 
-// ponytail: thresholds are untuned guesses; calibrate with `scripts/calibrate-cull.mjs` on real bursts before trusting "soft" on its own.
+// Calibrated with `scripts/calibrate-cull.mjs` (2026-11): blinkAt on 240 real faces (CEW closed / LFW open eyes),
+// maxHamming on 40 synthetic handheld bursts. ponytail: maxGapMs, softRatio and softAbs are still untested guesses
+// (synthetic data can't judge them); re-run the script on a labelled real shoot before trusting "soft" on its own.
 export const CULL_DEFAULTS = {
   maxGapMs: 3000, // frames further apart than this are never the same burst
-  maxHamming: 12, // of 64 bits; looser than this and different scenes start to merge
+  maxHamming: 16, // of 64 bits; same-burst frames measured <=12, cuts to a new scene >=23
   softRatio: 0.6, // soft = under 60% of the sharpest frame in its burst
   softAbs: 20, // lone frames: Laplacian variance this low is almost always blur
-  blinkAt: 0.5 // MediaPipe eyeBlink score (0 open .. 1 shut) above which a face counts as eyes-closed
+  blinkAt: 0.45 // MediaPipe eyeBlink score (0 open .. 1 shut); 0.45 catches 85% of shut eyes at 89% precision vs 73% at 0.5
 }
 export type CullThresholds = typeof CULL_DEFAULTS
 

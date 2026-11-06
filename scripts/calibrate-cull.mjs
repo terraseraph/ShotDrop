@@ -83,7 +83,8 @@ function readLabels(path) {
   for (const line of lines) {
     if (!line.trim()) continue
     const [id, burst, soft, blink] = line.split(',').map((x) => x.trim())
-    truth.set(Number(id), { burst, soft: soft === '1', blink: blink === '1' })
+    // Blank soft/blink = not labelled; those rows are left out of that metric.
+    truth.set(Number(id), { burst, soft: soft === '' ? null : soft === '1', blink: blink === '' ? null : blink === '1' })
   }
   return truth
 }
@@ -117,7 +118,7 @@ function score(path) {
   console.log(`-> maxGapMs ${best.g}, maxHamming ${best.h}: ${best.splits} splits, ${best.merges} merges\n`)
 
   // 2. Soft, with the chosen burst settings
-  const truthSoft = shots.filter((s) => s.sharpness != null)
+  const truthSoft = shots.filter((s) => s.sharpness != null && truth.get(s.id).soft != null)
   const softF1 = (r, a) => {
     const cull = analyze(shots, { ...CULL_DEFAULTS, maxGapMs: best.g, maxHamming: best.h, softRatio: r, softAbs: a })
     let tp = 0, fp = 0, fn = 0
@@ -146,7 +147,7 @@ function score(path) {
   console.log(`-> softRatio ${bestSoft.ratio}, softAbs ${bestSoft.a}: precision ${pct(bestSoft.p)}, recall ${pct(bestSoft.r)}\n`)
 
   // 3. Blink: only frames where faces were found
-  const faced = shots.filter((s) => s.blink != null)
+  const faced = shots.filter((s) => s.blink != null && truth.get(s.id).blink != null)
   let bestBlink = { f1: -1, b: CULL_DEFAULTS.blinkAt }
   console.log('Blink threshold   precision  recall  F1')
   for (const b of range(0.2, 0.8, 0.05)) {
