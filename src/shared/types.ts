@@ -2,7 +2,7 @@
 
 export type Flag = -1 | 0 | 1 // reject | none | pick
 export type Label = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | null
-export type FileKind = 'jpeg' | 'heif' | 'raw' | 'other'
+export type FileKind = 'jpeg' | 'heif' | 'raw' | 'sidecar' | 'other'
 export type SyncStatus = 'pending' | 'running' | 'done' | 'error'
 
 export interface ShotFile {
@@ -73,6 +73,7 @@ export interface Settings {
   watchFolders: string[]
   destinations: Destination[]
   rclonePath: string
+  xmpSidecars: boolean // write <name>.xmp next to each shot with rating/flag/label
   tunnel: { autoStart: boolean; cloudflaredPath: string }
 }
 

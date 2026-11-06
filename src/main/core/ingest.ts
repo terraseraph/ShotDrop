@@ -7,6 +7,7 @@ import type { Library } from './library'
 import type { Previewer } from './media'
 import { fileKind, isImage, readExif } from './media'
 import type { Bus } from './events'
+import { XmpService } from './xmp'
 
 export interface IngestOptions {
   /** Move the file into the library (FTP incoming) or copy it (watched card/folder, leave the original). */
@@ -22,6 +23,10 @@ function hashFile(path: string): Promise<string> {
       .on('end', () => resolve(h.digest('hex')))
       .on('error', reject)
   })
+}
+
+function isSidecar(path: string): boolean {
+  return extname(path).toLowerCase() === '.xmp'
 }
 
 function localDate(ms: number): string {
@@ -55,7 +60,8 @@ export class Ingestor {
     private previews: Previewer,
     private bus: Bus,
     private getLibraryDir: () => string,
-    private onFileAdded: (fileId: number, shotId: number) => void
+    private onFileAdded: (fileId: number, shotId: number) => void,
+    private xmp: XmpService
   ) {}
 
   get incomingDir(): string {
@@ -92,7 +98,7 @@ export class Ingestor {
   }
 
   enqueue(path: string, opts: IngestOptions): void {
-    if (!isImage(path) || this.queued.has(path)) return
+    if (!(isImage(path) || isSidecar(path)) || this.queued.has(path)) return
     this.queued.add(path)
     this.queue.push({ path, opts })
     void this.pump()
@@ -104,7 +110,8 @@ export class Ingestor {
     while (this.queue.length) {
       const job = this.queue.shift()!
       try {
-        await this.ingest(job.path, job.opts)
+        if (isSidecar(job.path)) await this.ingestSidecar(job.path, job.opts)
+        else await this.ingest(job.path, job.opts)
       } catch (e) {
         this.bus.emit({ type: 'ingest:error', file: job.path, error: e instanceof Error ? e.message : String(e) })
       } finally {
@@ -112,6 +119,18 @@ export class Ingestor {
       }
     }
     this.running = false
+  }
+
+  /** A lone .xmp: never a shot. If its photo is already in the library, adopt it; otherwise the photo's ingest picks it up. */
+  private async ingestSidecar(path: string, opts: IngestOptions): Promise<void> {
+    if (!existsSync(path)) return
+    const shotId = this.lib.findShotByName(basename(path, extname(path)))
+    if (shotId === undefined) return
+    if (await this.xmp.adopt(shotId, path, true)) {
+      if (opts.mode === 'move') await XmpService.discard(path)
+      const shot = this.lib.get(shotId)
+      if (shot) this.bus.emit({ type: 'shot:updated', shot })
+    }
   }
 
   private async ingest(path: string, opts: IngestOptions): Promise<void> {
@@ -185,6 +204,18 @@ export class Ingestor {
     }
 
     this.onFileAdded(fileId, shotId)
+
+    // A sidecar next to the source photo carries its rating/label: import it (new shots only) and keep it with the shot.
+    const srcSidecar = [join(dirname(path), `${stem}.xmp`), join(dirname(path), `${stem}.XMP`)].find((p) => existsSync(p))
+    if (srcSidecar) {
+      try {
+        if (await this.xmp.adopt(shotId, srcSidecar, created)) {
+          if (opts.mode === 'move') await XmpService.discard(srcSidecar)
+        }
+      } catch (e) {
+        this.bus.emit({ type: 'ingest:error', file: srcSidecar, error: `Sidecar import failed: ${String(e)}` })
+      }
+    }
     const shot = this.lib.get(shotId)!
     this.bus.emit(created ? { type: 'shot:added', shot } : { type: 'shot:updated', shot })
 

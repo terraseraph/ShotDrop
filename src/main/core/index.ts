@@ -12,6 +12,7 @@ import { SyncService } from './sync'
 import { Bus } from './events'
 import { lanAddresses } from './net'
 import { TunnelService } from './tunnel'
+import { XmpService } from './xmp'
 
 export interface CoreOptions {
   dataDir: string // settings, DB, preview cache
@@ -34,6 +35,7 @@ export class Core {
   readonly ingest: Ingestor
   readonly ftp: FtpService
   readonly sync: SyncService
+  readonly xmp: XmpService
   readonly tunnel: TunnelService
   apiState = { port: 0, remote: false }
 
@@ -44,12 +46,20 @@ export class Core {
     this.lib = new Library(this.db)
     this.previews = new Previewer(join(opts.dataDir, 'cache'))
     this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus())
+    this.xmp = new XmpService(
+      this.lib,
+      this.bus,
+      () => this.settings,
+      () => this.settings.libraryDir,
+      (fileId, shotId) => this.sync.sidecarChanged(fileId, shotId)
+    )
     this.ingest = new Ingestor(
       this.lib,
       this.previews,
       this.bus,
       () => this.settings.libraryDir,
-      (fileId, shotId) => this.sync.fileAdded(fileId, shotId)
+      (fileId, shotId) => this.sync.fileAdded(fileId, shotId),
+      this.xmp
     )
     this.ftp = new FtpService(
       () => this.ingest.incomingDir,
@@ -81,6 +91,7 @@ export class Core {
     await this.tunnel.stop()
     await this.ftp.stop()
     await this.ingest.stop()
+    await this.xmp.drain()
     await shutdownMedia()
     this.db.close()
   }
@@ -120,6 +131,7 @@ export class Core {
       mkdirSync(after.libraryDir, { recursive: true })
       await this.ingest.start(after.watchFolders)
     }
+    if (changed('xmpSidecars') && after.xmpSidecars) for (const s of this.lib.list({}).items) this.xmp.schedule(s.id)
     if (changed('rclonePath')) await this.sync.start()
     if (changed('tunnel')) await this.tunnel.refreshInstalled()
     if (changed('destinations')) {
@@ -135,12 +147,14 @@ export class Core {
     const shot = this.lib.update(id, patch)
     if (shot) {
       if (shot.flag === 1 && prev?.flag !== 1) this.sync.shotPicked(id)
+      this.xmp.schedule(id)
       this.bus.emit({ type: 'shot:updated', shot })
     }
     return shot
   }
 
   async deleteShot(id: number): Promise<boolean> {
+    this.xmp.cancel(id)
     const files = this.lib.files(id)
     if (!files.length && !this.lib.get(id)) return false
     for (const f of files) {

@@ -20,6 +20,7 @@ export function defaultSettings(picturesDir: string): Settings {
     watchFolders: [],
     destinations: [],
     rclonePath: 'rclone',
+    xmpSidecars: true,
     tunnel: { autoStart: false, cloudflaredPath: 'cloudflared' }
   }
 }

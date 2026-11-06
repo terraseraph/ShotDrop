@@ -132,7 +132,7 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 
 ### Culling
 - [x] Keyboard-first: `1`–`5` stars, `P` pick, `X` reject, `6`–`9` colour labels, arrows to move
-- [ ] Ratings written to XMP sidecars so Lightroom and Capture One see them
+- [x] Ratings written to XMP sidecars so Lightroom and Capture One see them (`xmp:Rating`, `xmp:Label`, `xmpDM:Pick`; rejects are `Rating=-1`; one `<name>.xmp` per RAW+JPEG pair; synced with photos; imported on ingest)
 - [x] "Sync picks only" option per destination
 - [x] Delete to the recycle bin (never a hard delete)
 - [ ] Batch delete or move rejects

@@ -374,6 +374,15 @@ function LibraryTab({ s, edit }: { s: Settings; edit: (p: Partial<Settings>) => 
       </section>
 
       <section className="panel">
+        <h3>XMP sidecars</h3>
+        <p className="muted small">
+          Write rating, pick/reject and colour label to a <span className="mono">.xmp</span> file next to each shot, so Lightroom, Capture One and
+          Bridge see your culling. Sidecars are synced along with the photos.
+        </p>
+        <Switch checked={s.xmpSidecars} onChange={(v) => edit({ xmpSidecars: v })} label={s.xmpSidecars ? 'Write sidecars' : 'Off'} />
+      </section>
+
+      <section className="panel">
         <h3>Watched folders</h3>
         <p className="muted small">New images in these folders are copied in (originals left alone). Handy for card readers or tethering software.</p>
         {s.watchFolders.map((f, i) => (

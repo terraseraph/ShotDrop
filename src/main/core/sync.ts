@@ -2,9 +2,10 @@ import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { copyFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { Destination, Settings } from '@shared/types'
+import type { Destination, FileKind, Settings } from '@shared/types'
 import type { FileRow, Library } from './library'
 import type { Bus } from './events'
+import { toolPath } from './bundled'
 
 const CONCURRENCY = 2
 const MAX_ATTEMPTS = 5
@@ -33,7 +34,7 @@ export class SyncService {
   ) {}
 
   async start(): Promise<void> {
-    this.rcloneAvailable = await run(this.settings().rclonePath, ['version']).then(
+    this.rcloneAvailable = await run(toolPath(this.settings().rclonePath, 'rclone'), ['version']).then(
       () => true,
       () => false
     )
@@ -52,9 +53,24 @@ export class SyncService {
     const shot = this.lib.get(shotId)
     if (!file || !shot) return
     for (const d of this.settings().destinations) {
-      if (d.enabled && wants(d, file, shot.flag === 1)) this.lib.enqueueSync(fileId, d.id)
+      if (d.enabled && wants(d, file, shot.flag === 1, this.kinds(shotId))) this.lib.enqueueSync(fileId, d.id)
     }
     this.pump()
+  }
+
+  /** A sidecar was written or replaced: (re)send it to every destination that wants it. */
+  sidecarChanged(fileId: number, shotId: number): void {
+    const file = this.lib.file(fileId)
+    const shot = this.lib.get(shotId)
+    if (!file || !shot) return
+    for (const d of this.settings().destinations) {
+      if (d.enabled && wants(d, file, shot.flag === 1, this.kinds(shotId))) this.lib.requeueSync(fileId, d.id)
+    }
+    this.pump()
+  }
+
+  private kinds(shotId: number): Set<FileKind> {
+    return new Set(this.lib.files(shotId).map((f) => f.kind))
   }
 
   /** A shot was picked: enqueue it for "picks only" destinations. */
@@ -69,8 +85,14 @@ export class SyncService {
   backfill(dest: Destination): number {
     const picked = new Set(this.lib.shotIdsWithFlag(1))
     let n = 0
-    for (const f of this.lib.allFiles()) {
-      if (wants(dest, f, picked.has(f.shot_id))) {
+    const all = this.lib.allFiles()
+    const kinds = new Map<number, Set<FileKind>>()
+    for (const f of all) {
+      if (!kinds.has(f.shot_id)) kinds.set(f.shot_id, new Set())
+      kinds.get(f.shot_id)!.add(f.kind)
+    }
+    for (const f of all) {
+      if (wants(dest, f, picked.has(f.shot_id), kinds.get(f.shot_id)!)) {
         this.lib.enqueueSync(f.id, dest.id)
         n++
       }
@@ -91,7 +113,7 @@ export class SyncService {
       this.lib.setSyncStatus(job.id, 'running')
       this.changed(file.shot_id)
       this.transfer(dest, file)
-        .then(() => this.lib.setSyncStatus(job.id, 'done'))
+        .then(() => this.lib.finishSync(job.id))
         .catch((e: Error) => {
           // Keep retrying on the next pump until MAX_ATTEMPTS, then leave it in 'error' for the user.
           this.lib.setSyncStatus(job.id, 'error', e.message)
@@ -114,7 +136,7 @@ export class SyncService {
     }
     if (!this.rcloneAvailable) throw new Error('rclone not found. Install it or set its path in Settings.')
     const remote = `${dest.target.replace(/\/+$/, '')}/${file.rel_path}`
-    await run(this.settings().rclonePath, ['copyto', file.path, remote, '--retries', '2'])
+    await run(toolPath(this.settings().rclonePath, 'rclone'), ['copyto', file.path, remote, '--retries', '2'])
   }
 
   private changed(shotId: number): void {
@@ -124,7 +146,12 @@ export class SyncService {
   }
 }
 
-function wants(d: Destination, f: FileRow, picked: boolean): boolean {
+function wants(d: Destination, f: FileRow, picked: boolean, shotKinds: Set<FileKind>): boolean {
+  if (f.kind === 'sidecar') {
+    // A sidecar follows its photos: it goes wherever at least one of them goes.
+    const photoKinds = [...shotKinds].filter((k) => k !== 'sidecar')
+    return photoKinds.some((k) => wants(d, { ...f, kind: k }, picked, shotKinds))
+  }
   switch (d.filter) {
     case 'jpeg':
       return f.kind === 'jpeg' || f.kind === 'heif'

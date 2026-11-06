@@ -60,7 +60,7 @@ export interface NewShot {
   source: string | null
 }
 
-const KIND_RANK: Record<FileKind, number> = { jpeg: 0, heif: 1, raw: 2, other: 3 }
+const KIND_RANK: Record<FileKind, number> = { jpeg: 0, heif: 1, raw: 2, sidecar: 8, other: 3 }
 
 /** All database access for shots, files and sync state. */
 export class Library {
@@ -101,7 +101,7 @@ export class Library {
 
   /** The file the preview should be rendered from: JPEG beats HEIF beats RAW. */
   bestPreviewSource(shotId: number): FileRow | undefined {
-    const files = this.files(shotId)
+    const files = this.files(shotId).filter((f) => f.kind !== 'sidecar')
     return files.sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind])[0]
   }
 
@@ -125,6 +125,22 @@ export class Library {
 
   files(shotId: number): FileRow[] {
     return this.db.prepare(`SELECT * FROM files WHERE shot_id = ? ORDER BY id`).all(shotId) as FileRow[]
+  }
+
+  sidecarFile(shotId: number): FileRow | undefined {
+    return this.db.prepare(`SELECT * FROM files WHERE shot_id = ? AND kind = 'sidecar'`).get(shotId) as FileRow | undefined
+  }
+
+  setFileSize(fileId: number, size: number): void {
+    this.db.prepare(`UPDATE files SET size = ? WHERE id = ?`).run(size, fileId)
+  }
+
+  /** Most recently imported shot with this base name (used to attach a late-arriving sidecar). */
+  findShotByName(name: string): number | undefined {
+    const r = this.db.prepare(`SELECT id FROM shots WHERE lower(name) = lower(?) ORDER BY id DESC LIMIT 1`).get(name) as
+      | { id: number }
+      | undefined
+    return r?.id
   }
 
   file(fileId: number): FileRow | undefined {
@@ -224,11 +240,26 @@ export class Library {
       .run(status, error, Date.now(), status, jobId)
   }
 
+  /** Mark done only if still running (a requeue in the meantime must stay pending). */
+  finishSync(jobId: number): void {
+    this.db.prepare(`UPDATE sync_jobs SET status = 'done', error = NULL, updated_at = ? WHERE id = ? AND status = 'running'`).run(Date.now(), jobId)
+  }
+
   retryFailedSync(destId?: string): number {
     const sql = destId
       ? `UPDATE sync_jobs SET status = 'pending' WHERE status = 'error' AND dest_id = ?`
       : `UPDATE sync_jobs SET status = 'pending' WHERE status = 'error'`
     return (destId ? this.db.prepare(sql).run(destId) : this.db.prepare(sql).run()).changes
+  }
+
+  /** Re-send a file whose content changed (sidecar): back to pending even if already done. */
+  requeueSync(fileId: number, destId: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO sync_jobs (file_id, dest_id, status, updated_at) VALUES (?, ?, 'pending', ?)
+         ON CONFLICT(file_id, dest_id) DO UPDATE SET status = 'pending', attempts = 0, error = NULL, updated_at = excluded.updated_at`
+      )
+      .run(fileId, destId, Date.now())
   }
 
   dropSyncForDest(destId: string): void {
@@ -296,7 +327,7 @@ export class Library {
       label: r.label as Label,
       source: r.source,
       hasPreview: !!r.has_preview,
-      files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, size: f.size })),
+      files: files.filter((f) => f.kind !== 'sidecar').map((f) => ({ id: f.id, name: f.name, kind: f.kind, size: f.size })),
       sync
     }
   }
