@@ -78,8 +78,9 @@ as `resources\bin`. `src/main/core/media.ts` finds it with `bundledBin('dcraw_em
 `resources/bin/win-x64` in dev and to `dcraw_emu` on `PATH` elsewhere. If none exists the Develop button is disabled.
 
 LibRaw's MSVC build imports the VC++ 2015–2022 runtime (`MSVCP140`, `VCRUNTIME140`, `VCRUNTIME140_1`), which the other
-bundled tools do not, and a clean Windows install may not have it. The fetch script copies those three DLLs from the build
-machine's `System32` next to the exe (app-local deployment). Added to the package: about 1.8 MB unpacked (LibRaw 1.1 MB, runtime 0.7 MB).
+bundled tools do not, and a clean Windows install may not have it. We do not ship the runtime (see `docs/packaging.md`
+for why); if it is missing, Develop reports "needs the Microsoft Visual C++ Redistributable (x64)" with the download
+link. Added to the package: about 1.1 MB unpacked.
 
 ## Not done
 

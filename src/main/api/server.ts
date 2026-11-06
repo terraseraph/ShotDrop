@@ -65,7 +65,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     const key = (req.headers['x-shotdrop-key'] as string | undefined) ?? (req.query as { key?: string }).key
     // Outside access is allowed through LAN remote mode or a running tunnel, and always needs the PIN.
     const open = remote.enabled || (proxied && core.tunnel.state.status === 'running')
-    const img = /^\/api\/shots\/(\d+)\/(preview|original|full)\b/.exec(req.url)
+    const img = /^\/api\/shots\/(\d+)\/preview(?:$|\?)/.exec(req.url)
     const share = (req.query as { share?: string }).share
     if (req.method === 'GET' && open && remote.pin && img && share && share === shareToken(remote.pin, img[1])) return
     if (!open || !remote.pin || key !== remote.pin) return reply.code(401).send({ error: 'PIN required' })

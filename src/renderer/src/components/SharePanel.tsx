@@ -72,7 +72,7 @@ export function SharePanel({ shot }: { shot: Shot }) {
       const r = await api.shareLink(shot.id)
       if (!r.url) return { text: r.reason ?? 'No link available', bad: true }
       await navigator.clipboard.writeText(r.url)
-      return { text: `Link copied (${r.via}). It opens this photo only.` }
+      return { text: `Link copied (${r.via}). It opens this photo's preview only and stays valid until you change the PIN.` }
     })
 
   return (

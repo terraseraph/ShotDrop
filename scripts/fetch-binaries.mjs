@@ -89,12 +89,7 @@ if (have === want && Object.values(LIBRAW_FILES).every((f) => existsSync(join(OU
     writeFileSync(join(tmp, 'a.zip'), buf)
     execFileSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', 'a.zip', ...Object.keys(LIBRAW_FILES)], { cwd: tmp })
     for (const [entry, out] of Object.entries(LIBRAW_FILES)) copyFileSync(join(tmp, entry), join(OUT, out))
-    // LibRaw's MSVC build imports the VC++ 2015-2022 runtime, which a clean Windows install may lack. Ship the three DLLs app-local.
-    for (const dll of ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll']) {
-      const from = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', dll)
-      if (existsSync(from)) copyFileSync(from, join(OUT, dll))
-      else console.warn(`warn    ${dll} not found; dcraw_emu.exe will need the VC++ redistributable on the target PC`)
-    }
+    // Note: LibRaw's MSVC build needs the VC++ 2015-2022 runtime on the target PC; we don't ship it (see docs/packaging.md).
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }
