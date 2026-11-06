@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Settings, Status } from '@shared/types'
+import type { NetInterface, Settings, Status } from '@shared/types'
 import { api } from '../api'
 import { Icon } from './Icon'
 
@@ -20,6 +20,43 @@ export function CopyField({ label, value, mono = true }: { label: string; value:
       >
         <Icon name={copied ? 'check' : 'copy'} size={14} />
       </button>
+    </div>
+  )
+}
+
+const KIND: Record<NetInterface['kind'], string> = { wifi: 'Wi-Fi', ethernet: 'Ethernet', 'vpn-virtual': 'VPN / virtual', other: 'Other' }
+
+/** Every address on this PC with its adapter; the first is what cameras are told to use. */
+export function AddressPicker({ ftp }: { ftp: Status['ftp'] }) {
+  const [saving, setSaving] = useState(false)
+  const choose = (address: string | null): void => {
+    setSaving(true)
+    // The server merges `ftp` shallowly, so the partial patch is safe.
+    api.patchSettings({ ftp: { preferredAddress: address } } as Partial<Settings>).finally(() => setSaving(false))
+  }
+  const missing = ftp.preferredMissing
+  if (!ftp.interfaces.length && !missing) return null
+  return (
+    <div className="addr-picker">
+      {missing && (
+        <p className="addr-notice">
+          Your chosen address {missing} isn't on this PC any more (the network probably changed), so ShotDrop is using {ftp.addresses[0] ?? 'another address'}. Pick a new one below
+          <button className="link-btn" disabled={saving} onClick={() => choose(null)}> or go back to automatic</button>.
+        </p>
+      )}
+      {ftp.interfaces.length > 1 && <p className="muted small">This PC has {ftp.interfaces.length} network addresses. Choose the one on the same network as the camera.</p>}
+      <ul>
+        {ftp.interfaces.map((i, idx) => (
+          <li key={i.address} className={idx === 0 ? 'active' : ''}>
+            <span className="mono">{i.address}</span>
+            <span className="muted small">{i.adapter} · {KIND[i.kind]}</span>
+            {i.kind === 'vpn-virtual' && <span className="addr-badge">{/tailscale|wireguard|^wg|zerotier/i.test(i.adapter) ? 'VPN' : 'Virtual'}</span>}
+            {i.preferred ? <span className="addr-badge ok">Your choice</span> : (
+              <button className="link-btn" disabled={saving} onClick={() => choose(i.address)}>Use this one</button>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -52,9 +89,7 @@ export function ConnectionCard({ status }: { status: Status | null }) {
         <span className="conn-label">Mode</span>
         <span className="conn-value">FTP · Passive on · Folder: /</span>
       </div>
-      {ftp.addresses.length > 1 && (
-        <p className="muted small">Other addresses on this PC: {ftp.addresses.slice(1).join(', ')}. Use the one on the same Wi-Fi as the camera.</p>
-      )}
+      <AddressPicker ftp={ftp} />
     </div>
   )
 }

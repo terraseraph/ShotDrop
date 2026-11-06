@@ -1,11 +1,10 @@
 import { execFile } from 'node:child_process'
 import { statfs } from 'node:fs/promises'
 import { createServer, Socket } from 'node:net'
-import { networkInterfaces } from 'node:os'
 import type { Check, DiagnosticsReport, FixId, FixResult, LoginAttempt } from '@shared/diagnostics'
 import type { Core } from './index'
 import { allowCameras, firewallStatus, removeRules, type FirewallStatus } from './firewall'
-import { isVirtualAdapter, lanAddresses } from './net'
+import { listInterfaces } from './net'
 
 const isWin = process.platform === 'win32'
 
@@ -144,8 +143,9 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
   const s = core.settings
   const ftp = core.ftp.state
   const checks: Check[] = []
-  const addrs = lanAddresses()
-  const primary = addrs[0]
+  const pref = s.ftp.preferredAddress
+  const ifaces = listInterfaces(pref)
+  const primary = ifaces[0]?.address
 
   // 1. FTP server
   if (!s.ftp.enabled) {
@@ -190,11 +190,9 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
   }
 
   // 3. Network adapters
-  const ifaces = Object.entries(networkInterfaces()).flatMap(([name, infos]) =>
-    (infos ?? []).filter((i) => i.family === 'IPv4' && !i.internal).map((i) => ({ name, address: i.address }))
-  )
-  const real = ifaces.filter((i) => !isVirtualAdapter(i.name))
-  const adapterOf = (a: string): string => ifaces.find((i) => i.address === a)?.name ?? 'unknown adapter'
+  const real = ifaces.filter((i) => i.kind !== 'vpn-virtual')
+  const adapterOf = (a: string): string => ifaces.find((i) => i.address === a)?.adapter ?? 'unknown adapter'
+  const chosen = !!pref && pref === primary
   if (!primary) {
     checks.push({ id: 'network', title: 'Network', level: 'error', detail: 'This PC has no network connection. Connect to Wi-Fi or Ethernet, on the same network as the camera.' })
   } else if (!real.length) {
@@ -202,17 +200,18 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
       id: 'network',
       title: 'Network',
       level: 'warn',
-      detail: `Only VPN/virtual adapters are connected (${ifaces.map((i) => i.name).join(', ')}). A camera can't reach those. Connect to the same Wi-Fi as the camera.`
+      detail: `Only VPN/virtual adapters are connected (${ifaces.map((i) => i.adapter).join(', ')}). A camera can't reach those. Connect to the same Wi-Fi as the camera.`
     })
   } else {
     const others = real.filter((i) => i.address !== primary)
     checks.push({
       id: 'network',
       title: 'Network',
-      level: others.length ? 'info' : 'ok',
+      level: pref && !chosen ? 'warn' : others.length ? 'info' : 'ok',
       detail:
-        `Cameras should use ${primary} (${adapterOf(primary)}).` +
-        (others.length ? ` This PC is also on ${others.map((o) => `${o.address} (${o.name})`).join(', ')}; use whichever is on the camera's Wi-Fi.` : '')
+        (pref && !chosen ? `Your chosen address ${pref} is no longer on this PC, so ShotDrop switched to ${primary}. ` : '') +
+        `Cameras should use ${primary} (${adapterOf(primary)})${chosen ? ', the address you chose' : ''}.` +
+        (others.length ? ` This PC is also on ${others.map((o) => `${o.address} (${o.adapter})`).join(', ')}; use whichever is on the camera's Wi-Fi.` : '')
     })
   }
 
@@ -251,7 +250,7 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
   }
 
   // 6. What cameras have actually done
-  const own = new Set([...addrs, '127.0.0.1', '::1'])
+  const own = new Set([...ifaces.map((i) => i.address), '127.0.0.1', '::1'])
   const external = attempts.filter((a) => !own.has(a.ip.replace(/^::ffff:/, '')))
   const lastOk = external.filter((a) => a.ok).at(-1)
   const recentFails = external.filter((a) => !a.ok && (!lastOk || a.at > lastOk.at))
