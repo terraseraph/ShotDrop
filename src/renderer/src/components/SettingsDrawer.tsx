@@ -3,6 +3,8 @@ import type { Destination, DestinationFilter, DestinationType, Settings, Status 
 import { api, desktop } from '../api'
 import { NetworkCheck } from './NetworkCheck'
 import { TunnelPanel } from './TunnelPanel'
+import { PhoneLink } from './PhoneLink'
+import { lanUrl } from './ViewOnPhone'
 import { Icon } from './Icon'
 
 export type Tab = 'camera' | 'sync' | 'library' | 'remote'
@@ -367,6 +369,12 @@ function RemoteTab({ s, status, edit, toast }: { s: Settings; status: Status | n
         <Field label="PIN">
           <input className="input mono big" value={s.remote.pin} onChange={(e) => edit({ remote: { ...s.remote, pin: e.target.value.replace(/\D/g, '').slice(0, 12) } })} />
         </Field>
+        {status?.api.remote && lanUrl(status) && (
+          <div className="remote-qr">
+            <PhoneLink url={lanUrl(status)!} pin={s.remote.pin} size={200} />
+            <p className="muted small">Scan with a phone on this network, enter the PIN, then Add to Home Screen.</p>
+          </div>
+        )}
         {status?.api.remote && (
           <div className="conn-card">
             {status.api.urls.map((u) => (

@@ -30,6 +30,8 @@ interface Props {
   dockOpen: boolean
   onDock: () => void
   onHelp: () => void
+  onPhone: () => void
+  mobile: boolean
   visibleCount: number
 }
 
@@ -63,6 +65,13 @@ export function TopBar(p: Props) {
           ))}
         </select>
 
+        {p.mobile ? (
+          <select className="select" value={p.filter} onChange={(e) => p.onFilter(e.target.value as Filter)} aria-label="Filter">
+            {FILTERS.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+        ) : (
         <div className="seg" role="tablist" aria-label="Filter">
           {FILTERS.map((f) => (
             <button key={f.id} role="tab" aria-selected={p.filter === f.id} className={p.filter === f.id ? 'on' : ''} onClick={() => p.onFilter(f.id)}>
@@ -70,6 +79,7 @@ export function TopBar(p: Props) {
             </button>
           ))}
         </div>
+        )}
         <span className="count">{p.visibleCount}</span>
       </div>
 
@@ -88,7 +98,7 @@ export function TopBar(p: Props) {
 
         <button className={`toggle ${p.follow ? 'on' : ''}`} onClick={() => p.onFollow(!p.follow)} title="Follow new shots (F)">
           <Icon name="follow" />
-          Follow
+          <span className="lbl">Follow</span>
         </button>
 
         <div className="seg icons" aria-label="View">
@@ -101,11 +111,16 @@ export function TopBar(p: Props) {
         </div>
 
         {!isRemote && (
+          <button className="icon-btn" onClick={p.onPhone} title="View on phone" aria-label="View on phone">
+            <Icon name="phone" />
+          </button>
+        )}
+        {!isRemote && (
           <button className={`icon-btn ${p.dockOpen ? 'on' : ''}`} onClick={p.onDock} title="Status dock (,)" aria-pressed={p.dockOpen}>
             <Icon name="dock" />
           </button>
         )}
-        <button className="icon-btn" onClick={p.onHelp} title="Keyboard shortcuts (?)">
+        <button className="icon-btn help" onClick={p.onHelp} title="Keyboard shortcuts (?)">
           <Icon name="keyboard" />
         </button>
         {!isRemote && (
