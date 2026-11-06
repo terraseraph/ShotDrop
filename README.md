@@ -24,53 +24,120 @@ It runs on your own machine with your own storage. There's no hosted service, so
 
 ---
 
+## Getting started (dev)
+
+```bash
+npm install
+npm run dev        # Electron app + Vite renderer with hot reload
+npm run typecheck
+npm run dist       # Windows installer via electron-builder
+```
+
+In dev mode, all data (settings, DB, previews, library) goes into a gitignored `.dev-data/` folder in the repo, so test shots never touch your real Pictures folder. A packaged build uses `%APPDATA%/shotdrop` and `Pictures/ShotDrop`.
+
+To fake a camera, upload over FTP with the user and password shown in the app:
+
+```bash
+curl -T DSC01234.JPG ftp://camera:<password>@127.0.0.1:2121/
+```
+
+On first run, Windows Firewall will ask to allow ShotDrop. Allow it on private networks, or cameras can't reach the FTP server.
+
+### Project layout
+
+```
+src/
+  shared/types.ts        types shared by server and UI
+  main/
+    index.ts             Electron shell: window, IPC for folder picker, lifecycle
+    core/                no Electron imports: can run headless later (NAS, NXS box)
+      index.ts           Core: wires everything together, applies settings changes
+      ftp.ts             embedded FTP server (ftp-srv), one folder per camera login
+      ingest.ts          watcher → hash/dedupe → EXIF → file by date → previews
+      media.ts           EXIF (exiftool), thumbnails/previews (sharp), embedded RAW JPEGs
+      library.ts         SQLite access: shots, files, sync jobs
+      sync.ts            background sync queue (folder copy, rclone)
+      config.ts / db.ts / net.ts / events.ts
+    api/server.ts        Fastify REST API + SSE event stream + serves the web UI
+  preload/index.ts       exposes API base + native helpers to the window
+  renderer/              React UI (same bundle serves remote browsers)
+```
+
+## REST API
+
+The desktop window uses the same HTTP API a remote browser or script would. It listens on `127.0.0.1:8787`, or on all interfaces when remote access is on. Requests that don't come from this machine, including anything through a tunnel, need the PIN as an `x-shotdrop-key` header or a `?key=` parameter.
+
+| Method | Path | |
+|---|---|---|
+| GET | `/api/status` | FTP, API, library and sync state |
+| GET | `/api/events` | Server-Sent Events: `shot:added`, `shot:updated`, `shot:removed`, `status`, `ingest:error` |
+| GET | `/api/sessions` | Shoot days with counts |
+| GET | `/api/shots` | `?session=&minRating=&flag=-1\|0\|1\|notRejected&label=&order=asc\|desc&limit=&offset=` |
+| GET | `/api/shots/:id` | One shot |
+| PATCH | `/api/shots/:id` | `{ rating?, flag?, label? }` |
+| PATCH | `/api/shots` | Bulk: `{ ids: [], patch: {...} }` |
+| DELETE | `/api/shots/:id` | Sends the files to the recycle bin |
+| GET | `/api/shots/:id/thumb` · `/preview` · `/original?file=` | Images |
+| GET / PATCH | `/api/settings` | Changing FTP, library or watch settings restarts those services live |
+| POST | `/api/ftp/start` · `/api/ftp/stop` | |
+| GET / POST | `/api/destinations` | `{ name, type: folder\|rclone, target, filter: all\|jpeg\|raw\|picks }`. Adding one backfills existing shots. |
+| PATCH / DELETE | `/api/destinations/:id` | |
+| POST | `/api/destinations/:id/resync` | Queue everything again |
+| GET | `/api/sync/jobs?status=` | Recent sync jobs |
+| POST | `/api/sync/retry` | Retry failed jobs |
+
+---
+
 ## Features
 
 ### Ingest
-- [ ] Built-in FTP server (with FTPS where the camera supports it), started from the app with one toggle
-- [ ] Auto-detect the LAN IP and show the camera setup details in big readable text: host, port, user, password, folder
-- [ ] **Camera setup wizard** with per-brand step-by-step instructions (Sony, Canon, Nikon, Fuji)
+- [x] Built-in FTP server, started from the app with one toggle (FTPS still to do)
+- [x] Auto-detect the LAN IP and show the camera setup details in big readable text: host, port, user, password, folder
+- [x] **Camera setup wizard** with per-brand step-by-step instructions (Sony, Canon, Nikon, Fuji)
 - [ ] QR code or printable card with the connection details
-- [ ] Multiple cameras at once, each with its own credentials, so frames are tagged by camera or shooter
-- [ ] Handles JPEG, HEIF and RAW (ARW, CR3, NEF, RAF, DNG), plus JPEG+RAW pairs grouped as one shot
-- [ ] Also ingest from a watched folder (card reader, tether software output) and drag-and-drop
-- [ ] Partial-upload detection: never show or sync a half-written file
-- [ ] Duplicate detection by hash, so camera re-sends don't create copies
+- [x] Multiple cameras at once, each with its own credentials, so frames are tagged by camera or shooter
+- [x] Handles JPEG, HEIF and RAW (ARW, CR3, NEF, RAF, DNG), plus JPEG+RAW pairs grouped as one shot
+- [x] Also ingest from a watched folder (card reader, tether software output)
+- [ ] Drag-and-drop import
+- [x] Partial-upload detection: never show or sync a half-written file
+- [x] Duplicate detection by hash, so camera re-sends don't create copies
 - [ ] Auto-rename and folder rules, e.g. `{date}/{camera}/{seq}`
 
 ### Gallery (the main screen)
-- [ ] New shots appear within seconds, with a subtle "new" pulse
-- [ ] **Follow mode:** the big view jumps to each new frame as it arrives (live-tether feel). Toggle off to browse freely.
-- [ ] Grid view, filmstrip view and full-screen loupe
-- [ ] Instant previews from the JPEG embedded in the RAW, with full decode on demand
-- [ ] Zoom to 100% and pan for focus checks
-- [ ] EXIF overlay: shutter, aperture, ISO, focal length, lens, camera, time
+- [x] New shots appear within seconds, with a subtle "new" pulse
+- [x] **Follow mode:** the big view jumps to each new frame as it arrives (live-tether feel). Toggle off to browse freely.
+- [x] Grid view, filmstrip view and full-screen loupe
+- [x] Instant previews from the JPEG embedded in the RAW, with full decode on demand
+- [x] Zoom to 100% and pan for focus checks
+- [x] EXIF overlay: shutter, aperture, ISO, focal length, lens, camera, time
 - [ ] Optional histogram and highlight-clipping overlay
 - [ ] Side-by-side compare (2 to 4 up)
-- [ ] Sort and filter by time, camera, rating, flag, colour label, file type
-- [ ] Sessions/shoots: group a day or job into its own collection
+- [x] Filter by session, pick, rating, reject
+- [ ] Sort and filter by camera, colour label, file type
+- [x] Sessions/shoots: group a day or job into its own collection
 
 ### Culling
-- [ ] Keyboard-first: `1`–`5` stars, `P` pick, `X` reject, `6`–`9` colour labels, arrows to move
+- [x] Keyboard-first: `1`–`5` stars, `P` pick, `X` reject, `6`–`9` colour labels, arrows to move
 - [ ] Ratings written to XMP sidecars so Lightroom and Capture One see them
-- [ ] "Sync picks only" option per destination
-- [ ] Batch delete or move rejects (to the recycle bin, never a hard delete)
+- [x] "Sync picks only" option per destination
+- [x] Delete to the recycle bin (never a hard delete)
+- [ ] Batch delete or move rejects
 
 ### Sync
-- [ ] Multiple destinations per shoot, each with its own rules
-  - Google Drive, Dropbox, OneDrive, S3/R2/B2 and others via bundled **rclone** (user signs into their own account)
-  - Local or NAS folder and network shares
-  - rsync/SSH to a remote box
-- [ ] Per-destination filters: all files, JPEG only, picks only, RAW only
-- [ ] Background queue with retry, resume and bandwidth limits
-- [ ] Status per photo: local ✓, synced to each destination ✓
-- [ ] Works offline: queues uploads and catches up when the connection is back
+- [x] Multiple destinations, each with its own rules
+  - [x] Google Drive, Dropbox, OneDrive, S3/R2/B2 and others via **rclone** (user's own `rclone config` for now; bundling and in-app sign-in still to do)
+  - [x] Local or NAS folder and network shares
+  - [ ] rsync/SSH to a remote box
+- [x] Per-destination filters: all files, JPEG only, picks only, RAW only
+- [x] Background queue with retry and resume (bandwidth limits still to do)
+- [x] Status per photo: local ✓, synced to each destination ✓
+- [x] Works offline: queues uploads and catches up when the connection is back
 - [ ] Optional resized "share copies", e.g. long edge 2048px JPEG, for faster cloud previews
 
 ### Remote access
-- [ ] **Remote gallery:** view and cull from a phone or another PC through a browser, served by the app's built-in web server
+- [x] **Remote gallery:** view and cull from a phone or another PC through a browser, served by the app's built-in web server
 - [ ] One-click **Cloudflare Tunnel** to expose the remote gallery over HTTPS without port forwarding (free; needs the user's Cloudflare account, or a quick tunnel for temporary URLs)
-- [ ] Password or PIN on the remote gallery
+- [x] Password or PIN on the remote gallery
 - [ ] **Remote camera uploads** (advanced, see notes below): accept camera uploads from outside the LAN
 
 ### App and system
@@ -153,7 +220,7 @@ Entry-level bodies usually only support the brand's phone app, which ShotDrop ca
 
 ## Roadmap
 
-**v0.1 (MVP)**
+**v0.1 (MVP)** ✅ scaffolded
 - Electron + React shell, built-in FTP server, camera setup screen
 - Live gallery with follow mode, loupe, keyboard culling
 - One sync destination via rclone (Google Drive)

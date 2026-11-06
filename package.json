@@ -1,0 +1,55 @@
+{
+  "name": "shotdrop",
+  "version": "0.1.0",
+  "description": "Wireless camera-to-screen gallery: built-in FTP ingest, live culling, sync to your own storage.",
+  "main": "./out/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "electron-vite build && electron-builder"
+  },
+  "build": {
+    "appId": "au.com.oztechinnovations.shotdrop",
+    "productName": "ShotDrop",
+    "files": [
+      "out/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**",
+      "**/node_modules/exiftool-vendored*/**",
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.4.1",
+    "@fastify/static": "^10.1.10",
+    "better-sqlite3": "^13.0.3",
+    "chokidar": "^5.0.0",
+    "exiftool-vendored": "^39.1.1",
+    "fastify": "^5.12.8",
+    "ftp-srv": "^4.6.3",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "5.9",
+    "vite": "^8.3.6"
+  }
+}
