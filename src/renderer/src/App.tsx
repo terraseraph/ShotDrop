@@ -7,7 +7,7 @@ import { Loupe } from './components/Loupe'
 import { Filmstrip } from './components/Filmstrip'
 import { Grid } from './components/Grid'
 import { InfoPanel } from './components/InfoPanel'
-import { EmptyState } from './components/EmptyState'
+import { SetupScreen } from './components/SetupScreen'
 import { SettingsDrawer } from './components/SettingsDrawer'
 import { PinGate } from './components/PinGate'
 import { Shortcuts } from './components/Shortcuts'
@@ -41,11 +41,15 @@ export default function App() {
   const [infoOpen, setInfoOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [setupOpen, setSetupOpen] = useState(false)
+  const emptyRef = useRef(true)
   const [freshIds, setFreshIds] = useState<Set<number>>(new Set())
   const followRef = useRef(follow)
   followRef.current = follow
 
   const onArrival = useCallback((shot: Shot) => {
+    // First shot ever: keep the setup screen up so it can show the test shot.
+    if (emptyRef.current) setSetupOpen(true)
     setFreshIds((s) => new Set(s).add(shot.id))
     setTimeout(() => setFreshIds((s) => {
       const n = new Set(s)
@@ -133,6 +137,7 @@ export default function App() {
   if (!lib.loaded) return <div className="app" />
 
   const empty = lib.shots.length === 0
+  emptyRef.current = empty
 
   return (
     <div className="app">
@@ -153,8 +158,13 @@ export default function App() {
         visibleCount={visible.length}
       />
 
-      {empty ? (
-        <EmptyState status={lib.status} onSettings={() => setSettingsOpen(true)} />
+      {empty || setupOpen ? (
+        <SetupScreen
+          status={lib.status}
+          shots={lib.shots}
+          onBack={empty ? null : () => setSetupOpen(false)}
+          onGallery={(id) => { setSetupOpen(false); setSelectedId(id); setView('loupe') }}
+        />
       ) : (
         <div className={`workspace ${infoOpen ? 'with-info' : ''}`}>
           <main className="stage">
@@ -171,7 +181,7 @@ export default function App() {
         </div>
       )}
 
-      {settingsOpen && !isRemote && <SettingsDrawer status={lib.status} onClose={() => setSettingsOpen(false)} toast={lib.toast} />}
+      {settingsOpen && !isRemote && <SettingsDrawer status={lib.status} onClose={() => setSettingsOpen(false)} toast={lib.toast} onSetup={() => { setSettingsOpen(false); setSetupOpen(true) }} />}
       {helpOpen && <Shortcuts onClose={() => setHelpOpen(false)} />}
 
       <div className="toasts" aria-live="polite">

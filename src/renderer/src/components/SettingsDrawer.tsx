@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Destination, DestinationFilter, DestinationType, Settings, Status } from '@shared/types'
 import { api, desktop } from '../api'
-import { ConnectionCard } from './ConnectionCard'
 import { NetworkCheck } from './NetworkCheck'
 import { TunnelPanel } from './TunnelPanel'
 import { Icon } from './Icon'
@@ -12,6 +11,7 @@ interface Props {
   status: Status | null
   onClose: () => void
   toast: (t: string, tone?: 'info' | 'error') => void
+  onSetup: () => void
 }
 
 const isWindows = navigator.userAgent.includes('Windows')
@@ -19,49 +19,7 @@ const PORT_HINT = isWindows
   ? 'Any free port works; set the same number in the camera. Use a free port in the connection check if this one is taken.'
   : 'Any free port works. Ports below 1024 need root on macOS/Linux.'
 
-const BRAND_STEPS: { brand: string; steps: string[] }[] = [
-  {
-    brand: 'Sony',
-    steps: [
-      'Menu → Network → FTP Transfer Func. → Server Setting → pick a server slot.',
-      'Host name: the Server address shown above. Port: as shown. Secure protocol: Off.',
-      'User / Password: as shown. Passive mode: On. Directory: leave blank.',
-      'Connect the camera to the same Wi-Fi (Network → Wi-Fi → Access Point Set.).',
-      'Turn on Auto FTP Transfer to send each shot as you take it.'
-    ]
-  },
-  {
-    brand: 'Canon',
-    steps: [
-      'Menu → Network → Network settings → Connection option settings → FTP transfer.',
-      'Run the connection wizard: choose the Wi-Fi network, then FTP mode (not SFTP/FTPS).',
-      'Address: the Server address. Port: as shown. Passive mode: Enable. Proxy: none.',
-      'Login: the User and Password shown. Target folder: Root folder.',
-      'Transfer settings → Auto transfer: Enable.'
-    ]
-  },
-  {
-    brand: 'Nikon',
-    steps: [
-      'Network menu → Connect to FTP server → Network settings → Create profile.',
-      'Choose Wi-Fi and join the same network as this PC.',
-      'Server type: FTP. Address: the Server address. Port: as shown. Passive mode: On.',
-      'Login with the User and Password shown, then Connect.',
-      'Options → Auto send: On.'
-    ]
-  },
-  {
-    brand: 'Fujifilm',
-    steps: [
-      'Network/USB settings → FTP transfer settings → Server settings.',
-      'Server: the Server address. Port: as shown. Passive mode: On.',
-      'User ID / Password: as shown. Upload folder: blank.',
-      'Join the same Wi-Fi as this PC, then enable Auto Image Transfer Order.'
-    ]
-  }
-]
-
-export function SettingsDrawer({ status, onClose, toast }: Props) {
+export function SettingsDrawer({ status, onClose, toast, onSetup }: Props) {
   const [tab, setTab] = useState<Tab>('camera')
   const [s, setS] = useState<Settings | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -123,7 +81,7 @@ export function SettingsDrawer({ status, onClose, toast }: Props) {
           {!s ? (
             <p className="muted">Loading…</p>
           ) : tab === 'camera' ? (
-            <CameraTab s={s} status={status} edit={edit} toast={toast} />
+            <CameraTab s={s} status={status} edit={edit} toast={toast} onSetup={onSetup} />
           ) : tab === 'sync' ? (
             <SyncTab s={s} status={status} reload={load} toast={toast} />
           ) : tab === 'library' ? (
@@ -166,10 +124,9 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   )
 }
 
-function CameraTab({ s, status, edit, toast }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void; toast: Props['toast'] }) {
+function CameraTab({ s, status, edit, toast, onSetup }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void; toast: Props['toast']; onSetup: () => void }) {
   const ftp = s.ftp
   const setFtp = (p: Partial<Settings['ftp']>): void => edit({ ftp: { ...ftp, ...p } })
-  const [brand, setBrand] = useState<string | null>(null)
 
   return (
     <>
@@ -178,7 +135,8 @@ function CameraTab({ s, status, edit, toast }: { s: Settings; status: Status | n
           <h3>Camera connection</h3>
           <Switch checked={ftp.enabled} onChange={(v) => setFtp({ enabled: v })} label={ftp.enabled ? 'FTP server on' : 'FTP server off'} />
         </div>
-        <ConnectionCard status={status} />
+        <p className="muted small">Host, password, QR code and per-brand menu steps are on the setup screen.</p>
+        <button className="btn" onClick={onSetup}><Icon name="camera" /> Camera setup</button>
       </section>
 
       <section className="panel">
@@ -226,25 +184,6 @@ function CameraTab({ s, status, edit, toast }: { s: Settings; status: Status | n
         </div>
       </section>
 
-      <section className="panel">
-        <h3>Camera setup guides</h3>
-        <div className="brands">
-          {BRAND_STEPS.map((b) => (
-            <div key={b.brand} className={`brand-guide ${brand === b.brand ? 'open' : ''}`}>
-              <button className="brand-head" onClick={() => setBrand(brand === b.brand ? null : b.brand)} aria-expanded={brand === b.brand}>
-                {b.brand}
-                <Icon name={brand === b.brand ? 'prev' : 'next'} />
-              </button>
-              {brand === b.brand && (
-                <ol>
-                  {b.steps.map((st) => <li key={st}>{st}</li>)}
-                </ol>
-              )}
-            </div>
-          ))}
-        </div>
-        <p className="muted small">Menu names vary by model and firmware. These are a starting point.</p>
-      </section>
     </>
   )
 }
