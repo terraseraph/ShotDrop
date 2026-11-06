@@ -27,6 +27,8 @@ interface Props {
   view: 'loupe' | 'grid'
   onView: (v: 'loupe' | 'grid') => void
   onSettings: () => void
+  dockOpen: boolean
+  onDock: () => void
   onHelp: () => void
   visibleCount: number
 }
@@ -42,6 +44,7 @@ export function TopBar(p: Props) {
   const live = ftp?.running && p.connected
   const receiving = (ftp?.activeConnections ?? 0) > 0
   const sync = p.status?.sync
+  const cams = p.status?.cameras.filter((c) => c.connected).length ?? 0
 
   return (
     <header className="topbar">
@@ -71,13 +74,6 @@ export function TopBar(p: Props) {
       </div>
 
       <div className="topbar-group right">
-        {sync && (sync.pending + sync.running > 0 || sync.errors > 0) && (
-          <span className={`chip ${sync.errors ? 'warn' : ''}`} title="Sync queue">
-            <Icon name="cloud" />
-            {sync.errors ? `${sync.errors} failed` : `${sync.pending + sync.running} syncing`}
-          </span>
-        )}
-
         {p.status?.tunnel.status === 'running' && (
           <button className="chip online" onClick={p.onSettings} title={p.status.tunnel.url ?? 'Public link is on'}>
             <Icon name="cloud" />
@@ -85,9 +81,9 @@ export function TopBar(p: Props) {
           </button>
         )}
 
-        <button className="chip ftp" onClick={p.onSettings} title="Camera connection">
+        <button className={`chip ftp ${sync?.errors ? 'warn' : ''}`} onClick={p.onDock} title={sync?.errors ? `${sync.errors} uploads failed` : 'Status dock (,)'}>
           <span className={`tally ${live ? (receiving ? 'receiving' : 'live') : 'off'}`} />
-          {!p.connected ? 'Disconnected' : ftp?.running ? `${ftp.addresses[0] ?? '…'}:${ftp.port}` : ftp?.error ? 'FTP error' : 'FTP off'}
+          {!p.connected ? 'Disconnected' : ftp?.error ? 'FTP error' : !ftp?.running ? 'FTP off' : `${cams} camera${cams === 1 ? '' : 's'}`}
         </button>
 
         <button className={`toggle ${p.follow ? 'on' : ''}`} onClick={() => p.onFollow(!p.follow)} title="Follow new shots (F)">
@@ -104,6 +100,11 @@ export function TopBar(p: Props) {
           </button>
         </div>
 
+        {!isRemote && (
+          <button className={`icon-btn ${p.dockOpen ? 'on' : ''}`} onClick={p.onDock} title="Status dock (,)" aria-pressed={p.dockOpen}>
+            <Icon name="dock" />
+          </button>
+        )}
         <button className="icon-btn" onClick={p.onHelp} title="Keyboard shortcuts (?)">
           <Icon name="keyboard" />
         </button>

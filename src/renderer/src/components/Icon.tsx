@@ -15,6 +15,7 @@ const PATHS: Record<string, string> = {
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   check: 'M5 12l5 5 9-11',
   camera: 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
+  dock: 'M4 5h16v14H4zM14 5v14',
   flag: 'M5 21V4h11l-2 4 2 4H5'
 }
 

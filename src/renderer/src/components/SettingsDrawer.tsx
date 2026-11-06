@@ -5,10 +5,11 @@ import { ConnectionCard } from './ConnectionCard'
 import { TunnelPanel } from './TunnelPanel'
 import { Icon } from './Icon'
 
-type Tab = 'camera' | 'sync' | 'library' | 'remote'
+export type Tab = 'camera' | 'sync' | 'library' | 'remote'
 
 interface Props {
   status: Status | null
+  tab?: Tab
   onClose: () => void
   toast: (t: string, tone?: 'info' | 'error') => void
 }
@@ -55,8 +56,8 @@ const BRAND_STEPS: { brand: string; steps: string[] }[] = [
   }
 ]
 
-export function SettingsDrawer({ status, onClose, toast }: Props) {
-  const [tab, setTab] = useState<Tab>('camera')
+export function SettingsDrawer({ status, tab: initialTab, onClose, toast }: Props) {
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'camera')
   const [s, setS] = useState<Settings | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
