@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ShotDrop cloud linking: 3 directions</title>
+<style>
+:root{--bg:#0b0b0d;--panel:#121215;--panel-3:#222227;--line:#26262c;--line-2:#33333a;--text:#ececef;--muted:#8a8a94;--tally:#ff5436;--live:#33d17a;--font:'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;--mono:'Cascadia Mono',Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:#050506;color:var(--text);font:14px/1.5 var(--font)}
+.w{max-width:1180px;margin:0 auto;padding:34px 24px 60px}
+.k{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--tally)}
+h1{font-size:30px;letter-spacing:-.02em;margin:4px 0 6px}h2{font-size:18px;margin:38px 0 12px}
+p{color:#c4c4cc;max-width:760px;margin:0 0 10px}.m{color:var(--muted)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.three{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;transition:.2s;text-decoration:none;color:inherit}
+.card:hover{border-color:#44444c;transform:translateY(-3px)}
+.card img{width:100%;display:block;border-bottom:1px solid var(--line);aspect-ratio:16/10;object-fit:cover;object-position:top}
+.card .b{padding:14px 16px 16px}.card h3{margin:0 0 4px;font-size:17px}.card .b p{font-size:13px;color:var(--muted)}
+.tag{display:inline-block;font:600 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:var(--panel-3);color:#c6c6cd;margin-right:4px}
+.tag.rec{background:rgba(51,209,122,.15);color:var(--live)}
+table{width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--line)}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}th{background:var(--panel);font-weight:600;color:var(--muted);font-size:12px}td:first-child{color:var(--muted);width:20%}
+ul{margin:0;padding-left:18px;color:#c4c4cc}li{margin:4px 0}
+.n{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}.n a{flex:none;width:150px}.n img{width:100%;border-radius:8px;border:1px solid var(--line)}
+@media(max-width:800px){.two,.three{grid-template-columns:1fr}}
+</style></head><body><div class="w">
+<div class="k">ShotDrop · cloud linking</div><h1>Connecting Google Drive and Dropbox: three directions</h1>
+<p class="m">Mockups only (scratch references, not app code). Dark neutral chrome from <code>styles.css</code> tokens. Each file is self-contained and clickable: pick any step from the chips at the top, flip to a 380px window, try the Disconnect confirm, pause, and the expired-sign-in error with Reconnect. Provider logos are simplified stand-ins; use the official brand assets when building.</p>
+
+<h2>What makes the current UI weak</h2>
+<div class="two"><ul>
+<li><b>Everything is on one scroll.</b> Linked accounts, connect buttons, folder browser, name, "Sync into", filter and Add are stacked in the same panel, so nobody can tell which step they are on or what happens next.</li>
+<li><b>"Connect" and "Add destination" are two mental models.</b> You link an account, then pick a folder, then press Add. Nothing says the first two don't create anything until Add.</li>
+<li><b>The waiting state is a yellow warning box.</b> It looks like an error, has no sense of progress, no timeout, and the fallback link is a muted sentence.</li>
+<li><b>The folder browser is a tiny 180px scroll area</b> with link-styled rows, an unlabelled "Use this folder", and no path preview. The Drive "safe mode" limit is explained only after you find an empty list.</li>
+</ul><ul>
+<li><b>Filters are a raw select</b> ("JPEG / HEIF only", "Picks only") with no plain-language explanation, counts or sizes.</li>
+<li><b>Own client ID and the full-access checkbox hide in a collapsed "Sign-in options"</b> although Google is retiring the shared ID in 2026, so the "rare" path is becoming the normal one. They apply to both providers with no hint of which does what.</li>
+<li><b>Connected state is thin.</b> The destination row shows name, target and filter, but no account email, quota, live progress or error text. Health is one global line ("3 failed · Retry") and an expired sign-in has no Reconnect, just Disconnect and start again.</li>
+<li><b>No first-run presence</b>, a 560px drawer for everything, and Disconnect uses a browser <code>confirm()</code>.</li>
+</ul></div>
+
+<h2>Three directions</h2>
+<div class="three">
+<a class="card" href="a-guided-drawer.html"><img src="shots/a-provider-wide.png" alt=""><div class="b"><span class="tag">A</span><span class="tag">Lowest risk</span><h3>Guided drawer</h3><p>A four-step wizard inside the existing Settings drawer. One decision per screen, progress bar, rich destination cards.</p></div></a>
+<a class="card" href="b-first-run-canvas.html"><img src="shots/b-folder-wide.png" alt=""><div class="b"><span class="tag">B</span><span class="tag">Best first impression</span><h3>First-run canvas</h3><p>A full-window setup page: step rail, big provider tiles, column folder browser, and a live sentence ("Send JPEGs only to Google Drive › Weddings").</p></div></a>
+<a class="card" href="c-route-board.html"><img src="shots/c-connected-wide.png" alt=""><div class="b"><span class="tag">C</span><span class="tag rec">Recommended</span><h3>Route board</h3><p>Sync becomes a live picture of camera → this PC → destinations. Add is one sheet with all three decisions visible.</p></div></a>
+</div>
+
+<h2>Comparison</h2>
+<table><tr><th></th><th>A · Guided drawer</th><th>B · First-run canvas</th><th>C · Route board</th></tr>
+<tr><td>Where it lives</td><td>Settings → Sync; same wizard as step 3 of first run</td><td>First-run setup (full window); sheet from Settings</td><td>Settings → Sync page; add sheet</td></tr>
+<tr><td>First-timer</td><td>Excellent: one choice per screen</td><td>Excellent and most inviting</td><td>Good: three sections at once</td></tr>
+<tr><td>Repeat user</td><td>Slow: four screens each time</td><td>Slow, heavy</td><td>Fast: one sheet</td></tr>
+<tr><td>Connected state</td><td>Rich cards (email, quota, progress, errors)</td><td>Same cards after a "you're set" screen</td><td>Cards plus a route diagram showing health at a glance</td></tr>
+<tr><td>Narrow width</td><td>Drawer goes full-bleed, pinned footer</td><td>Rail becomes a 4-segment bar, columns become a list</td><td>Vertical route, bottom sheet</td></tr>
+<tr><td>Build cost</td><td>Small: reuses the drawer</td><td>Largest: new full-window screen, column browser</td><td>Medium: new page layout and sheet</td></tr>
+<tr><td>Main risk</td><td>Feels long for experts</td><td>Overkill after first run; two surfaces to maintain</td><td>Denser; folder popover cramped at 380px</td></tr></table>
+
+<h2>Recommendation</h2>
+<p><b>Ship C's structure with A's copy, and keep B's live sentence.</b> The Route board is the only direction that fixes the connected state (health, errors, Reconnect, quota), which is where people spend their time. Its single sheet suits the second and third destination. Take A's plain-language filter cards and the Drive access question before sign-in, and B's one-line "Send X to Y" summary (already in C's sheet footer). For first run, don't build B's full-window screen: show C's empty board with its single "Add a destination" button, or later a small first-run step that opens the same sheet.</p>
+<p class="m">If you want the smallest first step, A is a safe pass: same drawer, no new surface, and it can later be re-skinned as C's sheet.</p>
+
+<h2>Backend notes from the mockups</h2>
+<ul>
+<li>Counts and size estimates on the filter choices ("412 JPEG · ≈2.4 GB") need a small library-count call; the mock assumes it exists.</li>
+<li>Per-destination progress, pause/resume and a Reconnect action are shown as designed; the current API exposes global counts and Retry only. An expired token (<code>invalid_grant</code>) should be mapped to a friendly error.</li>
+<li>Drive "safe mode" (<code>drive.file</code>) is a choice <i>before</i> sign-in, and "Show all my folders" is a re-sign-in.</li>
+<li>The email may be missing under <code>drive.file</code> (docs say best effort); the account row should fall back to the remote name.</li>
+<li>Disconnect is blocked (409) while a destination uses the account; the mock treats Disconnect as "stop this destination and sign out".</li>
+</ul>
+
+<h2>Narrow-width screenshots</h2>
+<div class="n">
+<a href="a-guided-drawer.html#v=waiting&w=narrow"><img src="shots/a-waiting-narrow.png" alt=""></a>
+<a href="b-first-run-canvas.html#v=filter&w=narrow"><img src="shots/b-filter-narrow.png" alt=""></a>
+<a href="c-route-board.html#v=connected&w=narrow"><img src="shots/c-connected-narrow.png" alt=""></a>
+</div>
+<p class="m" style="margin-top:14px">Open any file with <code>#v=empty|provider|waiting|folder|filter|connected|error</code> and <code>&amp;w=narrow</code>. All screenshots are in <code>shots/</code>.</p>
+</div></body></html>

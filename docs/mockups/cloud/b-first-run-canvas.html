@@ -1,0 +1,492 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ShotDrop cloud mockup</title><style>:root{
+  --bg:#0b0b0d;--stage:#08080a;--panel:#121215;--panel-2:#19191d;--panel-3:#222227;--line:#26262c;--line-2:#33333a;
+  --text:#ececef;--muted:#8a8a94;--faint:#5b5b64;--tally:#ff5436;--tally-glow:rgba(255,84,54,.45);--live:#33d17a;
+  --reject:#ef4b4b;--star:#f4c04e;--focus:#6ea8ff;--radius:8px;--radius-sm:6px;
+  --font:'Segoe UI Variable Text','Segoe UI',Inter,system-ui,sans-serif;--mono:'Cascadia Mono','SF Mono',ui-monospace,Consolas,monospace;
+  --ease:cubic-bezier(.2,.8,.2,1);--spring:cubic-bezier(.34,1.45,.5,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:#050506;color:var(--text);font:13px/1.45 var(--font);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+input{font:inherit;color:inherit}
+h1,h2,h3,h4,p{margin:0}
+.muted{color:var(--muted)}.faint{color:var(--faint)}.small{font-size:12px}.mono{font-family:var(--mono)}
+.ic{flex:none;display:block}
+.link{color:var(--focus);text-decoration:underline;text-underline-offset:2px}
+.row{display:flex;align-items:center;gap:10px}.row.tight{gap:6px}.between{justify-content:space-between}.grow{flex:1;min-width:0}
+.stack{display:flex;flex-direction:column;gap:10px}
+.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ===== mock page chrome (outside the app frame) ===== */
+.page{max-width:1180px;margin:0 auto;padding:22px 24px 40px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:14px}
+.page-head .kicker{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--tally)}
+.page-head h1{font-size:22px;font-weight:650;letter-spacing:-.01em;margin-top:2px}
+.page-head p{color:var(--muted);max-width:640px;margin-top:4px}
+.page-head a{color:var(--muted);text-decoration:none;font-size:12px}.page-head a:hover{color:var(--text)}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+.toolbar .sep{width:1px;height:20px;background:var(--line-2);margin:0 6px}
+.tchip{height:28px;padding:0 11px;border-radius:99px;border:1px solid var(--line-2);color:var(--muted);font-size:12px;transition:.15s}
+.tchip:hover{color:var(--text);border-color:var(--faint)}
+.tchip.on{background:var(--text);color:#111;border-color:transparent;font-weight:600}
+.where{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:12px;margin-bottom:8px}
+.where b{color:var(--text);font-weight:600}
+.stage{display:flex;justify-content:center}
+.frame{position:relative;width:100%;height:700px;border:1px solid var(--line-2);border-radius:12px;overflow:hidden;background:var(--bg);box-shadow:0 30px 80px rgba(0,0,0,.6);transition:width .35s var(--ease)}
+.stage.narrow .frame{width:380px}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:16px}
+.note{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:12px 14px}
+.note h4{margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.note p{color:#c9c9d0;font-size:12.5px}
+
+/* ===== faux app shell ===== */
+.app{position:absolute;inset:0;display:flex;flex-direction:column}
+.topbar{height:48px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.logo{font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.logo i{width:10px;height:10px;border-radius:3px;background:var(--tally);box-shadow:0 0 12px var(--tally-glow)}
+.livepill{display:flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:99px;background:rgba(51,209,122,.1);color:var(--live);font:600 11px var(--mono)}
+.livepill i{width:6px;height:6px;border-radius:50%;background:var(--live);animation:pulse 2s infinite}
+.gallery{flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;padding:8px;align-content:start;overflow:hidden}
+.th{aspect-ratio:3/2;border-radius:4px;position:relative;overflow:hidden}
+.th::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(0,0,0,.45))}
+.th b{position:absolute;right:5px;bottom:4px;z-index:1;font:600 9px var(--mono);color:rgba(255,255,255,.75)}
+.scrim{position:absolute;inset:0;background:rgba(4,4,6,.62);backdrop-filter:blur(2px);animation:fade .25s both}
+
+/* ===== primitives ===== */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 13px;border-radius:var(--radius-sm);background:var(--panel-3);border:1px solid var(--line-2);white-space:nowrap;transition:transform .12s var(--ease),background .15s,border-color .15s}
+.btn:hover:not(:disabled){background:#2a2a30;border-color:#44444c}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--text);color:#111;border-color:transparent;font-weight:600}
+.btn.primary:hover:not(:disabled){background:#fff}
+.btn.lg{height:40px;padding:0 20px;font-size:14px;border-radius:8px}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}.btn.ghost:hover:not(:disabled){color:var(--text);background:var(--panel-2);border-color:transparent}
+.btn.danger{color:#ff8b8b}.btn.danger:hover:not(:disabled){background:rgba(239,75,75,.12);border-color:rgba(239,75,75,.4)}
+.btn.warn{background:var(--tally);color:#fff;border-color:transparent;font-weight:600}.btn.warn:hover:not(:disabled){background:#ff6a50}
+.icon-btn{width:30px;height:30px;display:grid;place-items:center;border-radius:var(--radius-sm);color:var(--muted);transition:.15s}
+.icon-btn:hover{background:var(--panel-3);color:var(--text)}
+.input{height:34px;width:100%;padding:0 10px;border-radius:var(--radius-sm);background:var(--bg);border:1px solid var(--line-2);outline:0;transition:border-color .15s,box-shadow .15s}
+.input:focus{border-color:var(--focus);box-shadow:0 0 0 3px rgba(110,168,255,.18)}
+.input.mono{font-family:var(--mono);font-size:12px}
+.lbl{display:block;font-size:12px;color:var(--muted);margin:0 0 5px;font-weight:500}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--panel-3);color:var(--muted);white-space:nowrap}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.ok{background:rgba(51,209,122,.12);color:var(--live)}
+.pill.run{background:rgba(110,168,255,.12);color:var(--focus)}.pill.run i{animation:pulse 1.4s infinite}
+.pill.err{background:rgba(255,84,54,.14);color:#ff7a62}
+.pill.pause{background:rgba(244,192,78,.12);color:var(--star)}
+.tag{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:5px;background:var(--panel-3);color:#c6c6cd;font-size:11px;white-space:nowrap}
+.callout{display:flex;gap:10px;padding:10px 12px;border-radius:8px;background:rgba(110,168,255,.07);border:1px solid rgba(110,168,255,.22);color:#c4d6f6;font-size:12.5px}
+.callout.warn{background:rgba(244,192,78,.07);border-color:rgba(244,192,78,.25);color:#e9d6a4}
+.callout.err{background:rgba(255,84,54,.08);border-color:rgba(255,84,54,.3);color:#ffc2b6}
+.callout .ic{margin-top:2px}
+.bar{height:6px;border-radius:99px;background:var(--panel-3);overflow:hidden;position:relative}
+.bar>i{display:block;height:100%;border-radius:99px;background:var(--text);transition:width .5s var(--ease)}
+.bar.sync>i{background:linear-gradient(90deg,var(--focus),#9cc2ff);position:relative;overflow:hidden}
+.bar.sync>i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);animation:shimmer 1.6s infinite}
+.bar.err>i{background:var(--tally)}.bar.pause>i{background:var(--star)}
+.bar.quota>i{background:#7d7d88}.bar.quota.hi>i{background:var(--star)}
+.seg{display:flex;padding:3px;gap:2px;background:var(--bg);border:1px solid var(--line-2);border-radius:9px}
+.seg button{flex:1;height:30px;border-radius:6px;color:var(--muted);font-weight:500;display:flex;align-items:center;justify-content:center;gap:7px;transition:.15s;padding:0 8px;white-space:nowrap}
+.seg button:hover{color:var(--text)}.seg button.on{background:var(--panel-3);color:var(--text);box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 2px 6px rgba(0,0,0,.4)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--faint);flex:none;display:grid;place-items:center;transition:.15s}
+.on>.radio,.radio.on{border-color:var(--text)}.on>.radio::after,.radio.on::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--text)}
+details>summary{cursor:pointer;color:var(--muted);list-style:none;display:flex;align-items:center;gap:6px}
+details>summary::-webkit-details-marker{display:none}
+details>summary .ic{transition:transform .2s}details[open]>summary .ic{transform:rotate(90deg)}
+.pm{display:grid;place-items:center;flex:none;border-radius:10px;background:var(--panel-3);border:1px solid var(--line-2)}
+.pm svg{display:block}
+
+/* ===== waiting ===== */
+.ring{position:relative;display:grid;place-items:center}
+.ring::before,.ring::after{content:"";position:absolute;inset:-10px;border-radius:50%;border:1.5px solid var(--focus);opacity:0;animation:ring 2.4s var(--ease) infinite}
+.ring::after{animation-delay:1.2s}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--text);animation:spin .8s linear infinite;flex:none}
+.steps{padding:0;margin:0;counter-reset:s;display:flex;flex-direction:column;gap:9px}
+.steps li{list-style:none;display:flex;gap:10px;color:#c6c6cd;font-size:12.5px;align-items:flex-start}
+.steps li::before{counter-increment:s;content:counter(s);flex:none;width:20px;height:20px;border-radius:50%;background:var(--panel-3);display:grid;place-items:center;font:600 11px var(--mono);color:var(--muted)}
+.steps li.done::before{content:"✓";background:rgba(51,209,122,.15);color:var(--live)}
+.steps li.now::before{background:var(--focus);color:#0b0b0d}
+.steps li.now{color:var(--text)}
+
+/* ===== folder browser ===== */
+.crumbs{display:flex;align-items:center;flex-wrap:wrap;gap:2px;font-size:12.5px}
+.crumbs button{display:inline-flex;align-items:center;gap:5px;padding:3px 6px;border-radius:5px;color:var(--muted);transition:.12s}
+.crumbs button:hover{background:var(--panel-3);color:var(--text)}
+.crumbs button.cur{color:var(--text);font-weight:600}
+.crumbs .sl{color:var(--faint)}
+.flist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:9px;background:var(--bg);overflow:hidden}
+.frow{display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-bottom:1px solid var(--line);text-align:left;width:100%;transition:background .12s;color:var(--text)}
+.frow:last-child{border-bottom:0}
+.frow:hover{background:var(--panel-2)}
+.frow .ic:first-child{color:var(--muted)}
+.frow .go{margin-left:auto;color:var(--faint);opacity:0;transform:translateX(-4px);transition:.15s}
+.frow:hover .go{opacity:1;transform:none}
+.fempty{padding:22px 14px;text-align:center;color:var(--muted);font-size:12.5px}
+.newf{display:flex;gap:6px;align-items:center}
+.cols{display:flex;border:1px solid var(--line);border-radius:9px;background:var(--bg);overflow:hidden;height:100%}
+.col{flex:1;min-width:0;border-right:1px solid var(--line);overflow:auto;padding:4px}
+.col:last-child{border-right:0}
+.crow{display:flex;align-items:center;gap:8px;height:34px;padding:0 9px;border-radius:6px;width:100%;text-align:left;color:#d6d6dc;transition:background .12s}
+.crow:hover{background:var(--panel-2)}.crow.sel{background:rgba(110,168,255,.16);color:#fff}
+.crow .ic:first-child{color:var(--muted)}.crow .ic:last-child{margin-left:auto;color:var(--faint)}
+
+/* ===== filter options ===== */
+.fopt{display:flex;gap:12px;align-items:flex-start;padding:12px 13px;border-radius:10px;border:1px solid var(--line);background:var(--panel);text-align:left;width:100%;transition:.15s var(--ease)}
+.fopt:hover{border-color:var(--line-2);background:var(--panel-2)}
+.fopt.on{border-color:var(--text);background:var(--panel-2);box-shadow:0 0 0 1px var(--text) inset}
+.fopt .ficon{width:36px;height:36px;border-radius:8px;background:var(--panel-3);display:grid;place-items:center;color:#cfcfd6;flex:none}
+.fopt.on .ficon{background:var(--text);color:#111}
+.fopt b{display:block;font-size:13.5px;font-weight:600}
+.fopt span.d{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+.fopt .meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+
+/* ===== destination card ===== */
+.dcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;transition:border-color .2s}
+.dcard.err{border-color:rgba(255,84,54,.4)}
+.dcard .dh{display:flex;gap:12px;padding:14px 14px 10px;align-items:flex-start}
+.dcard .dm{padding:0 14px 12px;display:flex;flex-direction:column;gap:10px}
+.dcard .df{display:flex;gap:6px;padding:9px 10px;border-top:1px solid var(--line);background:rgba(255,255,255,.015);flex-wrap:wrap;align-items:center}
+.dcard .path{font:12px var(--mono);color:#b9b9c2}
+.kv{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);gap:8px}
+.kv b{color:var(--text);font-weight:500}
+.confirm{margin:0 14px 12px;padding:10px 12px;border-radius:8px;border:1px solid rgba(239,75,75,.4);background:rgba(239,75,75,.07);animation:rise .25s var(--ease) both}
+
+/* ===== motion ===== */
+.enter>*{animation:rise .45s var(--ease) both}
+.enter>*:nth-child(2){animation-delay:.05s}.enter>*:nth-child(3){animation-delay:.1s}.enter>*:nth-child(4){animation-delay:.15s}
+.enter>*:nth-child(5){animation-delay:.2s}.enter>*:nth-child(6){animation-delay:.25s}
+@keyframes rise{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pulse{50%{opacity:.35}}
+@keyframes ring{0%{transform:scale(.7);opacity:.55}100%{transform:scale(1.5);opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@keyframes slidein{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+@keyframes sheetup{from{transform:translateY(24px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+@keyframes dash{to{stroke-dashoffset:-24}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body><div id="app"></div><script>/* Shared mock engine: fake data, components, tiny state machine. Not product code. */
+const IC = {
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>', x:'<path d="M6 6l12 12M18 6L6 18"/>', plus:'<path d="M12 5v14M5 12h14"/>',
+  chev:'<path d="M9 6l6 6-6 6"/>', back:'<path d="M15 6l-6 6 6 6"/>', down:'<path d="M6 9l6 6 6-6"/>',
+  refresh:'<path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/>',
+  pause:'<path d="M8 5v14M16 5v14"/>', play:'<path d="M7 5l12 7-12 7z"/>',
+  gear:'<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+  alert:'<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5v.1"/>',
+  nas:'<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.1M7 16.5h.1"/>',
+  term:'<path d="M5 7l5 5-5 5M12 18h7"/>', ext:'<path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5"/>',
+  lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  star:'<path d="M12 4l2.5 5 5.5.8-4 3.9.9 5.5L12 16.6 7.1 19.2 8 13.7 4 9.8l5.5-.8z"/>',
+  image:'<rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="M5 18l5-5 4 4 2-2 3 3"/>',
+  layers:'<path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/>',
+  raw:'<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 15v-5h2a1.5 1.5 0 0 1 0 3H8M11 15l-1.2-2M13 15v-5l1.3 3.2L15.6 10v5"/>',
+  trash:'<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>', more:'<path d="M6 12h.1M12 12h.1M18 12h.1"/>',
+  cloud:'<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 10a4 4 0 0 1 0 8z"/>',
+  swap:'<path d="M7 7h12l-3-3M17 17H5l3 3"/>', copy:'<rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  shield:'<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/>', up:'<path d="M6 15l6-6 6 6"/>'
+};
+const ic = (n, s = 16, extra = '') => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra}>${IC[n]}</svg>`;
+
+/* Simplified stand-ins, NOT official brand marks. Ship the real brand assets. */
+const MARK = {
+  drive: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M8.5 3L1.5 15l3.7 6 7-12z" fill="#2da562"/><path d="M8.5 3h7l7 12h-7z" fill="#f4b400"/><path d="M5.2 21h13.6l3.7-6H8.9z" fill="#4a8af4"/></svg>`,
+  dropbox: s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="#3d7bff"><path d="M7 3l5 3.3-5 3.3-5-3.3zM17 3l5 3.3-5 3.3-5-3.3zM2 13l5-3.3 5 3.3-5 3.3zM12 13l5-3.3 5 3.3-5 3.3zM7 17.8l5-3.3 5 3.3-5 3.3z"/></svg>`,
+  nas: s => ic('nas', s), custom: s => ic('term', s)
+};
+const pm = (id, size = 40, glyph) => `<span class="pm" style="width:${size}px;height:${size}px">${MARK[id](glyph || Math.round(size * .55))}</span>`;
+
+const PROVS = [
+  { id: 'drive', name: 'Google Drive', sub: 'Your own Drive, 15 GB free on any Google account', badge: 'Most popular' },
+  { id: 'dropbox', name: 'Dropbox', sub: 'Your own Dropbox, personal or team' },
+  { id: 'nas', name: 'Folder or NAS', sub: 'A drive on this PC or a share on your network', badge: 'No sign-in' },
+  { id: 'custom', name: 'Custom (rclone)', sub: 'S3, OneDrive, SFTP and 50+ more. You bring the config' }
+];
+const PNAME = { drive: 'Google Drive', dropbox: 'Dropbox', nas: 'Folder / NAS', custom: 'Custom remote' };
+const EMAIL = { drive: 'ana@lumen.studio', dropbox: 'ana.reyes@gmail.com' };
+const QUOTA = { drive: { total: 15, used: 11.2 }, dropbox: { total: 2000, used: 412 } };
+const TREE = {
+  drive: { '': ['ShotDrop'], 'ShotDrop': ['Weddings', 'Portraits', 'Events'], 'ShotDrop/Weddings': ['Harlow & Finn', 'Okafor 2026'] },
+  dropbox: { '': ['Camera Uploads', 'Clients', 'ShotDrop'], 'Clients': ['Harlow & Finn', 'Okafor'], 'ShotDrop': ['Weddings'], 'ShotDrop/Weddings': [] },
+  nas: { '': ['\\\\studio-nas\\photos'], '\\\\studio-nas\\photos': ['2026', 'Clients'] }
+};
+const FILTERS = [
+  { id: 'all', ico: 'layers', name: 'Everything', d: 'Every photo, JPEG and RAW, as it arrives. A full backup.', meta: ['412 JPEG', '412 RAW', '≈ 18 GB'] },
+  { id: 'jpeg', ico: 'image', name: 'JPEGs only', d: 'Light, shareable copies. RAW files stay on this PC.', meta: ['412 JPEG', '≈ 2.4 GB'] },
+  { id: 'raw', ico: 'raw', name: 'RAW only', d: 'Your untouched originals. Pair with a JPEG destination.', meta: ['412 RAW', '≈ 15.6 GB'] },
+  { id: 'picks', ico: 'star', name: 'Picks only', d: 'Only photos you flag as picks in ShotDrop, sent the moment you pick them.', meta: ['38 picks', '≈ 1.6 GB'] }
+];
+const FNAME = { all: 'everything', jpeg: 'JPEGs only', raw: 'RAW only', picks: 'picks only' };
+
+/* ---------- state ---------- */
+const S = { view: 'empty', provider: null, path: [], filter: 'all', access: 'safe', own: false, newName: '', width: 'wide',
+  variant: 'ok', paused: false, confirm: false, up: 214, total: 412, start: Date.now(), hasSecond: true, flash: '' };
+const VIEWS = [['empty', 'Empty'], ['provider', 'Provider'], ['waiting', 'Signing in'], ['folder', 'Folder'], ['filter', 'What to sync'], ['connected', 'Connected'], ['error', 'Error']];
+const DIR = { render: () => '', title: '' };
+const joined = () => S.path.join('/');
+const kids = () => (TREE[S.provider === 'custom' ? 'nas' : S.provider] || TREE.nas)[joined()] || [];
+const gb = n => n >= 1000 ? (n / 1000).toFixed(n % 1000 ? 1 : 0) + ' TB' : (+n.toFixed(1)) + ' GB';
+const free = p => gb(QUOTA[p].total - QUOTA[p].used);
+const targetText = () => S.provider === 'nas' ? (S.path.length ? S.path[0] + (S.path.length > 1 ? '\\' + S.path.slice(1).join('\\') : '') : '\\\\studio-nas\\photos\\ShotDrop')
+  : (S.provider === 'custom' ? 'b2-studio:shotdrop/' + (S.path.join('/')) : (S.path.length ? S.path.join(' / ') : 'My Drive'));
+
+/* ---------- components ---------- */
+const crumbs = (root) => `<div class="crumbs"><button class="${S.path.length ? '' : 'cur'}" data-act="up:0">${ic('cloud', 13)} ${root}</button>${S.path.map((p, i) =>
+  `<span class="sl">/</span><button class="${i === S.path.length - 1 ? 'cur' : ''}" data-act="up:${i + 1}">${p}</button>`).join('')}</div>`;
+
+const folderList = () => {
+  const k = kids();
+  if (!k.length) return `<div class="fempty">${ic('folder', 22)}<div style="margin-top:6px">${S.provider === 'drive' && !S.path.length ? 'Nothing here yet. Make a folder below.' : 'No sub-folders here. You can use this one, or make a new one.'}</div></div>`;
+  return k.map(f => `<button class="frow" data-act="nav:${encodeURIComponent(f)}">${ic('folder')}<span class="ell">${f}</span>${ic('chev', 14, 'class="ic go"')}</button>`).join('');
+};
+const newFolderRow = (ph) => `<div class="newf"><input class="input" id="nf" placeholder="${ph || 'New folder, e.g. Harlow & Finn'}" onkeydown="if(event.key==='Enter')act('mk')"><button class="btn" data-act="mk">${ic('plus', 14)} Create</button></div>`;
+const driveScopeNote = () => S.provider === 'drive' && S.access === 'safe' ? `<div class="callout">${ic('shield', 15)}<div>Safe mode: Drive only shows folders ShotDrop created. A folder you made by hand won't appear. <button class="link" data-act="fullaccess">Show all my folders</button> (needs one more sign-in).</div></div>` : '';
+
+const filterOpts = (style) => FILTERS.map(f => `<button class="fopt ${S.filter === f.id ? 'on' : ''}" data-act="filter:${f.id}">
+  <span class="ficon">${ic(f.ico, 18)}</span><span class="grow"><b>${f.name}</b><span class="d">${f.d}</span>${style === 'rich' ? `<span class="meta">${f.meta.map(m => `<span class="tag">${m}</span>`).join('')}</span>` : ''}</span><span class="radio ${S.filter === f.id ? 'on' : ''}" style="margin-top:3px"></span></button>`).join('');
+
+const preflight = (p) => {
+  if (p === 'drive') return `<div class="stack" style="gap:12px">
+    <div><span class="lbl">How much of your Drive can ShotDrop see?</span><div class="stack" style="gap:8px">
+      <button class="fopt ${S.access === 'safe' ? 'on' : ''}" data-act="access:safe" style="padding:10px 12px"><span class="grow"><b>Only folders ShotDrop creates <span class="tag" style="margin-left:4px">Recommended</span></b><span class="d">Safest. ShotDrop can't open or change anything else in your Drive.</span></span><span class="radio ${S.access === 'safe' ? 'on' : ''}"></span></button>
+      <button class="fopt ${S.access === 'full' ? 'on' : ''}" data-act="access:full" style="padding:10px 12px"><span class="grow"><b>All my folders</b><span class="d">Lets you pick a folder you already have. Google shows a stronger warning.</span></span><span class="radio ${S.access === 'full' ? 'on' : ''}"></span></button></div></div>
+    ${ownClient()}</div>`;
+  if (p === 'dropbox') return `<div class="stack" style="gap:12px"><div class="callout">${ic('info', 15)}<div>You'll approve ShotDrop in your browser. We never see your password, and the sign-in stays on this PC.</div></div>${ownClient()}</div>`;
+  return '';
+};
+const ownClient = () => `<details ${S.own ? 'open' : ''}><summary class="small" onclick="S.own=!S.own">${ic('chev', 12)} Sign-in keeps failing? Use your own app credentials</summary>
+  <div class="stack" style="gap:8px;margin-top:8px"><p class="small muted">Google is retiring the shared sign-in that ShotDrop uses by default during 2026. Your own client ID never expires and isn't shared. <span class="link">Step-by-step guide</span></p>
+  <input class="input mono" placeholder="Client ID"><input class="input mono" type="password" placeholder="Client secret"></div></details>`;
+
+const waiting = (p, o = {}) => `<div class="stack" style="gap:16px;align-items:${o.center ? 'center' : 'stretch'};text-align:${o.center ? 'center' : 'left'}">
+  <div class="row" style="gap:16px;${o.center ? 'flex-direction:column' : ''}"><span class="ring">${pm(p, o.big || 56)}</span>
+  <div><h3 style="font-size:16px;font-weight:650">Finish signing in in your browser</h3><p class="muted" style="margin-top:2px">We opened ${p === 'drive' ? 'accounts.google.com' : 'dropbox.com'}. This window continues by itself.</p></div></div>
+  <ol class="steps" style="text-align:left"><li class="done">Browser opened</li><li class="now">Pick your ${p === 'drive' ? 'Google' : 'Dropbox'} account and press <b>Allow</b></li><li>Come back here, we'll notice automatically</li></ol>
+  <div class="row" style="${o.center ? 'justify-content:center' : ''}"><span class="spin"></span><span class="muted small">Waiting <b data-timer style="color:var(--text);font-family:var(--mono)">0:08</b> · gives up after 5:00</span></div>
+  <div class="panel" style="padding:10px 12px;text-align:left"><div class="small muted" style="margin-bottom:6px">Browser didn't open? Copy this link into any browser on this PC.</div>
+  <div class="row tight"><code class="mono ell grow small" style="background:var(--bg);padding:6px 8px;border-radius:6px;border:1px solid var(--line)">http://127.0.0.1:53682/auth?state=Ys3k…</code><button class="btn" data-act="copy">${ic('copy', 14)} Copy</button></div></div></div>`;
+
+const localForm = (p) => `<div class="stack" style="gap:14px"><div><label class="lbl">${p === 'nas' ? 'Folder or network share' : 'rclone remote path'}</label>
+  <div class="row tight"><input class="input mono" id="lp" value="${p === 'nas' ? '\\\\studio-nas\\photos\\ShotDrop' : 'b2-studio:shotdrop'}">${p === 'nas' ? `<button class="btn">${ic('folder', 14)} Browse…</button>` : ''}</div>
+  <div class="small muted" style="margin-top:6px">${p === 'nas' ? 'Examples: D:\\Photos or \\\\nas\\photos. We check ShotDrop can write there before saving.' : 'Use a remote from your own rclone setup, like gdrive:Photos. Advanced: ShotDrop does not manage this sign-in.'}</div></div>
+  ${p === 'nas' ? `<div class="callout">${ic('check', 15)}<div>Reachable · 1.8 TB free · ShotDrop can write here.</div></div>` : `<div class="callout warn">${ic('alert', 15)}<div>Heads up: remotes from your own rclone.conf are used as-is. If sign-in expires you fix it in rclone, not here.</div></div>`}</div>`;
+
+const quotaBar = (p) => { const q = QUOTA[p]; const pct = Math.round(q.used / q.total * 100); return `<div><div class="bar quota ${pct > 70 ? 'hi' : ''}"><i style="width:${pct}%"></i></div><div class="kv" style="margin-top:5px"><span>${gb(q.used)} of ${gb(q.total)} used</span><b>${free(p)} free</b></div></div>`; };
+const progress = (d) => { const e = S.variant === 'error' && !d.nas; const st = d.nas ? 'ok' : e ? 'err' : S.paused ? 'pause' : 'run';
+  const pct = d.nas ? 100 : Math.round(S.up / S.total * 100);
+  return `<div><div class="bar ${d.nas ? '' : e ? 'err' : S.paused ? 'pause' : 'sync'}"><i data-bar style="width:${pct}%"></i></div>
+  <div class="kv" style="margin-top:5px"><span data-line>${d.nas ? 'Up to date · last upload 2 min ago' : e ? `<span style="color:#ff7a62">${S.up} of ${S.total} sent · 3 failed</span>` : S.paused ? `Paused at ${S.up} of ${S.total}` : `<b data-count>${S.up}</b> of ${S.total} files · <span class="mono">DSC_${4600 + S.up}.ARW</span>`}</span>
+  <span class="mono">${d.nas ? '' : e || S.paused ? '' : '6.2 MB/s'}</span></div></div>`; };
+
+/* A destination card. d = {nas:false} for the one being built, {nas:true} for the seeded folder dest. */
+const destCard = (d = {}, o = {}) => {
+  const p = d.nas ? 'nas' : S.provider || 'drive'; const err = S.variant === 'error' && !d.nas;
+  const pill = d.nas ? `<span class="pill ok"><i></i>Up to date</span>` : err ? `<span class="pill err"><i></i>3 failed</span>` : S.paused ? `<span class="pill pause"><i></i>Paused</span>` : `<span class="pill run"><i></i>Syncing</span>`;
+  const path = d.nas ? '\\\\studio-nas\\photos\\ShotDrop' : (p === 'nas' || p === 'custom' ? targetText() : [PNAME[p], ...S.path].join(' › '));
+  const name = d.nas ? 'Studio NAS' : (S.newName || `${PNAME[p]} · ${S.path[S.path.length - 1] || 'ShotDrop'}`);
+  const sub = d.nas ? 'Folder on your network' : (EMAIL[p] || PNAME[p]);
+  const f = d.nas ? 'raw' : S.filter;
+  return `<div class="dcard ${err ? 'err' : ''}${d.nas ? ' nasdest' : ''}">
+  <div class="dh">${pm(p, 40)}<div class="grow"><div class="row between" style="gap:8px"><b style="font-size:14px" class="ell">${name}</b>${pill}</div>
+    <div class="small muted ell">${sub}</div><div class="path ell" style="margin-top:4px">${path}</div></div></div>
+  <div class="dm"><div class="row tight" style="flex-wrap:wrap"><span class="tag">${ic(FILTERS.find(x => x.id === f).ico, 12)} ${FILTERS.find(x => x.id === f).name}</span>${!d.nas && p === 'drive' && S.access === 'safe' ? `<span class="tag">${ic('shield', 12)} Safe mode</span>` : ''}</div>
+    ${progress(d)}
+    ${err ? `<div class="callout err">${ic('alert', 15)}<div><b>Google rejected the saved sign-in.</b> The access was removed or expired. Reconnect and the 3 waiting uploads continue on their own.<details style="margin-top:6px"><summary class="small">${ic('chev', 11)} Technical details</summary><code class="mono small" style="display:block;margin-top:6px;opacity:.85">oauth2: "invalid_grant" "Token has been expired or revoked."</code></details></div></div>` : ''}
+    ${!d.nas && (p === 'drive' || p === 'dropbox') ? quotaBar(p) : ''}</div>
+  ${S.confirm && !d.nas ? `<div class="confirm"><b>Disconnect ${PNAME[p]}?</b><p class="small" style="margin:4px 0 8px;color:#e5c0c0">ShotDrop forgets this sign-in and stops this destination. Files already uploaded stay in your ${PNAME[p]}. To fully revoke access, also remove ShotDrop in your ${p === 'drive' ? 'Google' : 'Dropbox'} account settings.</p><div class="row tight"><button class="btn danger" data-act="disconnect">Disconnect</button><button class="btn ghost" data-act="noconfirm">Keep</button></div></div>` : ''}
+  <div class="df">${err ? `<button class="btn warn" data-act="reconnect">${ic('refresh', 14)} Reconnect</button><button class="btn" data-act="retry">Retry now</button>` : d.nas ? '' : `<button class="btn" data-act="pause">${ic(S.paused ? 'play' : 'pause', 14)} ${S.paused ? 'Resume' : 'Pause'}</button>`}
+    <button class="btn ghost" data-act="resync">${ic('refresh', 14)} Resync</button><button class="btn ghost" data-act="view:folder">${ic('folder', 14)} Change folder</button>
+    <span class="grow"></span>${d.nas ? `<button class="icon-btn" title="Remove">${ic('trash', 15)}</button>` : `<button class="btn ghost danger" data-act="askdisc">Disconnect</button>`}</div></div>`;
+};
+
+/* faux app backdrop */
+const thumbs = (n) => Array.from({ length: n }, (_, i) => { const h = (i * 47 + 20) % 360, h2 = (h + 40) % 360;
+  return `<div class="th" style="background:linear-gradient(${120 + i * 23}deg,hsl(${h} 22% 20%),hsl(${h2} 26% 11%))"><b>${i % 3 ? 'RAW' : 'JPG'}</b></div>`; }).join('');
+const appBackdrop = (extra = '') => `<div class="app"><div class="topbar"><div class="logo"><i></i>ShotDrop</div><span class="livepill"><i></i>FTP · 192.168.1.20:2121</span><span class="grow"></span>
+  <span class="muted small" style="font-family:var(--mono)">412 shots</span><span class="icon-btn">${ic('gear', 17)}</span></div><div class="gallery">${thumbs(40)}</div>${extra}</div>`;
+
+/* ---------- engine ---------- */
+const frame = () => document.getElementById('frame');
+function render(enter) {
+  const f = frame(); const sc = f.querySelector('[data-scroll]'); const top = sc ? sc.scrollTop : 0;
+  f.innerHTML = DIR.render(S);
+  const body = f.querySelector('[data-body]'); if (body && enter) body.classList.add('enter');
+  const sc2 = f.querySelector('[data-scroll]'); if (sc2 && !enter) sc2.scrollTop = top;
+  document.querySelectorAll('.tchip[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === (S.view === 'connected' && S.variant === 'error' ? 'error' : S.view)));
+  document.querySelectorAll('.tchip[data-w]').forEach(b => b.classList.toggle('on', b.dataset.w === S.width));
+  document.getElementById('stage').classList.toggle('narrow', S.width === 'narrow');
+  tick();
+}
+function setView(v) {
+  if (v === 'error') { S.view = 'connected'; S.variant = 'error'; } else { S.view = v; if (v === 'connected') S.variant = 'ok'; }
+  if (v === 'empty') { S.provider = null; S.path = []; S.filter = 'all'; S.confirm = false; }
+  if (v === 'provider' || v === 'waiting') { S.provider = S.provider === 'nas' || S.provider === 'custom' ? 'drive' : (S.provider || 'drive'); S.path = []; if (v === 'waiting') S.start = Date.now() - 8000; }
+  if (v === 'folder') { S.provider = S.provider === 'nas' || S.provider === 'custom' ? 'drive' : (S.provider || 'drive'); if (!S.path.length) S.path = ['ShotDrop', 'Weddings']; }
+  if (v === 'filter' || v === 'connected') { S.provider = S.provider === 'nas' || S.provider === 'custom' ? S.provider : (S.provider || 'drive'); if (!S.path.length && S.provider !== 'nas') S.path = ['ShotDrop', 'Weddings', 'Harlow & Finn']; }
+  S.confirm = false; render(true);
+}
+function act(a) {
+  const [k, ...r] = a.split(':'); const v = r.join(':');
+  if (k === 'view') return setView(v);
+  if (k === 'provider') { S.provider = v; S.path = []; S.own = false; if (v === 'nas' || v === 'custom') { S.view = 'local'; render(true); return; } S.view = 'provider'; return render(false); }
+  if (k === 'access') { S.access = v; return render(false); }
+  if (k === 'connect') { S.view = 'waiting'; S.start = Date.now(); return render(true); }
+  if (k === 'cancel') { S.view = 'provider'; return render(true); }
+  if (k === 'signedin') { S.path = []; S.view = 'folder'; return render(true); }
+  if (k === 'nav') { S.path = [...S.path, decodeURIComponent(v)]; return render(false); }
+  if (k === 'up') { S.path = S.path.slice(0, +v); return render(false); }
+  if (k === 'mk') { const el = document.getElementById('nf'); const n = el && el.value.trim() || 'New shoot'; S.path = [...S.path, n.replace(/[\\/]+/g, '-')]; return render(false); }
+  if (k === 'fullaccess') { S.access = 'full'; S.view = 'waiting'; S.start = Date.now(); return render(true); }
+  if (k === 'filter') { S.filter = v; return render(false); }
+  if (k === 'localok') { S.view = 'filter'; if (S.provider === 'nas') S.path = []; return render(true); }
+  if (k === 'finish') { S.view = 'connected'; S.variant = 'ok'; S.up = 12; S.total = 412; return render(true); }
+  if (k === 'pause') { S.paused = !S.paused; return render(false); }
+  if (k === 'askdisc') { S.confirm = true; return render(false); }
+  if (k === 'noconfirm') { S.confirm = false; return render(false); }
+  if (k === 'disconnect') return setView('empty');
+  if (k === 'reconnect') { S.variant = 'ok'; S.view = 'waiting'; S.start = Date.now(); return render(true); }
+  if (k === 'retry') { S.variant = 'ok'; return render(false); }
+  if (k === 'resync') { S.up = 0; return render(false); }
+  if (k === 'copy') return;
+  if (k === 'width') { S.width = v; return render(false); }
+  if (DIR.act && DIR.act(k, v)) return;
+}
+document.addEventListener('click', e => { const t = e.target.closest('[data-act]'); if (t) { e.preventDefault(); act(t.dataset.act); } });
+
+function tick() {
+  const el = document.querySelector('[data-timer]'); if (el) { const s = Math.floor((Date.now() - S.start) / 1000); el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+}
+setInterval(() => {
+  tick();
+  if (S.view !== 'connected' || S.paused || S.variant === 'error') return;
+  if (S.up < S.total - 1) S.up += 1 + (Math.random() > .6 ? 1 : 0);
+  const pct = Math.round(S.up / S.total * 100);
+  document.querySelectorAll('[data-bar]').forEach(b => { if (!b.closest('.nasdest')) b.style.width = pct + '%'; });
+  document.querySelectorAll('[data-count]').forEach(c => c.textContent = S.up);
+}, 600);
+
+function boot(meta) {
+  document.title = 'ShotDrop cloud mockup · ' + meta.title;
+  if (location.hash.includes('still=1')) document.head.insertAdjacentHTML('beforeend','<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>');
+  const h = location.hash.slice(1); if (h) h.split('&').forEach(kv => { const [k, v] = kv.split('='); if (k === 'v') { if (v === 'error') { S.variant = 'error'; S.view = 'connected'; } else { S.view = v; } } if (k === 'w') S.width = v; if (k === 'p') S.provider = v; });
+  if (S.view === 'provider' || S.view === 'waiting') S.provider = S.provider || 'drive';
+  if (['folder', 'filter', 'connected'].includes(S.view)) { S.provider = S.provider || 'drive'; if (!S.path.length) S.path = ['ShotDrop', 'Weddings', ...(S.view === 'folder' ? [] : ['Harlow & Finn'])]; }
+  if (S.view === 'waiting') S.start = Date.now() - 8000;
+  if (S.view === 'connected' && !S.up) S.up = 214;
+  document.getElementById('app').innerHTML = `<div class="page"><div class="page-head"><div><div class="kicker">${meta.kicker}</div><h1>${meta.title}</h1><p>${meta.blurb}</p></div><a href="index.html">← all directions</a></div>
+  <div class="toolbar">${VIEWS.map(([v, l]) => `<button class="tchip" data-v="${v}" onclick="setView('${v}')">${l}</button>`).join('')}<span class="sep"></span>
+  <button class="tchip" data-w="wide" onclick="act('width:wide')">Desktop</button><button class="tchip" data-w="narrow" onclick="act('width:narrow')">Narrow (380px)</button></div>
+  <div class="where">Lives in: <b>${meta.where}</b></div>
+  <div class="stage" id="stage"><div class="frame" id="frame"></div></div>
+  <div class="notes">${meta.notes.map(([h, p]) => `<div class="note"><h4>${h}</h4><p>${p}</p></div>`).join('')}</div></div>`;
+  render(true);
+}
+</script><script>/* Direction B: First-run canvas (full-window setup, live sentence) */
+const B_STEPS = [['provider', 'Where'], ['access', 'Sign in'], ['folder', 'Folder'], ['filter', 'What to send']];
+const bIdx = v => ({ empty: -1, provider: 0, local: 1, waiting: 1, folder: 2, filter: 3, connected: 4 })[v];
+document.head.insertAdjacentHTML('beforeend', `<style>
+.bwin{position:absolute;inset:0;display:flex;background:var(--bg)}
+.brail{width:270px;flex:none;border-right:1px solid var(--line);background:var(--panel);padding:22px 20px;display:flex;flex-direction:column;gap:26px}
+.bmain{flex:1;min-width:0;display:flex;flex-direction:column}
+.bscroll{flex:1;min-height:0;overflow:auto;padding:36px 44px 20px}
+.tl{display:flex;flex-direction:column;gap:0}
+.tl .t{display:flex;gap:12px;position:relative;padding-bottom:22px}
+.tl .t:last-child{padding-bottom:0}
+.tl .t::before{content:"";position:absolute;left:10px;top:22px;bottom:2px;width:2px;background:var(--line-2)}
+.tl .t:last-child::before{display:none}
+.tl .t.done::before{background:var(--live);opacity:.5}
+.tl .dot{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;font:600 11px var(--mono);background:var(--panel-3);color:var(--muted);border:1px solid var(--line-2);z-index:1;transition:.3s var(--spring)}
+.tl .t.done .dot{background:rgba(51,209,122,.16);color:var(--live);border-color:transparent}
+.tl .t.now .dot{background:var(--tally);color:#fff;border-color:transparent;box-shadow:0 0 0 5px rgba(255,84,54,.15);transform:scale(1.08)}
+.tl b{font-weight:600;display:block;font-size:13px}.tl .t:not(.now):not(.done) b{color:var(--muted);font-weight:500}
+.tl small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+.bh{font-size:28px;font-weight:660;letter-spacing:-.02em;line-height:1.15}
+.bsub{color:var(--muted);font-size:14px;margin:8px 0 26px;max-width:540px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:640px}
+.tile{display:flex;flex-direction:column;gap:14px;padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--panel);text-align:left;transition:.2s var(--ease);position:relative;overflow:hidden}
+.tile:hover{border-color:var(--line-2);transform:translateY(-3px);background:var(--panel-2);box-shadow:0 12px 30px rgba(0,0,0,.35)}
+.tile.on{border-color:var(--text);background:var(--panel-2)}
+.tile b{font-size:15px;font-weight:650;display:block}
+.tile span.s{color:var(--muted);font-size:12.5px;display:block;margin-top:2px}
+.sentence{flex:none;border-top:1px solid var(--line);background:var(--panel);padding:12px 44px;display:flex;align-items:center;gap:14px;min-height:64px}
+.sent{font-size:14px;line-height:2;flex:1;min-width:0}
+.sp{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:7px;background:var(--panel-3);font-weight:600;font-size:13px;vertical-align:middle;transition:.2s}
+.sp.empty{background:transparent;border:1px dashed var(--faint);color:var(--muted);font-weight:500}
+.sp.pend{animation:pulse 2s infinite}
+.colwrap{height:260px;max-width:700px}
+.done-hero{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.tick{width:46px;height:46px;border-radius:50%;background:rgba(51,209,122,.15);color:var(--live);display:grid;place-items:center;animation:pop .6s var(--spring) both}
+@keyframes pop{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
+.nstep{display:none}
+.bmob .brail{display:none}.bmob .nstep{display:flex}
+.bmob .bscroll{padding:18px 16px 12px}.bmob .bh{font-size:22px}.bmob .tiles{grid-template-columns:1fr}.bmob .sentence{padding:10px 16px;flex-wrap:wrap}.bmob .sent{font-size:13px}
+.bmob .tile{flex-direction:row;align-items:center;padding:13px}
+.bmob .bwin{flex-direction:column}.bmob .colwrap{height:auto}
+.nstep{align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.nstep .dots{display:flex;gap:5px;flex:1}.nstep .dots i{flex:1;height:3px;border-radius:9px;background:var(--panel-3)}.nstep .dots i.d{background:var(--live)}.nstep .dots i.n{background:var(--tally)}
+</style>`);
+
+DIR.render = (S) => {
+  const v = S.view, i = bIdx(v), mob = S.width === 'narrow', P = S.provider;
+  const cur = S.path.length ? S.path.join(' › ') : null;
+  const valLabel = ['', P ? PNAME[P] : '', cur ? 'ok' : '', ''];
+  const rail = `<aside class="brail"><div class="logo" style="font-size:16px"><i></i>ShotDrop</div><div><div class="wiz-cap" style="font:600 11px var(--mono);letter-spacing:.1em;color:var(--muted);margin-bottom:14px">SET UP SYNC</div><div class="tl">${B_STEPS.map(([k, l], n) => {
+    const st = i > n ? 'done' : i === n ? 'now' : '';
+    const sub = n === 0 && P && i > 0 ? PNAME[P] : n === 1 && i > 1 ? (EMAIL[P] || 'Ready') : n === 2 && i > 2 ? S.path[S.path.length - 1] || 'Top level' : '';
+    return `<div class="t ${st}"><span class="dot">${st === 'done' ? '✓' : n + 1}</span><div><b>${l}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>`; }).join('')}</div></div>
+    <div style="margin-top:auto" class="small faint">${ic('lock', 12)} Sign-ins stay on this PC.<br>Nothing passes through our servers.</div></aside>`;
+  const nstep = `<div class="nstep"><button class="icon-btn" data-act="view:empty">${ic('back', 18)}</button><div class="dots">${B_STEPS.map((_, n) => `<i class="${i > n ? 'd' : i === n ? 'n' : ''}"></i>`).join('')}</div><span class="small muted mono">${Math.min(i + 1, 4)}/4</span></div>`;
+
+  /* live sentence */
+  const pill = (txt, filled, go) => `<button class="sp ${filled ? '' : 'empty'}" ${go ? `data-act="${go}"` : ''}>${filled ? txt : txt}</button>`;
+  const sentence = (nxt) => `<div class="sentence"><div class="sent">Send <button class="sp" data-act="view:filter">${i >= 4 || i >= 3 ? FNAME[S.filter] : (i < 3 ? 'photos' : 'photos')}</button> to
+    ${P && i >= 1 ? `<button class="sp" data-act="view:provider">${P === 'drive' || P === 'dropbox' ? pm(P, 18, 12).replace('class="pm"', 'class="pm" style="border:0;background:none;width:18px;height:18px"') : ''}${PNAME[P]}</button>` : `<span class="sp empty pend">choose a place</span>`}
+    ${i >= 3 && S.path.length ? `›<button class="sp" data-act="view:folder">${ic('folder', 13)} ${S.path.slice(-2).join(' › ')}</button>` : i >= 2 ? `›<span class="sp empty pend">choose a folder</span>` : ''}</div>${nxt || ''}</div>`;
+
+  let main = '', nxt = '', hasSent = true;
+  if (v === 'empty') {
+    hasSent = false;
+    main = `<div style="max-width:660px"><div class="wiz-cap" style="font:600 11px var(--mono);letter-spacing:.1em;color:var(--tally);margin-bottom:10px">WELCOME · STEP 3 OF 3</div>
+      <h1 class="bh" style="font-size:34px">Where should your<br>photos go?</h1><p class="bsub">Your camera is connected and 412 shots are on this PC. Pick where copies should be sent as you shoot, so a dead card or a stolen laptop never costs you a wedding.</p>
+      <div class="tiles">${PROVS.map(p => `<button class="tile" data-act="provider:${p.id}">${pm(p.id, 44)}<span><b>${p.name}</b><span class="s">${p.sub}</span></span>${p.badge ? `<span class="tag" style="position:absolute;top:14px;right:14px">${p.badge}</span>` : ''}</button>`).join('')}</div>
+      <p style="margin-top:22px"><button class="link muted" style="text-decoration:none" data-act="view:connected">Skip for now, keep photos on this PC →</button></p></div>`;
+  } else if (v === 'provider') {
+    main = `<h1 class="bh">${PNAME[P]}</h1><p class="bsub">${P === 'drive' ? 'Choose how much ShotDrop may see, then sign in with Google.' : 'Sign in with Dropbox in your browser.'}</p>
+      <div style="max-width:560px" class="stack" style="gap:16px">${preflight(P)}<div class="row" style="margin-top:6px"><button class="btn primary lg" data-act="connect">Sign in with ${P === 'drive' ? 'Google' : 'Dropbox'} ${ic('ext', 14)}</button><button class="btn ghost" data-act="view:empty">Choose another</button></div></div>`;
+  } else if (v === 'local') {
+    main = `<h1 class="bh">${P === 'nas' ? 'Pick a folder' : 'Name your remote'}</h1><p class="bsub">No sign-in needed.</p><div style="max-width:560px">${localForm(P)}<div class="row" style="margin-top:18px"><button class="btn primary lg" data-act="localok">Continue</button><button class="btn ghost" data-act="view:empty">Choose another</button></div></div>`;
+  } else if (v === 'waiting') {
+    main = `<div style="max-width:520px;margin:${mob ? '0' : '20px'} auto 0">${waiting(P, { center: true, big: 72 })}<div class="row" style="justify-content:center;margin-top:18px"><button class="btn" data-act="cancel">Cancel</button><button class="link small" style="margin-left:8px;color:var(--muted)" data-act="signedin">Mock: simulate "signed in"</button></div></div>`;
+  } else if (v === 'folder') {
+    const wide = !mob;
+    const cols = () => { const lv = ['', ...S.path.map((_, n) => S.path.slice(0, n + 1).join('/'))]; const T = TREE[P === 'custom' ? 'nas' : P] || TREE.nas;
+      return `<div class="cols">${lv.map((key, n) => `<div class="col">${(T[key] || []).map(f => { const sel = S.path[n] === f; return `<button class="crow ${sel ? 'sel' : ''}" data-act="colnav:${n}:${encodeURIComponent(f)}">${ic('folder', 15)}<span class="ell">${f}</span>${ic('chev', 13)}</button>`; }).join('') || `<div class="fempty small">Empty. Make a folder below.</div>`}</div>`).join('')}</div>`; };
+    main = `<h1 class="bh">Where in ${PNAME[P]}?</h1><p class="bsub">Open folders to drill in. The folder you end on is where photos land.</p>
+      ${driveScopeNote() ? `<div style="max-width:700px;margin-bottom:12px">${driveScopeNote()}</div>` : ''}
+      <div class="colwrap">${wide ? cols() : `<div style="margin-bottom:8px">${crumbs(PNAME[P])}</div><div class="flist">${folderList()}</div>`}</div>
+      <div style="max-width:700px;margin-top:12px">${newFolderRow('Make a new folder here, e.g. Harlow & Finn')}</div>`;
+    nxt = `<button class="btn primary lg" data-act="view:filter">Use this folder ${ic('chev', 14)}</button>`;
+  } else if (v === 'filter') {
+    main = `<h1 class="bh">What should go there?</h1><p class="bsub">You can add a second destination later with different rules, e.g. RAWs to the NAS and JPEGs to Drive.</p><div class="stack" style="max-width:640px;gap:9px">${filterOpts('rich')}</div>`;
+    nxt = `<button class="btn primary lg" data-act="finish">Start syncing</button>`;
+  } else if (v === 'connected') {
+    hasSent = false;
+    const err = S.variant === 'error';
+    main = `<div class="done-hero"><span class="tick" style="${err ? 'background:rgba(255,84,54,.15);color:#ff7a62' : ''}">${ic(err ? 'alert' : 'check', 24)}</span><div><h1 class="bh" style="font-size:24px">${err ? 'Sync needs your attention' : 'You\'re set. Shoot away.'}</h1><p class="muted">${err ? 'Uploads stopped because the sign-in expired.' : 'New photos copy over as they arrive. Existing shots are queued now.'}</p></div></div>
+      <div style="max-width:620px" class="stack">${S.provider ? destCard({}) : ''}${S.hasSecond ? destCard({ nas: true }) : ''}<div class="row"><button class="btn" data-act="view:empty">${ic('plus', 14)} Add another destination</button><span class="grow"></span><span class="small faint">Manage anytime in Settings → Sync</span></div></div>`;
+    nxt = `<button class="btn primary lg">Open gallery</button>`;
+  }
+  const sent = hasSent ? sentence(nxt) : (v === 'connected' ? `<div class="sentence"><span class="small muted grow">Settings → Sync shows this same card list.</span>${nxt}</div>` : '');
+  return `<div class="bwin ${mob ? 'bmob' : ''}">${rail}<div class="bmain">${mob && i >= 0 && i < 4 ? nstep : ''}<div class="bscroll" data-scroll><div data-body>${main}</div></div>${sent}</div></div>`;
+};
+DIR.act = (k, v) => { if (k === 'colnav') { const [n, f] = v.split(':'); S.path = [...S.path.slice(0, +n), decodeURIComponent(f)]; render(false); return true; } };
+boot({ kicker: 'Direction B', title: 'First-run canvas', where: 'First-run setup screen (full window). Settings → Sync reopens the same flow in a sheet and lists destinations as the same cards',
+  blurb: 'A roomy, confident setup page. A step rail on the left, big provider tiles, a Finder-style column folder browser, and one live sentence at the bottom that always says what will happen.',
+  notes: [['Why it works', 'The sentence ("Send JPEGs only to Google Drive › Weddings") is the plain-words summary the current UI lacks. Every pill jumps back to its step. Tiles feel like a choice, not a form.'],
+    ['Narrow width', 'The rail collapses to a 4-segment bar, tiles stack, columns become a breadcrumb + list. The sentence wraps and stays pinned.'],
+    ['Trade-off', 'Biggest build: a new full-window surface plus a column browser (more rclone listing calls). Best for first run, overkill for the third destination.']] });
+</script></body></html>
