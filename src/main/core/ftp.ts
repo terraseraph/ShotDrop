@@ -2,6 +2,7 @@ import FtpSrv from 'ftp-srv'
 import { mkdirSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import type { Settings } from '@shared/types'
+import type { LoginAttempt } from '@shared/diagnostics'
 import { addressFacing } from './net'
 
 // ftp-srv logs through bunyan; keep it quiet and route errors to the console.
@@ -24,6 +25,8 @@ export interface FtpState {
 export class FtpService {
   private server: FtpSrv | null = null
   state: FtpState = { running: false, error: null, activeConnections: 0 }
+  /** Recent logins (good and bad), newest last. A refused login is the commonest camera setup mistake. */
+  attempts: LoginAttempt[] = []
 
   constructor(
     private incomingDir: () => string,
@@ -54,6 +57,8 @@ export class FtpService {
 
     server.on('login', ({ connection, username, password }, resolve, reject) => {
       const user = cfg.users.find((u) => u.username === username && u.password === password)
+      this.attempts.push({ at: Date.now(), ip: String(connection.ip ?? ''), username, ok: !!user })
+      if (this.attempts.length > 50) this.attempts.shift()
       if (!user) return reject(new Error('Invalid username or password'))
       const root = join(this.incomingDir(), user.username)
       mkdirSync(root, { recursive: true })

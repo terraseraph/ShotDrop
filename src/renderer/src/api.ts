@@ -21,6 +21,7 @@ export const isRemote = !desktop && !import.meta.env.DEV
 
 /** In the Electron window the API base comes from preload; in a remote browser it's the page's own origin. */
 const base = desktop?.apiBase ?? (import.meta.env.DEV ? 'http://127.0.0.1:8787' : location.origin)
+export const apiBase = base
 
 const KEY_STORAGE = 'shotdrop.key'
 let key: string | null = (() => {

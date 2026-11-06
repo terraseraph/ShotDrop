@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Destination, DestinationFilter, DestinationType, Settings, Status } from '@shared/types'
 import { api, desktop } from '../api'
 import { ConnectionCard } from './ConnectionCard'
+import { NetworkCheck } from './NetworkCheck'
 import { TunnelPanel } from './TunnelPanel'
 import { Icon } from './Icon'
 
@@ -12,6 +13,11 @@ interface Props {
   onClose: () => void
   toast: (t: string, tone?: 'info' | 'error') => void
 }
+
+const isWindows = navigator.userAgent.includes('Windows')
+const PORT_HINT = isWindows
+  ? 'Any free port works; set the same number in the camera. Use a free port in the connection check if this one is taken.'
+  : 'Any free port works. Ports below 1024 need root on macOS/Linux.'
 
 const BRAND_STEPS: { brand: string; steps: string[] }[] = [
   {
@@ -117,7 +123,7 @@ export function SettingsDrawer({ status, onClose, toast }: Props) {
           {!s ? (
             <p className="muted">Loading…</p>
           ) : tab === 'camera' ? (
-            <CameraTab s={s} status={status} edit={edit} />
+            <CameraTab s={s} status={status} edit={edit} toast={toast} />
           ) : tab === 'sync' ? (
             <SyncTab s={s} status={status} reload={load} toast={toast} />
           ) : tab === 'library' ? (
@@ -160,7 +166,7 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   )
 }
 
-function CameraTab({ s, status, edit }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void }) {
+function CameraTab({ s, status, edit, toast }: { s: Settings; status: Status | null; edit: (p: Partial<Settings>) => void; toast: Props['toast'] }) {
   const ftp = s.ftp
   const setFtp = (p: Partial<Settings['ftp']>): void => edit({ ftp: { ...ftp, ...p } })
   const [brand, setBrand] = useState<string | null>(null)
@@ -173,6 +179,11 @@ function CameraTab({ s, status, edit }: { s: Settings; status: Status | null; ed
           <Switch checked={ftp.enabled} onChange={(v) => setFtp({ enabled: v })} label={ftp.enabled ? 'FTP server on' : 'FTP server off'} />
         </div>
         <ConnectionCard status={status} />
+      </section>
+
+      <section className="panel">
+        <h3>Connection check</h3>
+        <NetworkCheck watch={`${status?.ftp.running}-${status?.ftp.port}`} toast={toast} />
       </section>
 
       <section className="panel">
@@ -202,10 +213,10 @@ function CameraTab({ s, status, edit }: { s: Settings; status: Status | null; ed
       <section className="panel">
         <h3>Ports</h3>
         <div className="row">
-          <Field label="FTP port" hint="Cameras let you set any port. 21 may need admin rights.">
+          <Field label="FTP port" hint={PORT_HINT}>
             <input className="input mono" type="number" value={ftp.port} onChange={(e) => setFtp({ port: Number(e.target.value) })} />
           </Field>
-          <Field label="Passive ports" hint="Allow these through the firewall.">
+          <Field label="Passive ports" hint="Cameras use these for the photo transfer. 'Allow cameras' in the connection check opens them.">
             <div className="row tight">
               <input className="input mono" type="number" value={ftp.pasvMin} onChange={(e) => setFtp({ pasvMin: Number(e.target.value) })} />
               <span className="muted">–</span>

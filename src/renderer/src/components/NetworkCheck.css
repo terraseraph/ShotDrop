@@ -1,0 +1,21 @@
+.netcheck { display: grid; gap: 2px; }
+.netcheck-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 8px; }
+.netcheck-summary { font-weight: 600; }
+.netcheck-row { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.netcheck-icon { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; margin-top: 1px; }
+.netcheck-body { display: grid; gap: 3px; min-width: 0; }
+.netcheck-body p { margin: 0; color: #c4c4cc; font-size: 12.5px; user-select: text; }
+.netcheck-fixes { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+
+.lvl-ok { color: var(--live); }
+.lvl-warn { color: var(--star); }
+.lvl-error { color: #ff8a7a; }
+.lvl-info { color: var(--muted); }
+.netcheck-row.lvl-ok .netcheck-icon { background: rgba(51, 209, 122, 0.14); color: var(--live); }
+.netcheck-row.lvl-warn .netcheck-icon { background: rgba(244, 192, 78, 0.14); color: var(--star); }
+.netcheck-row.lvl-error .netcheck-icon { background: rgba(239, 75, 75, 0.16); color: var(--reject); }
+.netcheck-row.lvl-info .netcheck-icon { background: var(--panel-3); color: var(--muted); }
+.netcheck-row strong { color: var(--text); font-weight: 600; }
+
+/* On the empty screen: a card listing only what's wrong. */
+.netcheck.compact { width: 100%; text-align: left; background: var(--panel); border: 1px solid rgba(255, 84, 54, 0.35); border-radius: 12px; padding: 12px 14px 4px; }

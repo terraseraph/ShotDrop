@@ -3,6 +3,7 @@ import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
 import { createReadStream, existsSync, statSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
+import { registerDiagnostics } from './diagnostics'
 import type { Core } from '../core'
 import type { Destination, Flag, ServerEvent, Settings, ShotPatch, SyncStatus } from '@shared/types'
 
@@ -270,6 +271,9 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
       clearInterval(ping)
     })
   })
+
+  // ---- connection check (firewall, ports, self-test) ----
+  registerDiagnostics(app, core)
 
   // ---- remote web UI ----
   if (opts.rendererDir && existsSync(opts.rendererDir)) {

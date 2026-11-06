@@ -41,7 +41,7 @@ To fake a camera, upload over FTP with the user and password shown in the app:
 curl -T DSC01234.JPG ftp://camera:<password>@127.0.0.1:2121/
 ```
 
-On first run, Windows Firewall will ask to allow ShotDrop. Allow it on private networks, or cameras can't reach the FTP server.
+On first run, Windows Firewall will ask to allow ShotDrop. If cameras can't connect, open Settings → Camera → **Connection check**. It finds firewall blocks (including the hidden block rule Windows creates when someone clicks Cancel on that prompt), port clashes, wrong adapters and refused camera logins, and offers one-click fixes.
 
 ### Project layout
 
@@ -89,6 +89,9 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 | GET | `/api/tunnel` | Public link state: `off`, `installing`, `starting`, `running` or `error`, plus the URL |
 | POST | `/api/tunnel/install` (local) | Download cloudflared from Cloudflare's GitHub releases into the app data folder |
 | POST | `/api/tunnel/start` · `/api/tunnel/stop` (local) | Start or stop a Cloudflare quick tunnel to the API/gallery |
+| GET | `/api/diagnostics` (local) | Connection check: FTP server, transfer ports, network adapter, firewall, self-test login, camera login attempts, disk space |
+| GET | `/api/diagnostics/attempts` (local) | Recent FTP logins, accepted or refused |
+| POST | `/api/diagnostics/fix/:id` (local) | `firewall-allow` (one Windows permission prompt: adds local-subnet-only rules and removes block rules), `firewall-remove`, `use-free-port` |
 
 ---
 
@@ -98,6 +101,13 @@ The desktop window uses the same HTTP API a remote browser or script would. It l
 - [x] Built-in FTP server, started from the app with one toggle (FTPS still to do)
 - [x] Auto-detect the LAN IP and show the camera setup details in big readable text: host, port, user, password, folder
 - [x] **Camera setup wizard** with per-brand step-by-step instructions (Sony, Canon, Nikon, Fuji)
+- [x] **Connection check** with one-click fixes:
+  - Windows Firewall rules (local network only), including removing Windows' hidden block rule
+  - Port clashes (names the program holding the port, moves to a free one)
+  - VPN/virtual adapter warnings
+  - A self-test that logs in like a camera
+  - Refused camera logins ("wrong password from 192.168.x.x")
+  - Disk space
 - [ ] QR code or printable card with the connection details
 - [x] Multiple cameras at once, each with its own credentials, so frames are tagged by camera or shooter
 - [x] Handles JPEG, HEIF and RAW (ARW, CR3, NEF, RAF, DNG), plus JPEG+RAW pairs grouped as one shot

@@ -1,6 +1,9 @@
 import { networkInterfaces } from 'node:os'
 
-const VIRTUAL = /(vEthernet|VirtualBox|VMware|Hyper-V|WSL|docker|Loopback|Tailscale|ZeroTier|vboxnet|utun|bridge)/i
+const VIRTUAL = /(vEthernet|VirtualBox|VMware|Hyper-V|WSL|docker|Loopback|Tailscale|ZeroTier|WireGuard|^wg-|^wg\d|vboxnet|utun|bridge)/i
+
+/** VPN / VM / container adapters a camera can't reach. */
+export const isVirtualAdapter = (name: string): boolean => VIRTUAL.test(name)
 
 /** Private IPv4 addresses of this machine, real adapters first. Shown to the user as the camera's FTP host. */
 export function lanAddresses(): string[] {
