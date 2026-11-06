@@ -1,5 +1,6 @@
 import type { DB } from './db'
 import type { FileKind, Flag, Label, Session, Shot, ShotPatch, SyncStatus } from '@shared/types'
+import type { LumaStats } from './media'
 
 interface ShotRow {
   id: number
@@ -20,6 +21,8 @@ interface ShotRow {
   label: string | null
   source: string | null
   has_preview: number
+  hist: string | null
+  clipped: number | null
 }
 
 export interface FileRow {
@@ -105,8 +108,10 @@ export class Library {
     return files.sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind])[0]
   }
 
-  setPreview(shotId: number, fileId: number): void {
-    this.db.prepare(`UPDATE shots SET preview_file_id = ?, has_preview = 1 WHERE id = ?`).run(fileId, shotId)
+  setPreview(shotId: number, fileId: number, stats: LumaStats): void {
+    this.db
+      .prepare(`UPDATE shots SET preview_file_id = ?, has_preview = 1, hist = ?, clipped = ? WHERE id = ?`)
+      .run(fileId, JSON.stringify(stats.hist), stats.clipped, shotId)
   }
 
   previewFileId(shotId: number): number | null {
@@ -296,6 +301,8 @@ export class Library {
       label: r.label as Label,
       source: r.source,
       hasPreview: !!r.has_preview,
+      histogram: r.hist ? (JSON.parse(r.hist) as number[]) : null,
+      clipped: r.clipped,
       files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind, size: f.size })),
       sync
     }

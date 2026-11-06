@@ -77,6 +77,24 @@ export async function readExif(path: string): Promise<Exif> {
   }
 }
 
+export interface LumaStats {
+  hist: number[] // 64 luminance bins, scaled so the tallest is 100
+  clipped: number // % of pixels at or near pure white
+}
+
+/** Luminance histogram + highlight clipping from the already-rendered thumbnail (cheap, 480px). */
+async function lumaStats(path: string): Promise<LumaStats> {
+  const px = await sharp(path).greyscale().raw().toBuffer()
+  const bins = new Array<number>(64).fill(0)
+  let clip = 0
+  for (const v of px) {
+    bins[v >> 2]++
+    if (v >= 250) clip++
+  }
+  const max = Math.max(...bins, 1)
+  return { hist: bins.map((b) => Math.round((b / max) * 100)), clipped: Math.round((clip / Math.max(px.length, 1)) * 1000) / 10 }
+}
+
 const ORIENT_TO_DEG: Record<number, number> = { 3: 180, 6: 90, 8: 270 }
 
 /**
@@ -102,7 +120,7 @@ export class Previewer {
     return join(this.previewDir, `${shotId}.jpg`)
   }
 
-  async render(shotId: number, sourcePath: string, orientation: number | null): Promise<void> {
+  async render(shotId: number, sourcePath: string, orientation: number | null): Promise<LumaStats> {
     const kind = fileKind(sourcePath)
     let input = sourcePath
     let rotate: number | undefined // undefined = auto-rotate from EXIF in the input
@@ -122,6 +140,7 @@ export class Previewer {
         base().resize({ width: 2560, height: 2560, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toFile(this.previewPath(shotId)),
         base().resize({ width: 480, height: 480, fit: 'inside' }).jpeg({ quality: 75 }).toFile(this.thumbPath(shotId))
       ])
+      return await lumaStats(this.thumbPath(shotId))
     } finally {
       if (tmp && existsSync(tmp)) rmSync(tmp, { force: true })
     }

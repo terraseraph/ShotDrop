@@ -188,6 +188,9 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .hud-exif { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .hud-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .pill { height: 20px; padding: 0 7px; border-radius: 4px; background: var(--panel-3); color: var(--muted); font-size: 11px; display: inline-flex; align-items: center; font-weight: 600; letter-spacing: 0.02em; }
+.hist { position: absolute; top: 24px; right: 24px; display: grid; gap: 6px; justify-items: end; pointer-events: none; }
+.hist svg { width: 160px; height: 56px; padding: 6px; border-radius: 8px; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); }
+.pill.warn { color: var(--star); background: rgba(0, 0, 0, 0.55); }
 .pill.new { background: var(--tally); color: #fff; }
 .pill.live { color: var(--live); background: rgba(51, 209, 122, 0.1); }
 

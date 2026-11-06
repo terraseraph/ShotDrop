@@ -31,6 +31,8 @@ export interface Shot {
   label: Label
   source: string | null // ftp user / folder name
   hasPreview: boolean
+  histogram: number[] | null // 64 luminance bins, 0-100
+  clipped: number | null // % of pixels at pure white
   files: ShotFile[]
   sync: Record<string, SyncStatus> // destinationId -> aggregate status
 }

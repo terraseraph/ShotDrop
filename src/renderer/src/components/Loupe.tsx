@@ -17,6 +17,7 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
   const [zoom, setZoom] = useState(false)
   const [origin, setOrigin] = useState({ x: 50, y: 50 })
   const [loaded, setLoaded] = useState(false)
+  const [showHist, setShowHist] = useState(true)
   const box = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
         e.preventDefault()
         setOrigin({ x: 50, y: 50 })
         setZoom((z) => !z)
-      }
+      } else if ((e.key === 'h' || e.key === 'H') && !(e.target as HTMLElement).closest('input, textarea, select')) setShowHist((h) => !h)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -85,6 +86,8 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
         )}
       </div>
 
+      {showHist && shot.histogram && !zoom && <Histogram bins={shot.histogram} clipped={shot.clipped} />}
+
       <button className="nav prev" onClick={onPrev} aria-label="Previous">
         <Icon name="prev" size={22} />
       </button>
@@ -106,6 +109,18 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
           {follow && <span className="pill live">Following</span>}
         </div>
       </div>
+    </div>
+  )
+}
+
+function Histogram({ bins, clipped }: { bins: number[]; clipped: number | null }) {
+  const d = `M0 100 ${bins.map((v, i) => `L${i} ${100 - v}`).join(' ')} L63 100Z`
+  return (
+    <div className="hist">
+      {clipped != null && clipped > 1 && <span className="pill warn">▲ {Math.round(clipped)}% highlights clipped</span>}
+      <svg viewBox="0 0 63 100" preserveAspectRatio="none" aria-hidden>
+        <path d={d} fill="rgba(255,255,255,.45)" />
+      </svg>
     </div>
   )
 }
