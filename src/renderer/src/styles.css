@@ -259,6 +259,8 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .info dl div { display: grid; grid-template-columns: 92px 1fr; gap: 8px; }
 .info dt { color: var(--muted); }
 .info dd { margin: 0; overflow-wrap: anywhere; user-select: text; }
+.info kbd { font: 10px var(--mono); color: var(--faint); border: 1px solid var(--line-2); padding: 0 4px; border-radius: 3px; }
+.stars-input kbd { margin-left: auto; align-self: center; }
 .stars-input { display: flex; gap: 2px; }
 .stars-input button { font-size: 20px; width: 30px; height: 30px; color: var(--line-2); border-radius: 4px; }
 .stars-input button:hover { color: #8a7333; }

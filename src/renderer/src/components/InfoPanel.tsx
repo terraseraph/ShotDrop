@@ -51,13 +51,14 @@ export function InfoPanel({ shot, onPatch }: Props) {
               ★
             </button>
           ))}
+          <kbd>1–5</kbd>
         </div>
         <div className="flag-input">
           <button className={shot.flag === 1 ? 'on pick' : ''} onClick={() => onPatch({ flag: shot.flag === 1 ? 0 : 1 })} title="Pick (P)">
-            <Icon name="check" /> Pick
+            <Icon name="check" /> Pick <kbd>P</kbd>
           </button>
           <button className={shot.flag === -1 ? 'on reject' : ''} onClick={() => onPatch({ flag: shot.flag === -1 ? 0 : -1 })} title="Reject (X)">
-            <Icon name="close" /> Reject
+            <Icon name="close" /> Reject <kbd>X</kbd>
           </button>
         </div>
         <div className="label-input" aria-label="Colour label">
