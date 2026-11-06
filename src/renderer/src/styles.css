@@ -227,7 +227,6 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .frame:hover { outline-color: var(--line-2); }
 .frame.selected { outline-color: var(--text); }
 .frame.rejected img { opacity: 0.35; filter: grayscale(1); }
-.frame.fresh { animation: slide-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .frame.fresh::after, .cell.fresh .cell-img::after {
   content: ''; position: absolute; top: 5px; left: 5px; width: 7px; height: 7px; border-radius: 50%;
   background: var(--tally); box-shadow: 0 0 8px var(--tally-glow);

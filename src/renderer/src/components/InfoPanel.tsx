@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Label, Shot, ShotPatch, Status, SyncStatus } from '@shared/types'
+import { motion } from 'motion/react'
 import { api } from '../api'
 import { fmtAperture, fmtFocal, fmtShutter, fmtSize, fmtTime, fmtDate } from '../format'
 import { Icon } from './Icon'
@@ -77,9 +78,9 @@ export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
         {compare.length > 0 && (
           <div className="compare">
             {compare.map((c) => (
-              <button key={c.id} className={c.id === shot.id ? 'sel' : ''} onClick={() => onSelect(c.id)} title={c.name}>
+              <motion.button key={c.id} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', bounce: 0.3, visualDuration: 0.45 }} className={c.id === shot.id ? 'sel' : ''} onClick={() => onSelect(c.id)} title={c.name}>
                 <img src={api.thumbUrl(c.id)} alt={c.name} draggable={false} />
-              </button>
+              </motion.button>
             ))}
           </div>
         )}

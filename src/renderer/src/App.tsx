@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Label, Shot } from '@shared/types'
+import { MotionConfig } from 'motion/react'
 import { useLibrary } from './useLibrary'
 import { isRemote } from './api'
 import { TopBar, type Filter } from './components/TopBar'
@@ -143,6 +144,7 @@ export default function App() {
   const empty = lib.shots.length === 0
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="app">
       <TopBar
         status={lib.status}
@@ -189,6 +191,7 @@ export default function App() {
         ))}
       </div>
     </div>
+    </MotionConfig>
   )
 }
 

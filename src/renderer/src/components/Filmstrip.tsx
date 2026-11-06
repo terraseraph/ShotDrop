@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Shot } from '@shared/types'
+import { motion } from 'motion/react'
 import { api } from '../api'
 import { Badges, SyncDots } from './Badges'
 
@@ -34,8 +35,11 @@ export function Filmstrip({ shots, selectedId, freshIds, onSelect }: Props) {
   return (
     <div className="filmstrip" ref={strip}>
       {shots.map((s) => (
-        <button
+        <motion.button
           key={s.id}
+          initial={freshIds.has(s.id) ? { opacity: 0, x: 18, scale: 0.9 } : false}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          transition={{ type: 'spring', bounce: 0.3, visualDuration: 0.45 }}
           className={`frame ${s.id === selectedId ? 'selected' : ''} ${s.flag === -1 ? 'rejected' : ''} ${freshIds.has(s.id) ? 'fresh' : ''}`}
           onClick={() => onSelect(s.id)}
           title={s.name}
@@ -45,7 +49,7 @@ export function Filmstrip({ shots, selectedId, freshIds, onSelect }: Props) {
           <span className="frame-badges">
             <Badges shot={s} />
           </span>
-        </button>
+        </motion.button>
       ))}
     </div>
   )

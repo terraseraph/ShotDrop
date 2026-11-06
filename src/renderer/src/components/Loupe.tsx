@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Shot } from '@shared/types'
 import { api } from '../api'
 import { fmtAperture, fmtFocal, fmtIso, fmtShutter, fmtTime } from '../format'
+import { motion } from 'motion/react'
 import { Icon } from './Icon'
 import { Badges } from './Badges'
 
@@ -100,7 +101,11 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
           <strong>{shot.name}</strong>
           <span className="muted">{fmtTime(shot.capturedAt)}</span>
           {shot.files.length > 1 && <span className="pill">{shot.files.map((f) => f.kind.toUpperCase()).join('+')}</span>}
-          {fresh && <span className="pill new">New</span>}
+          {fresh && (
+            <motion.span className="pill new" initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', bounce: 0.3, visualDuration: 0.45 }}>
+              New
+            </motion.span>
+          )}
         </div>
         <div className="hud-exif mono">{exif.join('  ·  ')}</div>
         <div className="hud-right">
@@ -116,11 +121,11 @@ export function Loupe({ shot, fresh, follow, onPrev, onNext }: Props) {
 function Histogram({ bins, clipped }: { bins: number[]; clipped: number | null }) {
   const d = `M0 100 ${bins.map((v, i) => `L${i} ${100 - v}`).join(' ')} L63 100Z`
   return (
-    <div className="hist">
+    <motion.div className="hist" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
       {clipped != null && clipped > 1 && <span className="pill warn">▲ {Math.round(clipped)}% highlights clipped</span>}
       <svg viewBox="0 0 63 100" preserveAspectRatio="none" aria-hidden>
         <path d={d} fill="rgba(255,255,255,.45)" />
       </svg>
-    </div>
+    </motion.div>
   )
 }
