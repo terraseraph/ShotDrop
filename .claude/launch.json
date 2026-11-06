@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "shotdrop", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5173 }
+    { "name": "shotdrop", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 5173 },
+    { "name": "mockups", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "http-server", "C:/Users/terra/Design-mockups", "-p", "5190", "-c-1", "--silent"], "port": 5190 }
   ]
 }
