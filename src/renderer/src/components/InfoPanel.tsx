@@ -11,9 +11,11 @@ interface Props {
   shot: Shot | null
   status: Status | null
   onPatch: (p: ShotPatch) => void
+  compare: Shot[]
+  onSelect: (id: number) => void
 }
 
-export function InfoPanel({ shot, onPatch }: Props) {
+export function InfoPanel({ shot, onPatch, compare, onSelect }: Props) {
   const [destNames, setDestNames] = useState<Record<string, string>>({})
   const syncKeys = shot ? Object.keys(shot.sync).join() : ''
   useEffect(() => {
@@ -66,6 +68,21 @@ export function InfoPanel({ shot, onPatch }: Props) {
             <button key={l} className={`label-dot ${l} ${shot.label === l ? 'on' : ''}`} onClick={() => onPatch({ label: shot.label === l ? null : l })} aria-label={l} title={l} />
           ))}
         </div>
+      </section>
+
+      <section>
+        <h3>
+          Compare <span className="muted hint">· C to add, Shift+C clears</span>
+        </h3>
+        {compare.length > 0 && (
+          <div className="compare">
+            {compare.map((c) => (
+              <button key={c.id} className={c.id === shot.id ? 'sel' : ''} onClick={() => onSelect(c.id)} title={c.name}>
+                <img src={api.thumbUrl(c.id)} alt={c.name} draggable={false} />
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>

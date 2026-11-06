@@ -44,6 +44,7 @@ export default function App() {
   const [infoOpen, setInfoOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [compare, setCompare] = useState<number[]>([])
   const [freshIds, setFreshIds] = useState<Set<number>>(new Set())
   const followRef = useRef(follow)
   followRef.current = follow
@@ -64,6 +65,7 @@ export default function App() {
   const lib = useLibrary(onArrival)
   const visible = useMemo(() => applyFilter(lib.shots, filter, session, source), [lib.shots, filter, session, source])
   const inSession = useMemo(() => (session ? lib.shots.filter((s) => s.session === session) : lib.shots), [lib.shots, session])
+  const compareShots = useMemo(() => compare.flatMap((id) => lib.shots.find((s) => s.id === id) ?? []), [compare, lib.shots])
   const index = visible.findIndex((s) => s.id === selectedId)
   const selected = index >= 0 ? visible[index] : null
 
@@ -114,6 +116,8 @@ export default function App() {
         void lib.patch([id], { flag: -1 })
         advance()
       } else if ((k === 'u' || k === 'U') && id) void lib.patch([id], { flag: 0 })
+      else if (k === 'C') setCompare([])
+      else if (k === 'c' && id) setCompare((c) => (c.includes(id) ? c : [...c, id].slice(-4)))
       else if (k === 'f' || k === 'F') setFollow((f) => !f)
       else if (k === 'g' || k === 'G') setView('grid')
       else if (k === 'e' || k === 'E' || (k === 'Enter' && view === 'grid')) setView('loupe')
@@ -172,7 +176,7 @@ export default function App() {
               <Grid shots={visible} selectedId={selected?.id ?? null} freshIds={freshIds} onSelect={select} onOpen={(id) => { select(id); setView('loupe') }} />
             )}
           </main>
-          {infoOpen && <InfoPanel shot={selected} status={lib.status} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
+          {infoOpen && <InfoPanel shot={selected} status={lib.status} compare={compareShots} onSelect={select} onPatch={(p) => selected && lib.patch([selected.id], p)} />}
         </div>
       )}
 

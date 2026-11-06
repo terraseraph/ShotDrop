@@ -258,6 +258,11 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 /* ---------- info panel ---------- */
 .info { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 4px 0; }
 .info section { padding: 14px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+.info .hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.compare button { aspect-ratio: 3 / 2; border-radius: 6px; overflow: hidden; outline: 1px solid var(--line); outline-offset: 0; }
+.compare button.sel { outline: 2px solid var(--text); }
+.compare img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .info dl { margin: 0; display: grid; gap: 7px; }
 .info dl div { display: grid; grid-template-columns: 92px 1fr; gap: 8px; }
 .info dt { color: var(--muted); }
