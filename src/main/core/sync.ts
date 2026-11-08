@@ -48,6 +48,11 @@ export class SyncService {
    */
   private knownDirs = new Set<string>()
   private mkdirChain = new Map<string, Promise<unknown>>()
+  /** Library paths (folder or file rel_path) a rename or move is working on: no upload of anything under them starts. */
+  private held = new Set<string>()
+  /** Set by RemoteOpsService: runs its pending moves on every pump, and says whether a queued move still owns an upload's target. */
+  onPump?: () => void
+  uploadBlocked?: (destId: string, relPath: string) => boolean
 
   constructor(
     private lib: Library,
@@ -55,7 +60,7 @@ export class SyncService {
     private settings: () => Settings,
     private onState: () => void,
     private cloud: CloudAccounts,
-    private trash?: (path: string) => Promise<void>
+    readonly trash?: (path: string) => Promise<void>
   ) {}
 
   async start(): Promise<void> {
@@ -128,7 +133,57 @@ export class SyncService {
     return n
   }
 
+  /** True while an upload or delete is in flight for this path or anything under it (optionally on one destination only). */
+  isBusyUnder(prefix: string, destId?: string): boolean {
+    for (const key of this.busy) {
+      const i = key.indexOf('|')
+      if (destId && key.slice(0, i) !== destId) continue
+      const rel = key.slice(i + 1)
+      if (rel === prefix || rel.startsWith(`${prefix}/`)) return true
+    }
+    return false
+  }
+
+  hold(prefix: string): void {
+    this.held.add(prefix)
+  }
+
+  release(prefix: string): void {
+    this.held.delete(prefix)
+    this.pump()
+  }
+
+  private isHeld(rel: string): boolean {
+    for (const h of this.held) if (rel === h || rel.startsWith(`${h}/`)) return true
+    return false
+  }
+
+  /** Destinations currently backing off (unreachable) and destinations that are paused. */
+  skippedDests(): string[] {
+    const now = Date.now()
+    return [
+      ...[...this.offline].filter(([, o]) => o.until > now).map(([id]) => id),
+      ...this.settings().destinations.filter((d) => !d.enabled).map((d) => d.id)
+    ]
+  }
+
+  markOffline(destId: string): void {
+    const streak = (this.offline.get(destId)?.streak ?? -1) + 1
+    this.offline.set(destId, { until: Date.now() + offlineDelay(streak), streak })
+  }
+
+  markOnline(destId: string): void {
+    this.offline.delete(destId)
+  }
+
+  /** Forget remote folders known to exist under a moved prefix, so the next upload recreates them. */
+  forgetDirs(dest: Destination, relPrefix: string): void {
+    const base = `${dest.target.replace(/\/+$/, '')}/${relPrefix}`
+    for (const d of [...this.knownDirs]) if (d === base || d.startsWith(`${base}/`)) this.knownDirs.delete(d)
+  }
+
   pump(): void {
+    this.onPump?.()
     if (CONCURRENCY - this.active <= 0) return
     const now = Date.now()
     // Unreachable and paused destinations are skipped in the query, so they can't fill the slots and starve the rest.
@@ -148,7 +203,7 @@ export class SyncService {
       const file = this.lib.file(job.file_id)
       if (!dest || !dest.enabled || !file) continue
       const key = `${dest.id}|${file.rel_path}`
-      if (this.busy.has(key)) continue
+      if (this.busy.has(key) || this.isHeld(file.rel_path) || this.uploadBlocked?.(dest.id, file.rel_path)) continue
       started++
       this.busy.add(key)
       this.active++

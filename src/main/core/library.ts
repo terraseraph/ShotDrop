@@ -35,6 +35,17 @@ interface ShotRow {
   blink: number | null
 }
 
+export interface RemoteOpRow {
+  id: number
+  dest_id: string
+  op: 'move' | 'delete'
+  src: string
+  dst: string | null
+  status: 'pending' | 'running' | 'error'
+  attempts: number
+  error: string | null
+}
+
 export interface FileRow {
   id: number
   shot_id: number
@@ -297,6 +308,7 @@ export class Library {
    * hidden anchor shot (dot name, kind 'other'). Creates or refreshes it and returns the file id to enqueue.
    */
   setSessionAnchor(folder: string, path: string, relPath: string, size: number, hash: string): number {
+    this.anchorIds = null
     return this.db.transaction(() => {
       const now = Date.now()
       const key = `${folder}/.shotdrop.json`
@@ -330,9 +342,12 @@ export class Library {
 
   /** True for the hidden shot that carries a session's .shotdrop.json; routes treat its id as unknown. */
   isAnchorId(id: number): boolean {
-    const r = this.db.prepare(`SELECT name FROM shots WHERE id = ?`).get(id) as { name: string } | undefined
-    return !!r && isAnchorName(r.name)
+    this.anchorIds ??= new Set((this.db.prepare(`SELECT id, name FROM shots WHERE name LIKE '.%'`).all() as { id: number; name: string }[]).filter((r) => isAnchorName(r.name)).map((r) => r.id))
+    return this.anchorIds.has(id)
   }
+
+  /** Cached set of anchor shot ids (one query instead of one per /api/shots request); dropped whenever anchors change. */
+  private anchorIds: Set<number> | null = null
 
   count(): number {
     return (this.db.prepare(`SELECT COUNT(*) AS n FROM shots WHERE ${REAL}`).get() as { n: number }).n
@@ -441,10 +456,10 @@ export class Library {
       if (mirrorDests.length) {
         this.db
           .prepare(
-            `INSERT INTO remote_deletes (dest_id, rel_path, status, updated_at)
-             SELECT j.dest_id, f.rel_path, 'pending', @now FROM sync_jobs j JOIN files f ON f.id = j.file_id
+            `INSERT INTO remote_ops (dest_id, op, src, status, updated_at)
+             SELECT j.dest_id, 'delete', f.rel_path, 'pending', @now FROM sync_jobs j JOIN files f ON f.id = j.file_id
              WHERE j.file_id = @fileId AND j.dest_id IN (SELECT value FROM json_each(@dests))
-             ON CONFLICT(dest_id, rel_path) DO UPDATE SET status = 'pending', attempts = 0, error = NULL, updated_at = excluded.updated_at`
+             ON CONFLICT(dest_id, op, src) DO UPDATE SET status = 'pending', attempts = 0, error = NULL, updated_at = excluded.updated_at`
           )
           .run({ fileId, dests: JSON.stringify(mirrorDests), now: Date.now() })
       }
@@ -455,15 +470,15 @@ export class Library {
   /** A new file is going to the same path: the old delete must not remove it. Running deletes are left to finish first. */
   private cancelRemoteDelete(fileId: number, destId: string): void {
     this.db
-      .prepare(`DELETE FROM remote_deletes WHERE dest_id = ? AND status != 'running' AND rel_path = (SELECT rel_path FROM files WHERE id = ?)`)
+      .prepare(`DELETE FROM remote_ops WHERE op = 'delete' AND dest_id = ? AND status != 'running' AND src = (SELECT rel_path FROM files WHERE id = ?)`)
       .run(destId, fileId)
   }
 
   nextRemoteDeletes(limit: number, skipDests: string[] = []): { id: number; dest_id: string; rel_path: string; attempts: number }[] {
     return this.db
       .prepare(
-        `SELECT id, dest_id, rel_path, attempts FROM remote_deletes
-         WHERE status = 'pending' AND dest_id NOT IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT ?`
+        `SELECT id, dest_id, src AS rel_path, attempts FROM remote_ops
+         WHERE op = 'delete' AND status = 'pending' AND dest_id NOT IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT ?`
       )
       .all(JSON.stringify(skipDests), limit) as { id: number; dest_id: string; rel_path: string; attempts: number }[]
   }
@@ -471,7 +486,7 @@ export class Library {
   setRemoteDeleteStatus(id: number, status: 'pending' | 'running' | 'error', error: string | null = null): void {
     this.db
       .prepare(
-        `UPDATE remote_deletes SET status = ?, error = ?, updated_at = ?,
+        `UPDATE remote_ops SET status = ?, error = ?, updated_at = ?,
            attempts = attempts + CASE WHEN ? = 'error' THEN 1 ELSE 0 END WHERE id = ?`
       )
       .run(status, error, Date.now(), status, id)
@@ -479,33 +494,121 @@ export class Library {
 
   /** Done: the row goes (only if still running, so a re-queue in the meantime survives). */
   finishRemoteDelete(id: number): void {
-    this.db.prepare(`DELETE FROM remote_deletes WHERE id = ? AND status = 'running'`).run(id)
+    this.db.prepare(`DELETE FROM remote_ops WHERE id = ? AND status = 'running'`).run(id)
   }
 
   retryRemoteDelete(id: number): void {
-    this.db.prepare(`UPDATE remote_deletes SET status = 'pending' WHERE id = ? AND status = 'error'`).run(id)
+    this.db.prepare(`UPDATE remote_ops SET status = 'pending' WHERE id = ? AND status = 'error'`).run(id)
   }
 
   retryFailedRemoteDeletes(destId?: string): number {
-    const sql = `UPDATE remote_deletes SET status = 'pending' WHERE status = 'error'${destId ? ' AND dest_id = ?' : ''}`
+    const sql = `UPDATE remote_ops SET status = 'pending' WHERE op = 'delete' AND status = 'error'${destId ? ' AND dest_id = ?' : ''}`
     return (destId ? this.db.prepare(sql).run(destId) : this.db.prepare(sql).run()).changes
   }
 
   /** Destination removed, or mirroring switched off: nothing more gets deleted there. */
   dropRemoteDeletes(destId: string): void {
-    this.db.prepare(`DELETE FROM remote_deletes WHERE dest_id = ? AND status != 'running'`).run(destId)
+    this.db.prepare(`DELETE FROM remote_ops WHERE op = 'delete' AND dest_id = ? AND status != 'running'`).run(destId)
   }
 
   /** Per destination: deletes still to do, and the newest failure. */
   remoteDeleteState(): Record<string, { waiting: number; error: string | null }> {
     const out: Record<string, { waiting: number; error: string | null }> = {}
-    const rows = this.db.prepare(`SELECT dest_id, COUNT(*) AS n FROM remote_deletes GROUP BY dest_id`).all() as { dest_id: string; n: number }[]
+    const rows = this.db.prepare(`SELECT dest_id, COUNT(*) AS n FROM remote_ops WHERE op = 'delete' GROUP BY dest_id`).all() as { dest_id: string; n: number }[]
     for (const r of rows) out[r.dest_id] = { waiting: r.n, error: null }
     const errs = this.db
-      .prepare(`SELECT dest_id, error, MAX(updated_at) AS at FROM remote_deletes WHERE status = 'error' GROUP BY dest_id`)
+      .prepare(`SELECT dest_id, error, MAX(updated_at) AS at FROM remote_ops WHERE op = 'delete' AND status = 'error' GROUP BY dest_id`)
       .all() as { dest_id: string; error: string }[]
     for (const e of errs) (out[e.dest_id] ??= { waiting: 0, error: null }).error = e.error
     return out
+  }
+
+  // ---- remote ops (moves; deletes share the table, see above) ----
+
+  /** Queue a server-side move on a destination. A repeat for the same source replaces the target and resets the attempts. */
+  queueRemoteMove(destId: string, src: string, dst: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO remote_ops (dest_id, op, src, dst, status, updated_at) VALUES (?, 'move', ?, ?, 'pending', ?)
+         ON CONFLICT(dest_id, op, src) DO UPDATE SET dst = excluded.dst, status = 'pending', attempts = 0, error = NULL, updated_at = excluded.updated_at`
+      )
+      .run(destId, src, dst, Date.now())
+  }
+
+  /** The oldest unfinished op of each destination, if it's a pending move. Strictly in order, so a later op never runs before the one it depends on. */
+  nextRemoteMoves(skipDests: string[] = []): { id: number; dest_id: string; src: string; dst: string; attempts: number }[] {
+    return this.db
+      .prepare(
+        `SELECT id, dest_id, src, dst, attempts FROM remote_ops o
+         WHERE op = 'move' AND status = 'pending' AND dest_id NOT IN (SELECT value FROM json_each(?))
+           AND id = (SELECT MIN(id) FROM remote_ops WHERE dest_id = o.dest_id)
+         ORDER BY id`
+      )
+      .all(JSON.stringify(skipDests)) as { id: number; dest_id: string; src: string; dst: string; attempts: number }[]
+  }
+
+  /** Pending or running move targets of a destination: uploads under these prefixes wait for the move. */
+  pendingMoveTargets(destId: string): string[] {
+    return (this.db.prepare(`SELECT dst FROM remote_ops WHERE op = 'move' AND dest_id = ?`).all(destId) as { dst: string }[]).map((r) => r.dst)
+  }
+
+  remoteOp(id: number): RemoteOpRow | undefined {
+    return this.db.prepare(`SELECT id, dest_id, op, src, dst, status, attempts, error FROM remote_ops WHERE id = ?`).get(id) as RemoteOpRow | undefined
+  }
+
+  remoteOps(): RemoteOpRow[] {
+    return this.db.prepare(`SELECT id, dest_id, op, src, dst, status, attempts, error FROM remote_ops ORDER BY id`).all() as RemoteOpRow[]
+  }
+
+  retryFailedRemoteOps(): number {
+    return this.db.prepare(`UPDATE remote_ops SET status = 'pending', attempts = 0 WHERE status = 'error'`).run().changes
+  }
+
+  // ---- renaming and moving ----
+
+  /** Every file of a session folder, anchor included. */
+  sessionFiles(session: string): FileRow[] {
+    return this.db.prepare(`SELECT f.* FROM files f JOIN shots s ON s.id = f.shot_id WHERE s.session = ?`).all(session) as FileRow[]
+  }
+
+  /** Destinations that already received this file: only these need a remote move. */
+  sentDests(fileId: number): string[] {
+    return (this.db.prepare(`SELECT dest_id FROM sync_jobs WHERE file_id = ? AND status = 'done'`).all(fileId) as { dest_id: string }[]).map((r) => r.dest_id)
+  }
+
+  /** Rename a session folder in the database in one transaction. Sync jobs hang off file ids, so they follow the new rel_path. */
+  renameSessionRows(oldF: string, newF: string, newPath: (oldPath: string) => string): void {
+    this.anchorIds = null
+    this.db.transaction(() => {
+      const upd = this.db.prepare(`UPDATE files SET path = ?, rel_path = ? WHERE id = ?`)
+      for (const f of this.sessionFiles(oldF)) upd.run(newPath(f.path), `${newF}/${f.rel_path.slice(oldF.length + 1)}`, f.id)
+      this.db.prepare(`UPDATE shots SET session = ?, key = ? || substr(key, ?) WHERE session = ?`).run(newF, newF, oldF.length + 1, oldF)
+      this.db.prepare(`UPDATE sessions SET folder = ? WHERE folder = ?`).run(newF, oldF)
+    })()
+  }
+
+  /** Point one shot (and its files, sidecar included) at another session folder, in one transaction. */
+  relocateShot(shotId: number, newF: string, moves: { fileId: number; path: string; relPath: string }[]): void {
+    this.db.transaction(() => {
+      const upd = this.db.prepare(`UPDATE files SET path = ?, rel_path = ? WHERE id = ?`)
+      for (const m of moves) upd.run(m.path, m.relPath, m.fileId)
+      const s = this.db.prepare(`SELECT name FROM shots WHERE id = ?`).get(shotId) as { name: string }
+      this.db.prepare(`UPDATE shots SET session = ?, key = ? WHERE id = ?`).run(newF, `${newF}/${s.name.toLowerCase()}`, shotId)
+    })()
+  }
+
+  shotKeyTaken(key: string): boolean {
+    return !!this.db.prepare(`SELECT 1 FROM shots WHERE key = ?`).get(key)
+  }
+
+  /** A top-level folder of this name is in some destination's cached listing: renaming onto it would merge two sessions. */
+  remoteFolderCached(name: string): boolean {
+    return !!this.db.prepare(`SELECT 1 FROM remote_entries WHERE path = ? COLLATE NOCASE AND dir = 1`).get(name)
+  }
+
+  /** Drop cached listings under a prefix that was just moved; Browse refetches them live. */
+  forgetRemoteEntries(prefix: string): void {
+    this.db.prepare(`DELETE FROM remote_entries WHERE path = ? OR substr(path, 1, ?) = ?`).run(prefix, prefix.length + 1, `${prefix}/`)
   }
 
   /** How many of these shots' photos each destination has (or is receiving), for the delete confirmation. Not-yet-sent ones just get dropped. */

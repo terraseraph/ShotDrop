@@ -7,6 +7,8 @@ import { registerDiagnostics } from './diagnostics'
 import { registerCloud } from './cloud'
 import { ensureDestLibrary, registerLibrary } from './library'
 import { registerRemoteBrowse } from './remote-routes'
+import { registerRemoteOps } from './remoteops-routes'
+import { OpError, RemoteOpsService } from '../core/remoteops'
 import { listSources, metadataFile, resolveImage } from '../core/sources'
 import { exportJpeg } from '../core/exporter'
 import { checkPath, ensurePath, listPlaces } from '../core/places'
@@ -122,6 +124,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     (folder) => core.bus.emit({ type: 'session:changed', folder } as unknown as ServerEvent),
     () => core.sync.pump()
   )
+  const remoteOps = new RemoteOpsService(core)
   const sessionBody = {
     type: 'object',
     additionalProperties: false,
@@ -150,7 +153,17 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   app.patch('/api/sessions/:folder', { schema: { body: sessionBody } }, async (req, reply) => {
     const folder = safeFolder(core.settings.libraryDir, (req.params as { folder: string }).folder)
     if (!folder) return reply.code(400).send({ error: 'Bad session folder' })
-    const row = await sessions.patch(folder, req.body as { name?: string; client?: string; notes?: string })
+    const body = req.body as { name?: string; client?: string; notes?: string }
+    let target = folder
+    if (body.name !== undefined) {
+      try {
+        target = await remoteOps.renameSession(folder, body.name, core.lib.sessionMetas().get(folder)?.date)
+      } catch (e) {
+        if (e instanceof OpError) return reply.code(e.status).send({ error: e.message })
+        throw e
+      }
+    }
+    const row = await sessions.patch(target, body)
     return row ?? reply.code(404).send({ error: 'Unknown session' })
   })
   app.get('/api/library/counts', async () => core.lib.filterCounts())
@@ -558,6 +571,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   registerLibrary(app, core, local)
   // ---- browse destinations (read-only; no `local` guard, so the phone can use them with the PIN) ----
   registerRemoteBrowse(app, core)
+  registerRemoteOps(app, core, remoteOps)
 
   // ---- remote web UI ----
   if (opts.rendererDir && existsSync(opts.rendererDir)) {

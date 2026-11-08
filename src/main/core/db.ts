@@ -52,18 +52,8 @@ export function openDb(dataDir: string): DB {
     );
     CREATE INDEX IF NOT EXISTS sync_status ON sync_jobs(status);
 
-    -- Deletes to repeat on a destination after a photo was deleted locally ("mirror deletes").
-    -- Keyed by path, not file id: the file row is gone by the time this runs. A finished delete removes its row.
-    CREATE TABLE IF NOT EXISTS remote_deletes (
-      id         INTEGER PRIMARY KEY,
-      dest_id    TEXT NOT NULL,
-      rel_path   TEXT NOT NULL,
-      status     TEXT NOT NULL DEFAULT 'pending',
-      attempts   INTEGER NOT NULL DEFAULT 0,
-      error      TEXT,
-      updated_at INTEGER NOT NULL,
-      UNIQUE(dest_id, rel_path)
-    );
+    -- Persistent queue of remote moves and deletes (rename a session, move shots, mirror deletes). A finished op removes its row.
+    CREATE TABLE IF NOT EXISTS remote_ops (id INTEGER PRIMARY KEY, dest_id TEXT NOT NULL, op TEXT NOT NULL, src TEXT NOT NULL, dst TEXT, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, error TEXT, updated_at INTEGER NOT NULL, UNIQUE(dest_id, op, src));
 
     -- Local cache of each session folder's .shotdrop.json; a library rescan rebuilds it from disk.
     CREATE TABLE IF NOT EXISTS sessions (folder TEXT PRIMARY KEY, id TEXT UNIQUE, name TEXT, client TEXT, notes TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER);
@@ -83,6 +73,13 @@ export function openDb(dataDir: string): DB {
   }
   // Anything left "running" from a previous crash goes back to the queue.
   db.prepare(`UPDATE sync_jobs SET status = 'pending' WHERE status = 'running'`).run()
-  db.prepare(`UPDATE remote_deletes SET status = 'pending' WHERE status = 'running'`).run()
+  // remote_deletes moved into remote_ops (op = 'delete'); the old table is dropped in the same transaction as the copy.
+  db.transaction(() => {
+    if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'remote_deletes'`).get()) return
+    db.exec(`INSERT OR IGNORE INTO remote_ops (dest_id, op, src, status, attempts, error, updated_at)
+             SELECT dest_id, 'delete', rel_path, CASE WHEN status = 'error' THEN 'error' ELSE 'pending' END, attempts, error, updated_at FROM remote_deletes`)
+    db.exec('DROP TABLE remote_deletes')
+  })()
+  db.prepare(`UPDATE remote_ops SET status = 'pending' WHERE status = 'running'`).run()
   return db
 }
