@@ -24,6 +24,7 @@ export function defaultSettings(picturesDir: string): Settings & Pick<RemoteSett
     destinations: [],
     rclonePath: 'rclone',
     xmpSidecars: true,
+    ratingSystem: 'thumbs',
     tunnel: { autoStart: false, cloudflaredPath: 'cloudflared' },
     ptp: { enabled: false, host: '', guid: randomBytes(16).toString('hex') }
   }

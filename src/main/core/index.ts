@@ -236,7 +236,8 @@ export class Core {
       mkdirSync(after.libraryDir, { recursive: true })
       await this.ingest.start(after.watchFolders)
     }
-    if (changed('xmpSidecars') && after.xmpSidecars) for (const s of this.lib.list({}).items) this.xmp.schedule(s.id)
+    // Switching rating systems adds or removes the thumb keywords, so every sidecar is rewritten.
+    if ((changed('xmpSidecars') || changed('ratingSystem')) && after.xmpSidecars) for (const s of this.lib.list({}).items) this.xmp.schedule(s.id)
     if (changed('rclonePath')) await this.sync.start()
     if (changed('tunnel')) await this.tunnel.refreshInstalled()
     if (changed('ptp')) this.ptp.start(after.ptp)

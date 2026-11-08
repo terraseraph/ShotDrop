@@ -18,6 +18,8 @@
 .st-row.stack .l { flex: 1 1 100%; }
 .st-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .st-muted { color: var(--faint); }
+.st-rate-demo { display: inline-flex; align-items: center; gap: 10px; }
+.st-rate-demo > span { display: inline-flex; align-items: center; gap: 4px; }
 .st-text2 { color: var(--text-2); }
 .st-accent { color: var(--accent); }
 .st-ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

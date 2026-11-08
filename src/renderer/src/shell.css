@@ -90,6 +90,8 @@ button.chipx.lit { color: var(--accent); }
 .hint-stars { display: flex; align-items: center; gap: 1px; }
 .hint-stars button { width: 22px; height: 24px; display: grid; place-items: center; border-radius: 4px; }
 .hint-stars button:hover { background: var(--panel-3); }
+.hint-stars.thumbs { gap: 4px; }
+.hint-stars.thumbs button { width: 28px; }
 .hint-keys { color: var(--faint); display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
 .hint > .hint-keys { margin-left: 0; flex-wrap: wrap; }
 .hint-keys i { margin: 0 4px; font-style: normal; }
@@ -186,6 +188,9 @@ button.chipx.lit { color: var(--accent); }
 .action-bar { flex: none; }
 .m-stars { display: flex; justify-content: center; gap: 10px; padding: 4px 14px 8px; }
 .m-stars button { width: 44px; height: 44px; display: grid; place-items: center; touch-action: manipulation; }
+.m-stars.thumbs { gap: 28px; }
+.m-stars.thumbs button { width: 56px; border-radius: 12px; }
+.m-stars.thumbs button.on { background: #1e1e1e; }
 .m-cull { display: flex; gap: 8px; padding: 0 14px 10px; }
 .cull { flex: 1; height: 52px; border-radius: 12px; background: #1e1e1e; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--text-2); font-size: 11px; touch-action: manipulation; min-width: 44px; }
 .cull svg { width: 20px; height: 20px; }

@@ -3,6 +3,7 @@ import { copyFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, sep } from 'node:path'
 import { exiftool } from 'exiftool-vendored'
 import type { Flag, Label, Settings } from '@shared/types'
+import { KEYWORD_PARENT, THUMB_RATING, THUMB_WORD, thumbOf, type Thumb } from '@shared/rating'
 import type { Library } from './library'
 import type { Bus } from './events'
 
@@ -13,6 +14,9 @@ import type { Bus } from './events'
  *  - xmp:Rating  0-5; -1 when the shot is rejected (Lightroom/Photo Mechanic reject convention)
  *  - xmp:Label   Red | Yellow | Green | Blue | Purple
  *  - xmpDM:Pick  1 pick, -1 reject, 0 none (Adobe's pick flag in XMP; apps that ignore it still see Rating)
+ *  - keywords    with thumbs ratings on: "Thumbs down" | "Liked" | "Loved" in dc:subject, and the same under
+ *                "ShotDrop|" in lr:hierarchicalSubject so Lightroom files it under a ShotDrop keyword. Only our
+ *                three words are added or removed; the user's other keywords are left alone.
  * Existing sidecars are updated in place so other fields (develop settings, keywords...) survive.
  */
 
@@ -20,6 +24,15 @@ const DEBOUNCE_MS = 400
 
 const LABEL_OUT: Record<string, string> = { red: 'Red', yellow: 'Yellow', green: 'Green', blue: 'Blue', purple: 'Purple' }
 const LABEL_IN: Record<string, Label> = { red: 'red', yellow: 'yellow', green: 'green', blue: 'blue', purple: 'purple' }
+const THUMBS = Object.keys(THUMB_WORD) as Thumb[]
+const asList = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : typeof v === 'string' ? [v] : [])
+
+/** exiftool args that drop our thumb keywords and add the current one (if any). -= runs before +=, so re-adding is safe. */
+function keywordArgs(thumb: Thumb | null): string[] {
+  const args = THUMBS.flatMap((t) => [`-XMP-dc:Subject-=${THUMB_WORD[t]}`, `-XMP-lr:HierarchicalSubject-=${KEYWORD_PARENT}|${THUMB_WORD[t]}`])
+  if (thumb) args.push(`-XMP-dc:Subject+=${THUMB_WORD[thumb]}`, `-XMP-lr:HierarchicalSubject+=${KEYWORD_PARENT}|${THUMB_WORD[thumb]}`)
+  return args
+}
 
 const EMPTY_XMP = `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="ShotDrop">
@@ -44,6 +57,12 @@ export async function readSidecar(path: string): Promise<SidecarValues | null> {
     const pick = Number(t.Pick ?? 0)
     let flag: Flag = pick === 1 ? 1 : pick === -1 ? -1 : 0
     let rating = Number.isFinite(rawRating) ? Math.round(rawRating) : 0
+    // No star rating but our keyword is there (another app dropped Rating): take the thumb from the keyword.
+    if (t.Rating === undefined) {
+      const kw = asList(t.HierarchicalSubject)
+      const thumb = THUMBS.find((x) => kw.includes(`${KEYWORD_PARENT}|${THUMB_WORD[x]}`))
+      if (thumb) rating = THUMB_RATING[thumb]
+    }
     if (rating < 0) {
       flag = -1
       rating = 0
@@ -120,7 +139,8 @@ export class XmpService {
           '-overwrite_original',
           `-XMP-xmp:Rating=${shot.flag === -1 ? -1 : shot.rating}`,
           `-XMP-xmp:Label=${shot.label ? LABEL_OUT[shot.label] : ''}`,
-          `-XMP-xmpDM:Pick=${shot.flag}`
+          `-XMP-xmpDM:Pick=${shot.flag}`,
+          ...keywordArgs(this.settings().ratingSystem === 'thumbs' ? thumbOf(shot.rating) : null)
         ]
       )
       this.register(shotId, path)

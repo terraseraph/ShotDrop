@@ -4,6 +4,7 @@ import type { Shot, Status } from '@shared/types'
 import { api, apiBase, desktop } from '../api'
 import { fade, soft } from '../motion'
 import { ExportPopover } from './ExportPopover'
+import { ratingText, useRatingSystem } from '../rating'
 import './SharePanel.css'
 
 /** Desktop sharing actions for the selected shot (board: Open in…, Show in folder, Export JPEG, Share link). Remote browsers get nothing here. */
@@ -62,6 +63,7 @@ const keyHeader = (): Record<string, string> => {
 
 /** Bottom sheet on the phone: Share to… (Web Share API), Copy preview link, Save to phone. The PC makes the JPEG, the phone keeps it. */
 export function MobileShareSheet({ shot, status, onClose, toast }: { shot: Shot; status: Status | null; onClose: () => void; toast: (t: string, tone?: 'info' | 'error') => void }) {
+  const system = useRatingSystem()
   const [size, setSize] = useState<Size>('2048')
   const [meta, setMeta] = useState<Meta>('all')
   const [busy, setBusy] = useState<string | null>(null)
@@ -107,7 +109,7 @@ export function MobileShareSheet({ shot, status, onClose, toast }: { shot: Shot;
     toast('Preview link copied')
   })
 
-  const meta2 = [shot.rating ? `★${shot.rating}` : null, shot.flag === 1 ? 'Picked' : shot.flag === -1 ? 'Rejected' : null, [...new Set(shot.files.map((x) => x.kind === 'raw' ? 'RAW' : x.kind === 'jpeg' ? 'JPEG' : null).filter(Boolean))].join(' + ')].filter(Boolean).join(' · ')
+  const meta2 = [ratingText(shot.rating, system) || null, shot.flag === 1 ? 'Picked' : shot.flag === -1 ? 'Rejected' : null, [...new Set(shot.files.map((x) => x.kind === 'raw' ? 'RAW' : x.kind === 'jpeg' ? 'JPEG' : null).filter(Boolean))].join(' + ')].filter(Boolean).join(' · ')
   const Seg = <T extends string>({ v, set, items, label }: { v: T; set: (n: T) => void; items: [T, string][]; label: string }) => (
     <div><div className="msh-lbl">{label}</div><div className="msh-seg" role="radiogroup" aria-label={label}>{items.map(([k, l]) => <button key={k} role="radio" aria-checked={v === k} className={v === k ? 'on' : ''} onClick={() => set(k)}>{l}</button>)}</div></div>
   )

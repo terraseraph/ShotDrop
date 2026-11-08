@@ -10,7 +10,8 @@ import { useSessionNames } from './sessions'
 import { TopBar, type View } from './components/TopBar'
 import { Compare } from './components/Compare'
 import { useCullSettings } from './components/CullPanel'
-import { matchFilter } from './components/FilterChips'
+import { filterForSystem, matchFilter } from './components/FilterChips'
+import { keyRating, useRatingSystem } from './rating'
 import { TransferStrip } from './components/TransferStrip'
 import { NavContext, TabBar, type TabId } from './components/TabBar'
 import { Loupe } from './components/Loupe'
@@ -124,6 +125,8 @@ export default function App() {
     setSettingsOpen(true)
   }
   const cullUI = useCullSettings()
+  const ratingSystem = useRatingSystem()
+  useEffect(() => setFilter((f) => filterForSystem(f, ratingSystem === 'thumbs')), [ratingSystem])
   const cull = useMemo(() => analyze(lib.shots, cullUI.effective), [lib.shots, cullUI.effective])
   const visible = useMemo(() => applyFilter(lib.shots, filter, session, source, cull), [lib.shots, filter, session, source, cull])
   const inSession = useMemo(() => (session ? lib.shots.filter((s) => s.session === session) : lib.shots), [lib.shots, session])
@@ -170,7 +173,7 @@ export default function App() {
       // Shift+digit types '!' on most layouts; the physical key tells us which rating was meant.
       const k = /^Digit\d$/.test(e.code) ? e.code.slice(5) : e.key
       const id = selected?.id
-      // The Compare view handles its own culling keys (1-4 pick a pane, Shift+1-5 rate, P, Esc); we only keep view switching there.
+      // The Compare view handles its own culling keys (1-4 pick a pane, Shift+digit rates, P, Esc); we only keep view switching there.
       if (view === 'compare' && !['l', 'L', 'g', 'G', 'c', 'e', 'E', 'i', '?'].includes(k)) return
       let shiftAdvance = true
       try {
@@ -186,8 +189,9 @@ export default function App() {
       else if (k === 'Home') visible[0] && setSelectedId(visible[0].id)
       else if (k === 'End') {
         visible.length && setSelectedId(visible[visible.length - 1].id)
-      } else if (/^[0-5]$/.test(k) && id) {
-        void lib.patch([id], { rating: Number(k) })
+      } else if (/^[0-5]$/.test(k) && id && keyRating(ratingSystem, Number(k)) !== null) {
+        // Stars: 1-5. Thumbs: 1 down, 2 up, 3 love (stored as 1, 4, 5). 0 clears either way.
+        void lib.patch([id], { rating: keyRating(ratingSystem, Number(k))! })
         advance()
       } else if (LABEL_KEYS[k] && id) void lib.patch([id], { label: selected?.label === LABEL_KEYS[k] ? null : LABEL_KEYS[k] })
       else if ((k === 'p' || k === 'P') && id) {
@@ -213,7 +217,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, visible, view, move, lib, settingsOpen, syncOpen, compareIds.length, deleting])
+  }, [selected, visible, view, move, lib, settingsOpen, syncOpen, compareIds.length, deleting, ratingSystem])
 
   if (lib.needsPin) return <PinGate onUnlocked={lib.reload} />
   // Nothing until the first load settles, so remote visitors don't see the empty state flash before the PIN prompt.
