@@ -64,6 +64,12 @@ export function openDb(dataDir: string): DB {
       updated_at INTEGER NOT NULL,
       UNIQUE(dest_id, rel_path)
     );
+
+    -- Last known listing of each remote folder (Browse). Rebuilt from the provider on every live list.
+    CREATE TABLE IF NOT EXISTS remote_entries (
+      dest_id TEXT, path TEXT, name TEXT, dir INTEGER, size INTEGER, mtime INTEGER, kind TEXT, seen_at INTEGER,
+      PRIMARY KEY(dest_id, path)
+    );
   `)
   // Columns added after v0.1; CREATE TABLE IF NOT EXISTS won't add them to an existing library.
   for (const col of ['hist TEXT', 'clipped REAL', 'dark REAL', 'sharpness REAL', 'hash TEXT', 'faces INTEGER', 'blink REAL']) {
