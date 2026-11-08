@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Shot } from '@shared/types'
+import { fmtDay, useSessionNames } from '../sessions'
 
 const KEY = 'shotdrop.names'
 const LIVE_MS = 2 * 60_000
@@ -13,28 +14,34 @@ const load = (): Names => {
   }
 }
 
-/** Custom names live in this browser only (no server field for them yet). */
+/**
+ * Row names by key. `day:<folder>` names come from the session's .shotdrop.json (through the API, shared with every device);
+ * `cam:<user>` names stay in this browser.
+ */
 export function useNames(): [Names, (k: string, v: string) => void] {
-  const [names, setNames] = useState<Names>(load)
-  const set = (k: string, v: string): void =>
-    setNames((n) => {
+  const sessions = useSessionNames()
+  const [local, setLocal] = useState<Names>(() => Object.fromEntries(Object.entries(load()).filter(([k]) => !k.startsWith('day:'))))
+  const names = useMemo(() => ({ ...local, ...Object.fromEntries(Object.entries(sessions.all).map(([f, n]) => [`day:${f}`, n])) }), [local, sessions.all])
+  const set = (k: string, v: string): void => {
+    if (k.startsWith('day:')) return sessions.rename(k.slice(4), v)
+    setLocal((n) => {
       const next = { ...n }
       if (v.trim()) next[k] = v.trim()
       else delete next[k]
       try {
-        localStorage.setItem(KEY, JSON.stringify(next))
+        // Day labels not yet migrated stay in the old store; sessions.ts moves them to the server.
+        const pending = Object.fromEntries(Object.entries(load()).filter(([key]) => key.startsWith('day:')))
+        localStorage.setItem(KEY, JSON.stringify({ ...pending, ...next }))
       } catch {
         /* storage blocked: the name lasts until reload */
       }
       return next
     })
+  }
   return [names, set]
 }
 
-export const dayName = (session: string): string => {
-  const [y, m, d] = session.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-}
+export const dayName = fmtDay
 
 function Row({ id, auto, name, count, active, live, onClick, onRename }: { id: string; auto: string; name?: string; count: number; active: boolean; live?: boolean; onClick: () => void; onRename: (id: string, v: string) => void }) {
   const [editing, setEditing] = useState(false)
@@ -64,6 +71,7 @@ interface Props {
 
 export function SessionRail({ allShots, session, source, onSession, onSource }: Props) {
   const [names, rename] = useNames()
+  const { reload } = useSessionNames()
   const [now, setNow] = useState(Date.now())
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t) }, [])
 
@@ -72,6 +80,10 @@ export function SessionRail({ allShots, session, source, onSession, onSource }: 
     for (const s of allShots) m.set(s.session, (m.get(s.session) ?? 0) + 1)
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
   }, [allShots])
+
+  // A new shoot day (or a folder another device created) may already carry a name in its .shotdrop.json.
+  const dayKeys = days.map(([d]) => d).join('|')
+  useEffect(reload, [dayKeys, reload])
 
   const cams = useMemo(() => {
     const m = new Map<string, { n: number; last: number; model: string | null }>()

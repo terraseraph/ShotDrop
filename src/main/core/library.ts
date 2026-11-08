@@ -1,6 +1,10 @@
 import type { DB } from './db'
 import type { FileKind, Flag, Label, Session, Shot, ShotPatch, SyncStatus } from '@shared/types'
 import type { LumaStats } from './media'
+import type { SessionMeta } from '@shared/remote'
+
+/** Hidden anchor shots (one per session, holding its .shotdrop.json for sync) have dot names; real photos never do. */
+const REAL = `name NOT LIKE '.%'`
 
 interface ShotRow {
   id: number
@@ -67,6 +71,32 @@ export interface NewShot {
   height: number | null
   orientation: number | null
   source: string | null
+}
+
+interface SessionCacheRow {
+  folder: string
+  id: string
+  name: string | null
+  client: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: number | null
+  updated_at: number | null
+}
+
+function cacheToMeta(r: SessionCacheRow): SessionMeta {
+  const m: SessionMeta = {
+    schema: 1,
+    id: r.id,
+    name: r.name ?? '',
+    date: /^\d{4}-\d{2}-\d{2}/.exec(r.folder)?.[0] ?? '',
+    createdBy: r.created_by ?? '',
+    createdAt: r.created_at ?? 0,
+    updatedAt: r.updated_at ?? 0
+  }
+  if (r.client) m.client = r.client
+  if (r.notes) m.notes = r.notes
+  return m
 }
 
 const KIND_RANK: Record<FileKind, number> = { jpeg: 0, heif: 1, raw: 2, video: 4, sidecar: 8, other: 3 }
@@ -184,7 +214,7 @@ export class Library {
   }
 
   list(q: ShotQuery): { items: Shot[]; total: number } {
-    const where: string[] = []
+    const where: string[] = [REAL]
     const params: Record<string, unknown> = {}
     if (q.session) {
       where.push('session = @session')
@@ -218,12 +248,87 @@ export class Library {
 
   sessions(): Session[] {
     return this.db
-      .prepare(`SELECT session, COUNT(*) AS count FROM shots GROUP BY session ORDER BY session DESC`)
+      .prepare(`SELECT session, COUNT(*) AS count FROM shots WHERE ${REAL} GROUP BY session ORDER BY session DESC`)
       .all() as Session[]
   }
 
+  // ---- sessions (cache of each folder's .shotdrop.json) ----
+
+  sessionMetas(): Map<string, SessionMeta> {
+    const rows = this.db.prepare(`SELECT * FROM sessions`).all() as SessionCacheRow[]
+    return new Map(rows.map((r) => [r.folder, cacheToMeta(r)]))
+  }
+
+  upsertSession(folder: string, m: SessionMeta): void {
+    this.db.transaction(() => {
+      // A copied folder carries its twin's id: the folder just written keeps it, the other shows as unnamed.
+      this.db.prepare(`DELETE FROM sessions WHERE id = ? AND folder != ?`).run(m.id, folder)
+      this.insertSession(folder, m)
+    })()
+  }
+
+  replaceSessions(rows: { folder: string; meta: SessionMeta }[]): void {
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM sessions`).run()
+      for (const r of rows) {
+        try {
+          this.insertSession(r.folder, r.meta)
+        } catch {
+          /* duplicate id on another folder: this one stays unnamed in the cache */
+        }
+      }
+    })()
+  }
+
+  private insertSession(folder: string, m: SessionMeta): void {
+    this.db
+      .prepare(
+        `INSERT INTO sessions (folder, id, name, client, notes, created_by, created_at, updated_at)
+         VALUES (@folder, @id, @name, @client, @notes, @createdBy, @createdAt, @updatedAt)
+         ON CONFLICT(folder) DO UPDATE SET id = excluded.id, name = excluded.name, client = excluded.client, notes = excluded.notes,
+           created_by = excluded.created_by, created_at = excluded.created_at, updated_at = excluded.updated_at`
+      )
+      .run({ folder, id: m.id, name: m.name, client: m.client ?? null, notes: m.notes ?? null, createdBy: m.createdBy, createdAt: m.createdAt, updatedAt: m.updatedAt })
+  }
+
+  /**
+   * The sync queue only knows `files` rows, and a file row needs a shot, so each session's .shotdrop.json hangs off one
+   * hidden anchor shot (dot name, kind 'other'). Creates or refreshes it and returns the file id to enqueue.
+   */
+  setSessionAnchor(folder: string, path: string, relPath: string, size: number, hash: string): number {
+    return this.db.transaction(() => {
+      const now = Date.now()
+      const key = `${folder}/.shotdrop.json`
+      const shot = this.db.prepare(`SELECT id FROM shots WHERE key = ?`).get(key) as { id: number } | undefined
+      const shotId =
+        shot?.id ??
+        Number(
+          this.db
+            .prepare(`INSERT INTO shots (key, session, name, captured_at, imported_at) VALUES (?, ?, '.shotdrop.json', ?, ?)`)
+            .run(key, folder, now, now).lastInsertRowid
+        )
+      const f = this.db.prepare(`SELECT id FROM files WHERE shot_id = ?`).get(shotId) as { id: number } | undefined
+      if (f) {
+        this.db.prepare(`UPDATE files SET path = ?, rel_path = ?, size = ?, hash = ? WHERE id = ?`).run(path, relPath, size, hash, f.id)
+        return f.id
+      }
+      return Number(
+        this.db
+          .prepare(`INSERT INTO files (shot_id, path, rel_path, name, kind, size, hash, imported_at) VALUES (?, ?, ?, '.shotdrop.json', 'other', ?, ?, ?)`)
+          .run(shotId, path, relPath, size, hash, now).lastInsertRowid
+      )
+    })()
+  }
+
+  /** Folder and file id of every session meta file already registered for sync. */
+  sessionAnchorFiles(): { folder: string; fileId: number }[] {
+    return this.db
+      .prepare(`SELECT s.session AS folder, f.id AS fileId FROM shots s JOIN files f ON f.shot_id = s.id WHERE s.name = '.shotdrop.json'`)
+      .all() as { folder: string; fileId: number }[]
+  }
+
   count(): number {
-    return (this.db.prepare(`SELECT COUNT(*) AS n FROM shots`).get() as { n: number }).n
+    return (this.db.prepare(`SELECT COUNT(*) AS n FROM shots WHERE ${REAL}`).get() as { n: number }).n
   }
 
   update(id: number, patch: ShotPatch): Shot | undefined {
@@ -458,7 +563,7 @@ export class Library {
            SUM(f.kind IN ('jpeg','heif')) AS jpgN, SUM(CASE WHEN f.kind IN ('jpeg','heif') THEN f.size ELSE 0 END) AS jpgB,
            SUM(f.kind = 'raw') AS rawN, SUM(CASE WHEN f.kind = 'raw' THEN f.size ELSE 0 END) AS rawB,
            SUM(s.flag = 1 AND f.kind != 'sidecar') AS pickN, SUM(CASE WHEN s.flag = 1 AND f.kind != 'sidecar' THEN f.size ELSE 0 END) AS pickB
-         FROM files f JOIN shots s ON s.id = f.shot_id`
+         FROM files f JOIN shots s ON s.id = f.shot_id WHERE s.name NOT LIKE '.%'`
       )
       .get() as Record<string, number | null>
     const n = (k: string): number => row[k] ?? 0

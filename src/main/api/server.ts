@@ -11,6 +11,8 @@ import { checkPath, ensurePath, listPlaces } from '../core/places'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Core } from '../core'
+import { DATE_RE, SessionService, safeFolder, sanitizeName } from '../core/sessions'
+import type { RemoteSettings } from '@shared/remote'
 import type { Destination, ExportOptions, Flag, ServerEvent, Settings, ShotPatch, ShotSource, SyncStatus } from '@shared/types'
 
 const isLoopback = (ip: string): boolean => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
@@ -109,7 +111,37 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   app.get('/api/status', async () => core.status())
 
   // ---- shots ----
-  app.get('/api/sessions', async () => core.lib.sessions())
+  // ---- sessions (session folders and their .shotdrop.json) ----
+  const sessions = new SessionService(
+    core.lib,
+    () => core.settings.libraryDir,
+    () => (core.settings as Settings & Partial<RemoteSettings>).ingest?.currentSession ?? null,
+    () => core.settings.destinations.filter((d) => d.enabled).map((d) => d.id),
+    (folder) => core.bus.emit({ type: 'session:changed', folder } as unknown as ServerEvent),
+    () => core.sync.pump()
+  )
+  const sessionBody = {
+    type: 'object',
+    additionalProperties: false,
+    properties: { name: { type: 'string' }, client: { type: 'string' }, notes: { type: 'string' } }
+  } as const
+  app.get('/api/sessions', async () => sessions.list())
+  app.post(
+    '/api/sessions',
+    { schema: { body: { ...sessionBody, required: ['name'], properties: { ...sessionBody.properties, date: { type: 'string' }, makeCurrent: { type: 'boolean' } } } } },
+    async (req, reply) => {
+      const b = req.body as { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean }
+      if (!sanitizeName(b.name)) return reply.code(400).send({ error: 'Session name is required' })
+      if (b.date !== undefined && !DATE_RE.test(b.date)) return reply.code(400).send({ error: 'date must be YYYY-MM-DD' })
+      return sessions.create(b)
+    }
+  )
+  app.patch('/api/sessions/:folder', { schema: { body: sessionBody } }, async (req, reply) => {
+    const folder = safeFolder(core.settings.libraryDir, (req.params as { folder: string }).folder)
+    if (!folder) return reply.code(400).send({ error: 'Bad session folder' })
+    const row = await sessions.patch(folder, req.body as { name?: string; client?: string; notes?: string })
+    return row ?? reply.code(404).send({ error: 'Unknown session' })
+  })
   app.get('/api/library/counts', async () => core.lib.filterCounts())
 
   app.get('/api/shots', async (req) => {
