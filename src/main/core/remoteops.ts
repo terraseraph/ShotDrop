@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { Destination, ServerEvent } from '@shared/types'
-import type { RemoteOp } from '@shared/remote'
+import type { Destination, ServerEvent, Settings } from '@shared/types'
+import type { RemoteOp, RemoteSettings } from '@shared/remote'
 import type { Core } from './index'
 import type { RemoteOpRow } from './library'
 import { remoteFor } from './remote'
@@ -134,7 +134,11 @@ export class RemoteOpsService {
 
   // ---------------------------------------------------------------- rename
 
-  /** First free folder for `base` locally and in every destination's cached listing: `base`, `base-2`, ... */
+  /**
+   * First free folder for `base` locally and in every destination's cached listing: `base`, `base-2`, ...
+   * Note: `rclone moveto` of a folder onto a path that already exists as a folder on the remote merges into it instead of
+   * failing, and the remote check only sees the cached listing, so a collision slips through when that cache is stale.
+   */
   freeFolder(base: string, current?: string): string {
     let n = 1
     let f = base
@@ -183,6 +187,9 @@ export class RemoteOpsService {
         throw e
       }
       this.queueMoves(folder, target)
+      // s2's current-session setting (absent on branches without it) must keep pointing at the renamed folder.
+      const cur = (this.core.settings as Settings & Partial<RemoteSettings>).ingest
+      if (cur?.currentSession === folder) void this.core.updateSettings({ ingest: { ...cur, currentSession: target } } as Partial<Settings>)
       lib.forgetRemoteEntries(folder)
       for (const d of this.core.settings.destinations) sync.forgetDirs(d, folder)
     } finally {
