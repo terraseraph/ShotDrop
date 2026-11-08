@@ -69,6 +69,9 @@ export class CloudAccounts {
     private noOpenBrowser = false
   ) {}
 
+  /** Called after the config gains or loses a remote, so a running rclone daemon drops what it cached. */
+  onConfigChanged?: () => void
+
   cfgArgs = (): string[] => ['--config', this.confPath]
   private cfg = (): string[] => this.cfgArgs()
 
@@ -149,6 +152,7 @@ export class CloudAccounts {
         '--non-interactive', // never fall into rclone's own OAuth wizard (hidden browser) if the token is unusable
         ...this.cfg()
       ])
+      this.onConfigChanged?.()
       return { name, provider, fullAccess: scope !== 'drive.file', ownClient: !!opts.clientId }
     } finally {
       proc.kill()
@@ -198,6 +202,7 @@ export class CloudAccounts {
   async disconnect(name: string): Promise<void> {
     await this.known(name)
     await rclone(this.bin(), ['config', 'delete', name, ...this.cfg()])
+    this.onConfigChanged?.()
   }
 }
 

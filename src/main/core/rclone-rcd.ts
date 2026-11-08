@@ -107,6 +107,17 @@ export class RcloneDaemon {
     return true
   }
 
+  /** The config gained or lost a remote (link/disconnect): drop cached backends, or restart if that fails. */
+  async forget(): Promise<void> {
+    if (!this.s.running) return
+    this.known.clear()
+    try {
+      await this.call('fscache/clear', {}, 10_000)
+    } catch {
+      await this.kill()
+    }
+  }
+
   private up(): Promise<boolean> {
     if (this.proc && this.s.running) return Promise.resolve(true)
     if (this.starting) return this.starting
@@ -130,10 +141,6 @@ export class RcloneDaemon {
         ...cfg,
         '--rc-addr',
         `127.0.0.1:${this.port}`,
-        '--rc-user',
-        user,
-        '--rc-pass',
-        pass,
         '--contimeout',
         '20s',
         '--timeout',
@@ -145,7 +152,7 @@ export class RcloneDaemon {
       ]
       if (this.everStarted) this.s.restarts++
       this.everStarted = true
-      const p = spawn(bin, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] })
+      const p = spawn(bin, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, RCLONE_RC_USER: user, RCLONE_RC_PASS: pass } })
       this.proc = p
       let tail = ''
       p.stderr?.on('data', (d: Buffer) => (tail = (tail + d.toString()).slice(-2000)))

@@ -60,6 +60,7 @@ export class Core {
     this.cloud = new CloudAccounts(join(opts.dataDir, 'rclone.conf'), () => toolPath(this.settings.rclonePath, 'rclone'))
     this.rcd = new RcloneDaemon({ cloud: this.cloud, rclonePath: () => this.settings.rclonePath, log: (m) => console.warn(m) })
     setRcloneDaemon(this.rcd)
+    this.cloud.onConfigChanged = () => void this.rcd.forget()
     this.meta = new MetadataStore(join(opts.dataDir, 'cache'))
     this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud, opts.trash)
     this.xmp = new XmpService(

@@ -279,7 +279,7 @@ class RcloneFs implements RemoteFs {
     try {
       const rel = safeRel(path)
       await this.viaRcd(
-        (d) => d.rc('operations/copyfile', { srcFs: this.fsArg(), srcRemote: rel, dstFs: dirname(tmp), dstRemote: basename(tmp) }),
+        (d) => d.rc('operations/copyfile', { srcFs: this.fsArg(), srcRemote: rel, dstFs: dirname(tmp).replace(/\\/g, '/'), dstRemote: basename(tmp) }),
         () => this.run(['copyto', this.at(path), tmp])
       )
       await rename(tmp, toLocal)
@@ -292,7 +292,7 @@ class RcloneFs implements RemoteFs {
   async upload(fromLocal: string, path: string): Promise<void> {
     const rel = safeRel(path)
     await this.viaRcd(
-      (d) => d.rc('operations/copyfile', { srcFs: dirname(fromLocal), srcRemote: basename(fromLocal), dstFs: this.fsArg(), dstRemote: rel }),
+      (d) => d.rc('operations/copyfile', { srcFs: dirname(fromLocal).replace(/\\/g, '/'), srcRemote: basename(fromLocal), dstFs: this.fsArg(), dstRemote: rel }),
       () => this.run(['copyto', fromLocal, this.at(path)])
     )
   }
@@ -320,12 +320,8 @@ class RcloneFs implements RemoteFs {
   async remove(path: string): Promise<void> {
     const rel = safeRel(path)
     try {
-      // Drive's use_trash defaults to true in rclone; the spawned path also forces it with a flag. rc has no per-call
-      // backend flag, so a config that sets use_trash=false would permanently delete here.
-      await this.viaRcd(
-        (d) => d.rc('operations/deletefile', { fs: this.fsArg(), remote: rel }),
-        () => this.run(['deletefile', this.at(path), '--drive-use-trash=true'])
-      )
+      // Always spawned: rc can't carry the backend flag that keeps Drive deletes in the trash, and deletes are rare.
+      await this.run(['deletefile', this.at(rel), '--drive-use-trash=true'])
     } catch (e) {
       const err = e as SyncError
       if (err.exitCode === 3 || err.exitCode === 4) return
