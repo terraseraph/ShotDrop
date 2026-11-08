@@ -530,7 +530,13 @@ export class Library {
 
   /** Per-destination job totals, for progress rings. */
   destProgress(): Record<string, { done: number; total: number; running: number; errors: number }> {
-    const rows = this.db.prepare(`SELECT dest_id, status, COUNT(*) AS n FROM sync_jobs GROUP BY dest_id, status`).all() as {
+    // The hidden .shotdrop.json anchors are bookkeeping, not photos: an empty library must not read "1/1 synced".
+    const rows = this.db
+      .prepare(
+        `SELECT j.dest_id, j.status, COUNT(*) AS n FROM sync_jobs j JOIN files f ON f.id = j.file_id JOIN shots s ON s.id = f.shot_id
+         WHERE s.name NOT LIKE '.%' GROUP BY j.dest_id, j.status`
+      )
+      .all() as {
       dest_id: string
       status: SyncStatus
       n: number

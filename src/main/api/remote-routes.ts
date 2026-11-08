@@ -9,6 +9,7 @@ import type { Core } from '../core'
 import { BadPath, remoteFor, safeRel, type RemoteFs } from '../core/remote'
 import { RemoteThumbs } from '../core/remote-thumbs'
 import { isUnreachable, type SyncError } from '../core/retry'
+import { destProgressBySession, diffEntries } from '../core/diff'
 
 const FRESH_MS = 15_000 // a listing this young is not re-fetched on every request
 const META_NAME = '.shotdrop.json'
@@ -30,8 +31,15 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
 
   /** Last reachability seen per destination (from live lists); the sessions route reads this and does no network work. */
   const reach = new Map<string, boolean>()
-  /** Session meta read from `<folder>/.shotdrop.json`, remembered per "dest|folder" for the found group. */
-  const metas = new Map<string, SessionMeta | null>()
+  /** Session meta of found folders lives in remote_entries.meta_json (see metaOf), so names survive a restart. */
+  const metaOf = (destId: string, path: string): SessionMeta | null => {
+    const r = db.prepare(`SELECT meta_json FROM remote_entries WHERE dest_id = ? AND path = ?`).get(destId, path) as { meta_json: string | null } | undefined
+    try {
+      return r?.meta_json ? (JSON.parse(r.meta_json) as SessionMeta) : null
+    } catch {
+      return null
+    }
+  }
   const lastLive = new Map<string, number>()
   const inFlight = new Map<string, Promise<{ entries: RemoteEntry[]; meta: SessionMeta | null }>>()
 
@@ -115,9 +123,9 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
         const hasMeta = all.some((e) => !e.dir && e.name === META_NAME)
         const entries = all.filter((e) => !e.name.startsWith('.'))
         const meta = hasMeta ? await readMeta(fs, path) : null
-        if (path) metas.set(key, meta)
         const before = JSON.stringify(childRows(d.id, path).map((r) => [r.path, r.size, r.mtime]))
         upsert(d.id, path, entries)
+        if (path) db.prepare(`UPDATE remote_entries SET meta_json = ? WHERE dest_id = ? AND path = ?`).run(meta ? JSON.stringify(meta) : null, d.id, path)
         lastLive.set(key, Date.now())
         const changed = before !== JSON.stringify(childRows(d.id, path).map((r) => [r.path, r.size, r.mtime]))
         if (changed) core.bus.emit({ type: 'browse:updated', destId: d.id, path } as unknown as ServerEvent)
@@ -144,17 +152,19 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
       return fail(reply, e)
     }
     const key = `${d.id}|${path}`
+    const diff = (req.query as { diff?: string }).diff === '1'
+    const dif = (list: RemoteEntry[]): RemoteEntry[] => (diff ? diffEntries(db, d.id, path, list) : list)
     const rows = childRows(d.id, path)
     if (rows.length) {
       const cachedAt = Math.max(...rows.map((r) => r.seen_at))
       const recent = Date.now() - (lastLive.get(key) ?? 0) < FRESH_MS
       if (!recent) void liveList(d, path).catch(() => undefined)
-      const res: BrowseResult = { path, entries: toEntries(rows), meta: metas.get(key) ?? null, cachedAt, fresh: recent }
+      const res: BrowseResult = { path, entries: dif(toEntries(rows)), meta: metaOf(d.id, path), cachedAt, fresh: recent }
       return res
     }
     try {
       const { entries, meta } = await liveList(d, path)
-      const res: BrowseResult = { path, entries, meta, cachedAt: Date.now(), fresh: true }
+      const res: BrowseResult = { path, entries: dif(entries), meta, cachedAt: Date.now(), fresh: true }
       return res
     } catch (e) {
       return fail(reply, e)
@@ -220,7 +230,24 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
     }
   })
 
-  // ---- sessions: the "found" group (folders on destinations that have no local session). `mine` is filled in by b2-import. ----
+  // ---- sessions: `mine` (local sessions with per-destination progress from sync_jobs, no network) and the "found" group ----
+  const mineSessions = (): RemoteSessions['mine'] => {
+    const metas = core.lib.sessionMetas()
+    const progress = destProgressBySession(db)
+    const cur = (core.settings as { ingest?: { currentSession?: string | null } }).ingest?.currentSession ?? null
+    const known = new Set(core.settings.destinations.map((d) => d.id))
+    const counts = new Map(core.lib.sessions().map((s) => [s.session, s.count]))
+    return [...new Set([...counts.keys(), ...metas.keys()])]
+      .sort((a, b) => b.localeCompare(a))
+      .map((folder) => ({
+        folder,
+        count: counts.get(folder) ?? 0,
+        meta: metas.get(folder) ?? null,
+        current: cur === folder,
+        perDest: (progress.get(folder) ?? []).filter((p) => known.has(p.destId))
+      }))
+  }
+
   app.get('/api/remote/sessions', async (): Promise<RemoteSessions> => {
     const known = new Set(core.settings.destinations.map((d) => d.id))
     const local = new Set(core.lib.sessions().map((s) => s.session))
@@ -232,12 +259,12 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
     }
     const groups = new Map<string, RemoteSessions['found'][number]>()
     for (const r of dirs) {
-      const meta = metas.get(`${r.dest_id}|${r.path}`) ?? null
+      const meta = metaOf(r.dest_id, r.path)
       const key = meta ? meta.id : `f:${r.path}`
       let g = groups.get(key)
       if (!g) groups.set(key, (g = { key, folder: r.path, meta, perDest: [] }))
       g.perDest.push({ destId: r.dest_id, count: counts.get(`${r.dest_id}|${r.path}`) ?? null, offline: reach.get(r.dest_id) === false })
     }
-    return { mine: [], found: [...groups.values()].sort((a, b) => b.folder.localeCompare(a.folder)) }
+    return { mine: mineSessions(), found: [...groups.values()].sort((a, b) => b.folder.localeCompare(a.folder)) }
   })
 }
