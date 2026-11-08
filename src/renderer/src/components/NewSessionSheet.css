@@ -1,0 +1,17 @@
+.nss { gap: 12px; }
+.nss .row { display: flex; gap: 10px; }
+.nss-check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; cursor: pointer; }
+.nss-check input { margin-top: 3px; }
+.nss-check .field-hint { display: block; margin-top: 2px; }
+.nss-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.nss-actions .btn { justify-self: auto; }
+@media (max-width: 480px) { .nss .row { flex-direction: column; } }
+
+/* SessionRail additions */
+.gx-rail-new { margin: 0 8px 6px; height: 28px; border: 1px dashed var(--line-2, var(--line)); border-radius: 6px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; }
+.gx-rail-new:hover { background: var(--panel-2); color: var(--text); }
+.gx-rail-cur { display: flex; align-items: center; gap: 8px; margin: 0 8px 8px; padding: 6px 8px; border-radius: 6px; background: var(--panel-2); color: var(--text-2); font-size: 11px; line-height: 1.3; }
+.gx-rail-act { display: none; flex: 0 0 auto; height: 20px; padding: 0 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--text-2); font-size: 11px; cursor: pointer; }
+.gx-rail-row:hover .gx-rail-act, .gx-rail-row:focus-within .gx-rail-act { display: inline-block; }
+.gx-rail-act:hover { color: var(--text); background: var(--panel-3); }
+@media (pointer: coarse) { .gx-rail-act { display: inline-block; height: 28px; } .gx-rail-new { height: 40px; } }

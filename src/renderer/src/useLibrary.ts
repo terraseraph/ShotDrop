@@ -47,7 +47,14 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
     let watchdog: ReturnType<typeof setTimeout> | null = null
     let seq = 0
 
+    // Renames and moves change `session` on many shots at once; reload the list (debounced) instead of one event per shot.
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null
     const apply = (e: ServerEvent): void => {
+      if (e.type === 'session:changed') {
+        if (reloadTimer) clearTimeout(reloadTimer)
+        reloadTimer = setTimeout(() => void api.shots().then(({ items }) => !cancelled && setShots(items), () => undefined), 400)
+        return
+      }
       switch (e.type) {
         case 'shot:added':
           setShots((s) => (s.some((x) => x.id === e.shot.id) ? s : insertSorted(s, e.shot)))

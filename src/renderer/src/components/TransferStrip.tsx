@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DestStatus, DestinationFilter, Shot, Status } from '@shared/types'
+import type { TransferJob } from '@shared/remote'
+import { api } from '../api'
 import { ago, fmtSize } from '../format'
 
 const WORD: Record<DestinationFilter, string> = { all: 'everything', jpeg: 'JPEG', raw: 'RAW', picks: 'picks' }
@@ -40,6 +42,7 @@ export function TransferStrip({ status, shots, onSync, mobile }: Props) {
     return b / 10
   }, [shots, now])
 
+  const jobs = useTransfers()
   if (!status) return <div className="tstrip" aria-label="Transfers" />
   const receiving = status.ftp.activeConnections > 0
   const camLabel = status.cameras.filter((c) => c.connected).map((c) => c.label || c.username).join(' · ') || 'camera'
@@ -61,6 +64,7 @@ export function TransferStrip({ status, shots, onSync, mobile }: Props) {
           {receiving && <div className="bar"><i className="recv" /></div>}
           <span className="mono tx-note nowrap">{receiving ? `${status.ftp.activeConnections} open` : latest ? ago(latest.importedAt) : ''}</span>
         </div>
+        {jobs.length > 0 && <TransferJobs jobs={jobs} status={status} />}
         <div className="tx" onClick={onSync} role="button" tabIndex={0}>
           <span className="cap">OUT</span>
           {dests.map((d) => {
@@ -123,11 +127,52 @@ export function TransferStrip({ status, shots, onSync, mobile }: Props) {
           )
         })}
       </div>
+      {jobs.length > 0 && <TransferJobs jobs={jobs} status={status} />}
       <div className="tx tx-end">
         <span className="mono tx-note" title="Estimated from files landing in the last 10 s">↓ {fmtSize(down)}/s</span>
         <span className="mono tx-note">↑ {fmtSize(up)}/s</span>
         <button className="tb" style={{ height: 24, fontSize: 12, color: 'var(--accent)' }} onClick={onSync}>Sync</button>
       </div>
     </div>
+  )
+}
+
+/** Import and copy jobs from Browse: running ones, plus finished ones for a few seconds. */
+function useTransfers(): TransferJob[] {
+  const [jobs, setJobs] = useState<TransferJob[]>([])
+  useEffect(() => {
+    let alive = true
+    void api.transfers().then((l) => alive && setJobs(l.filter((j) => j.status === 'running'))).catch(() => undefined)
+    const off = api.onTransfer((j) => {
+      setJobs((cur) => [...cur.filter((x) => x.id !== j.id), j])
+      if (j.status !== 'running') setTimeout(() => setJobs((cur) => cur.filter((x) => x.id !== j.id)), 6000)
+    })
+    return () => { alive = false; off() }
+  }, [])
+  return jobs
+}
+
+function TransferJobs({ jobs, status }: { jobs: TransferJob[]; status: Status }) {
+  const name = (id?: string): string => status.destinations.find((d) => d.id === id)?.name ?? 'destination'
+  return (
+    <>
+      {jobs.map((j) => (
+        <div key={j.id} className="tx tx-job">
+          <span className="cap">{j.kind === 'import' ? 'GET' : 'COPY'}</span>
+          <span className="nowrap">{j.kind === 'import' ? `${name(j.destId)} → library` : `${name(j.destId)} → ${name(j.toDestId)}`}</span>
+          {j.status === 'running' ? (
+            <>
+              <div className="bar out"><i style={{ width: `${j.total ? Math.round(((j.done + j.failed) / j.total) * 100) : 0}%` }} /></div>
+              <span className="mono tx-note nowrap">{j.done}/{j.total}{j.failed ? ` · ${j.failed} failed` : ''}</span>
+              <button className="tb" style={{ height: 22, fontSize: 11 }} onClick={() => void api.cancelTransfer(j.id).catch(() => undefined)}>Cancel</button>
+            </>
+          ) : (
+            <span className="mono tx-note nowrap" style={j.status === 'error' ? { color: 'var(--reject-text)' } : undefined}>
+              {j.status === 'done' ? `done · ${j.done}${j.failed ? ` · ${j.failed} failed` : ''}` : j.status === 'cancelled' ? 'cancelled' : j.error ?? 'failed'}
+            </span>
+          )}
+        </div>
+      ))}
+    </>
   )
 }

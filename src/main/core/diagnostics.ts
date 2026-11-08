@@ -291,6 +291,21 @@ export async function runDiagnostics(core: Core, attempts: LoginAttempt[]): Prom
     /* library dir missing: the ingest check will complain */
   }
 
+  // 8. rclone daemon (only shown once it has been used or has failed)
+  const rcd = core.rcd.state()
+  if (rcd.running || rcd.restarts || rcd.lastError || rcd.disabled) {
+    checks.push({
+      id: 'rclone',
+      title: 'Cloud transfer helper',
+      level: rcd.disabled ? 'warn' : 'ok',
+      detail: rcd.running
+        ? `rclone daemon running (PID ${rcd.pid}, port ${rcd.port}, ${rcd.restarts} restart${rcd.restarts === 1 ? '' : 's'}).`
+        : rcd.disabled
+          ? `rclone daemon unavailable (${rcd.lastError ?? 'unknown'}); cloud calls start rclone each time, which is slower.`
+          : `rclone daemon idle (stops after 10 minutes unused, starts on demand${rcd.lastError ? `; last error: ${rcd.lastError}` : ''}).`
+    })
+  }
+
   return { checkedAt: Date.now(), checks }
 }
 

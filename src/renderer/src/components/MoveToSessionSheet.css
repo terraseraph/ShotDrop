@@ -1,0 +1,16 @@
+.mv-body { display: flex; flex-direction: column; gap: 12px; min-width: min(420px, 100%); }
+.mv-new { display: flex; gap: 8px; }
+.mv-input { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--raised); background: var(--panel); color: #fff; font: inherit; }
+.mv-input:focus { outline: 2px solid var(--focus); }
+.mv-list { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow: auto; }
+.mv-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--raised); background: var(--panel-2); color: var(--text-2); text-align: left; }
+.mv-row:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+.mv-row:disabled { opacity: 0.5; }
+.mv-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-count { color: var(--faint); font-size: 12px; flex: 0 0 auto; }
+.mv-empty, .mv-note { color: var(--faint); font-size: 12px; margin: 0; }
+.mv-error { color: #ff8a80; font-size: 13px; }
+
+.mv-ops { margin: 8px 12px 0; padding: 6px 8px; border-radius: 7px; background: var(--panel-2); color: var(--faint); font-size: 12px; }
+.mv-ops.err { color: #ff8a80; }
+.mv-ops button { margin-left: 6px; text-decoration: underline; color: inherit; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }

@@ -13,7 +13,7 @@ export interface CheckFix {
 }
 
 export interface Check {
-  id: 'ftp' | 'passive' | 'network' | 'firewall' | 'selftest' | 'camera' | 'disk'
+  id: 'ftp' | 'passive' | 'network' | 'firewall' | 'selftest' | 'camera' | 'disk' | 'rclone'
   title: string
   level: CheckLevel
   detail: string

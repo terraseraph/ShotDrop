@@ -7,6 +7,8 @@ const randomPassword = (): string => randomBytes(4).toString('hex')
 
 export function defaultSettings(picturesDir: string): Settings {
   return {
+    libraryId: `lib_${randomBytes(4).toString('hex')}`,
+    ingest: { currentSession: null, currentSessionEndsAt: null },
     libraryDir: join(picturesDir, 'ShotDrop'),
     ftp: {
       enabled: true,
@@ -46,7 +48,8 @@ export class ConfigStore {
         api: { ...defaults.api, ...saved.api },
         remote: { ...defaults.remote, ...saved.remote },
         tunnel: { ...defaults.tunnel, ...saved.tunnel },
-        ptp: { ...defaults.ptp, ...saved.ptp }
+        ptp: { ...defaults.ptp, ...saved.ptp },
+        ingest: { ...defaults.ingest, ...saved.ingest }
       }
     } else {
       this.value = defaults
@@ -66,7 +69,8 @@ export class ConfigStore {
       api: { ...this.value.api, ...patch.api },
       remote: { ...this.value.remote, ...patch.remote },
       tunnel: { ...this.value.tunnel, ...patch.tunnel },
-      ptp: { ...this.value.ptp, ...patch.ptp }
+      ptp: { ...this.value.ptp, ...patch.ptp },
+      ingest: { ...this.value.ingest, ...patch.ingest }
     }
     this.save()
     return this.get()
