@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Shot } from '@shared/types'
 import { fmtDay, useSessionNames } from '../sessions'
+import { RemoteOpsNote } from './RemoteOpsNote'
 
 const KEY = 'shotdrop.names'
 const LIVE_MS = 2 * 60_000
@@ -108,6 +109,7 @@ export function SessionRail({ allShots, session, source, onSession, onSource }: 
       {cams.map(([src, c]) => (
         <Row key={src} id={`cam:${src}`} auto={c.model ? `${c.model} · ${src}` : src} name={names[`cam:${src}`]} count={c.n} live={now - c.last < LIVE_MS} active={source === src} onClick={() => onSource(source === src ? '' : src)} onRename={rename} />
       ))}
+      <RemoteOpsNote />
       <div className="gx-rail-foot">Days and camera names are automatic. Double-click to rename.</div>
     </nav>
   )

@@ -94,7 +94,13 @@ export function useSessionNames() {
     else delete next[session]
     names = next // optimistic; the server's answer replaces it
     emit()
-    void api.patchSession(session, { name: n }).then(refresh, refresh)
+    void api
+      .patchSession(session, { name: n })
+      .then((row) => {
+        // A new name renames the folder: tell the views that were pointing at the old one.
+        if (row.folder !== session) window.dispatchEvent(new CustomEvent('shotdrop:session-renamed', { detail: { from: session, to: row.folder } }))
+      })
+      .then(refresh, refresh)
   }, [])
   const custom = useCallback((session: string) => cur[session] ?? '', [cur])
   const title = useCallback(
