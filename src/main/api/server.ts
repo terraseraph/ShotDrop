@@ -6,6 +6,7 @@ import { createHmac, randomUUID } from 'node:crypto'
 import { registerDiagnostics } from './diagnostics'
 import { registerCloud } from './cloud'
 import { ensureDestLibrary, registerLibrary } from './library'
+import { registerRemoteBrowse } from './remote-routes'
 import { listSources, metadataFile, resolveImage } from '../core/sources'
 import { exportJpeg } from '../core/exporter'
 import { checkPath, ensurePath, listPlaces } from '../core/places'
@@ -555,6 +556,8 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   registerDiagnostics(app, core)
   registerCloud(app, core)
   registerLibrary(app, core, local)
+  // ---- browse destinations (read-only; no `local` guard, so the phone can use them with the PIN) ----
+  registerRemoteBrowse(app, core)
 
   // ---- remote web UI ----
   if (opts.rendererDir && existsSync(opts.rendererDir)) {

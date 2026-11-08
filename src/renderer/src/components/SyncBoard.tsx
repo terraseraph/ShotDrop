@@ -10,6 +10,8 @@ import { fetchPlaces, getJson, lastPart } from './fsApi'
 import { TabBar } from './TabBar'
 import { Dialog } from './Dialog'
 import './SyncBoard.css'
+import { Browse } from './Browse'
+import { MobileBrowse } from './MobileBrowse'
 import './Phone.css'
 
 type Toast = (t: string, tone?: 'info' | 'error') => void
@@ -185,6 +187,7 @@ export function SyncBoard({ s, status, reload, toast }: Props) {
   const m = useSyncModel(s, status, reload, toast)
   const [sheet, setSheet] = useState<{ editing?: Destination; kind?: Kind } | null>(null)
   const [menu, setMenu] = useState<string | null>(null)
+  const [browse, setBrowse] = useState<{ id: string; name: string } | null>(null)
   const [queue, setQueue] = useState<{ file: string; destId: string; status: string; error: string | null }[] | null>(null)
   const cams = status?.cameras ?? []
   const camsOn = cams.filter((c) => c.connected)
@@ -307,6 +310,7 @@ export function SyncBoard({ s, status, reload, toast }: Props) {
                       {menu === r.d.id && (
                         <motion.div role="menu" className="sx-menu sheet" initial={{ opacity: 0, y: -4, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={firm}>
                           <button role="menuitem" onClick={() => { setMenu(null); void m.run(async () => toast(`Queued ${(await api.resync(r.d.id)).queued} files for ${r.d.name}`)) }}>Resync everything</button>
+                          <button role="menuitem" onClick={() => { setMenu(null); setBrowse({ id: r.d.id, name: r.d.name }) }}>Browse files…</button>
                           <button role="menuitem" onClick={() => { setMenu(null); setSheet({ editing: r.d }) }}>Change folder…</button>
                           <button role="menuitemcheckbox" aria-checked={!!r.d.mirrorDeletes} onClick={() => { setMenu(null); void m.mirror(r) }}>{r.d.mirrorDeletes ? '✓ ' : ''}Delete here when I delete in ShotDrop</button>
                           {r.kind === 'folder' && desktop && <button role="menuitem" onClick={() => { setMenu(null); void desktop!.openPath(r.path) }}>Show folder</button>}
@@ -353,6 +357,7 @@ export function SyncBoard({ s, status, reload, toast }: Props) {
       <AnimatePresence>
         {sheet && <AddDestinationSheet key="sheet" s={s} status={status} editing={sheet.editing} initialKind={sheet.kind} toast={toast} onClose={() => setSheet(null)} onDone={(msg) => { close(msg); m.loadAccounts() }} />}
       </AnimatePresence>
+      {browse && <Browse dest={browse} onClose={() => setBrowse(null)} />}
     </div>
   )
 }
@@ -420,6 +425,7 @@ export function MobileSync({ status, toast }: { status: Status | null; toast: To
   const [tick, setTick] = useState(0)
   useEffect(() => { void api.settings().then(setS, () => undefined) }, [tick, status?.destinations.length])
   const m = useSyncModel(s, status, () => setTick((t) => t + 1), toast)
+  const [browse, setBrowse] = useState<{ id: string; name: string } | null>(null)
   const cams = status?.cameras ?? []
   const camsOn = cams.filter((c) => c.connected).length
   const sync = status?.sync
@@ -461,6 +467,7 @@ export function MobileSync({ status, toast }: { status: Status | null; toast: To
                   <div className="sx-line sx-sub">{r.h === 'syncing' && <span>{m.counts && m.counts.all.files ? fmtSize(r.left * (m.counts.all.bytes / m.counts.all.files)) : ''}{r.etaSecs != null ? ` · ${etaText(r.etaSecs)}` : ''}</span>}<button className="m-act" onClick={() => void m.toggle(r)}>{r.d.enabled ? 'Pause' : 'Resume'}</button></div>
                 )}
                 {(r.h === 'failed') && <button className="m-act" onClick={() => void m.retry()}>Retry</button>}
+                <button className="m-act" onClick={() => setBrowse({ id: r.d.id, name: r.d.name })}>Browse files</button>
               </div>
             )
           })}
@@ -468,6 +475,7 @@ export function MobileSync({ status, toast }: { status: Status | null; toast: To
         <div className="sx-faintest" style={{ marginTop: 12 }}>Queue: {(sync?.pending ?? 0) + (sync?.running ?? 0)} jobs · {sync?.errors ?? 0} failed · resumes after restarts and offline periods.</div>
       </div>
       <TabBar current="sync" />
+      {browse && <MobileBrowse dest={browse} onClose={() => setBrowse(null)} />}
     </div>
   )
 }
