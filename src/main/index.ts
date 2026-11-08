@@ -106,6 +106,10 @@ app.on('second-instance', () => {
   }
 })
 
+// Log stray async failures instead of dying silently (or with Electron's error dialog).
+process.on('uncaughtException', (e) => console.error('[main] uncaughtException', e))
+process.on('unhandledRejection', (e) => console.error('[main] unhandledRejection', e))
+
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null)
   const dataDir = devHome ? join(devHome, 'app') : app.getPath('userData')
