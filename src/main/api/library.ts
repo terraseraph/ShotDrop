@@ -1,15 +1,13 @@
 import type { FastifyInstance, preHandlerHookHandler } from 'fastify'
 import { hostname } from 'node:os'
 import type { Destination, Settings } from '@shared/types'
-import type { LibraryMeta, RemoteSettings } from '@shared/remote'
+import type { LibraryMeta } from '@shared/remote'
 import type { Core } from '../core'
 import { toolPath } from '../core/bundled'
 import { ensureLibraryMeta, newLibraryId, readLibraryMeta, type LibraryDest, type LibraryRc } from '../core/cloud'
 
 /** Destinations whose library.json writers[] entry this app run has already refreshed. */
 const touched = new Set<string>()
-
-type Full = Settings & RemoteSettings
 
 const rcFor = (core: Core, dest: LibraryDest): LibraryRc => {
   const remote = dest.target.split(':')[0]
@@ -18,10 +16,10 @@ const rcFor = (core: Core, dest: LibraryDest): LibraryRc => {
 
 /** This library's id, generated once and kept in settings. */
 async function libraryId(core: Core): Promise<string> {
-  const have = (core.settings as Full).libraryId
+  const have = core.settings.libraryId
   if (have) return have
   const id = newLibraryId()
-  await core.updateSettings({ libraryId: id } as Partial<Settings>)
+  await core.updateSettings({ libraryId: id })
   return id
 }
 
@@ -65,7 +63,7 @@ export function registerLibrary(app: FastifyInstance, core: Core, local: { preHa
     },
     async (req) => {
       const r = await look(req.body as LibraryDest)
-      const ours = (core.settings as Full).libraryId
+      const ours = core.settings.libraryId
       return { ...r, other: !!r.library && r.library.libraryId !== ours }
     }
   )

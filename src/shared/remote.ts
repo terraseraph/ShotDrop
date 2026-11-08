@@ -12,5 +12,3 @@ export interface BrowseResult { path: string; entries: RemoteEntry[]; meta: Sess
 export interface TransferJob { id: number; kind: 'import'|'copy'; destId: string; toDestId?: string; total: number; done: number; failed: number; status: 'running'|'done'|'error'|'cancelled'; error?: string }
 export interface RemoteOp { id: number; destId: string; op: 'move'|'delete'; from: string; to?: string; status: 'pending'|'running'|'error'; attempts: number; error?: string }
 
-/** Settings additions; intersect with `Settings` at use sites (`Settings & RemoteSettings`) until folded into types.ts. */
-export interface RemoteSettings { libraryId: string; ingest: { currentSession: string | null; currentSessionEndsAt: number | null } }

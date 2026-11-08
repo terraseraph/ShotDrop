@@ -2,11 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { Settings } from '@shared/types'
-import type { RemoteSettings } from '@shared/remote'
 
 const randomPassword = (): string => randomBytes(4).toString('hex')
 
-export function defaultSettings(picturesDir: string): Settings & Pick<RemoteSettings, 'libraryId' | 'ingest'> {
+export function defaultSettings(picturesDir: string): Settings {
   return {
     libraryId: `lib_${randomBytes(4).toString('hex')}`,
     ingest: { currentSession: null, currentSessionEndsAt: null },
@@ -34,14 +33,14 @@ export function defaultSettings(picturesDir: string): Settings & Pick<RemoteSett
 /** Settings persisted as JSON in the app data dir. Deep-merges with defaults so new keys appear on upgrade. */
 export class ConfigStore {
   private file: string
-  private value: Settings & RemoteSettings
+  private value: Settings
 
   constructor(dataDir: string, picturesDir: string) {
     mkdirSync(dataDir, { recursive: true })
     this.file = join(dataDir, 'settings.json')
     const defaults = defaultSettings(picturesDir)
     if (existsSync(this.file)) {
-      const saved = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<Settings & RemoteSettings>
+      const saved = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<Settings>
       this.value = {
         ...defaults,
         ...saved,
@@ -58,11 +57,11 @@ export class ConfigStore {
     this.save()
   }
 
-  get(): Settings & RemoteSettings {
+  get(): Settings {
     return structuredClone(this.value)
   }
 
-  update(patch: Partial<Settings & RemoteSettings>): Settings & RemoteSettings {
+  update(patch: Partial<Settings>): Settings {
     this.value = {
       ...this.value,
       ...patch,

@@ -104,7 +104,7 @@ export class TransferService {
 
   private emit(row: TransferJob): void {
     this.db.prepare(`UPDATE transfer_jobs SET total = ?, done = ?, failed = ?, status = ?, error = ? WHERE id = ?`).run(row.total, row.done, row.failed, row.status, row.error ?? null, row.id)
-    this.core.bus.emit({ type: 'transfer:progress', ...row } as unknown as ServerEvent)
+    this.core.bus.emit({ type: 'transfer:progress', ...row })
   }
 
   private finish(job: Job, status: TransferJob['status'], error?: string): void {
@@ -315,7 +315,7 @@ export class TransferService {
       }
       core.sync.pump()
     }
-    core.bus.emit({ type: 'session:changed', folder } as unknown as ServerEvent)
+    core.bus.emit({ type: 'session:changed', folder })
   }
 
   private async runCopy(job: Job, src: Destination, staging: string): Promise<void> {

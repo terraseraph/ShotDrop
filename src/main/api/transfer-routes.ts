@@ -102,7 +102,7 @@ export function registerTransfers(app: FastifyInstance, core: Core): void {
       await writeFile(file, JSON.stringify(meta, null, 2) + '\n', 'utf8')
       await fs.upload(file, `${path}/${META_FILE}`)
       core.db.prepare(`UPDATE remote_entries SET meta_json = ? WHERE dest_id = ? AND path = ?`).run(JSON.stringify(meta), d.id, path)
-      core.bus.emit({ type: 'browse:updated', destId: d.id, path } as unknown as ServerEvent)
+      core.bus.emit({ type: 'browse:updated', destId: d.id, path })
       return meta
     } catch (e) {
       return fail(reply, e)

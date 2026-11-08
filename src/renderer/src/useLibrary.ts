@@ -50,7 +50,7 @@ export function useLibrary(onArrival: (shot: Shot) => void) {
     // Renames and moves change `session` on many shots at once; reload the list (debounced) instead of one event per shot.
     let reloadTimer: ReturnType<typeof setTimeout> | null = null
     const apply = (e: ServerEvent): void => {
-      if ((e as { type: string }).type === 'session:changed') {
+      if (e.type === 'session:changed') {
         if (reloadTimer) clearTimeout(reloadTimer)
         reloadTimer = setTimeout(() => void api.shots().then(({ items }) => !cancelled && setShots(items), () => undefined), 400)
         return

@@ -77,7 +77,7 @@ export class Core {
       clear: () => {
         const folder = this.config.get().ingest.currentSession ?? ''
         this.config.update({ ingest: { currentSession: null, currentSessionEndsAt: null } })
-        this.bus.emit({ type: 'session:changed', folder } as unknown as ServerEvent)
+        this.bus.emit({ type: 'session:changed', folder })
       }
     }
     this.ftp = new FtpService(

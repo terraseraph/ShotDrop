@@ -17,7 +17,7 @@ export function setCurrentSession(core: Core, folder: string | null, endAfterMin
   const endsAt = folder && endAfterMin && endAfterMin > 0 ? Date.now() + Math.round(endAfterMin * 60_000) : null
   const prev = core.config.get().ingest.currentSession
   core.config.update({ ingest: { currentSession: folder, currentSessionEndsAt: endsAt } })
-  core.bus.emit({ type: 'session:changed', folder: folder ?? prev ?? '' } as unknown as ServerEvent)
+  core.bus.emit({ type: 'session:changed', folder: folder ?? prev ?? '' })
   return { folder, endsAt }
 }
 
