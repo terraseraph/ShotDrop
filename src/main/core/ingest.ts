@@ -28,6 +28,11 @@ function hashFile(path: string): Promise<string> {
   })
 }
 
+/** exiftool's scratch file while rewriting a sidecar, and our own half-written downloads: never ingest these. */
+function isTransient(path: string): boolean {
+  return path.endsWith('_exiftool_tmp') || path.endsWith('.shotdrop-part')
+}
+
 function isSidecar(path: string): boolean {
   return extname(path).toLowerCase() === '.xmp'
 }
@@ -79,18 +84,24 @@ export class Ingestor {
     mkdirSync(this.incomingDir, { recursive: true })
     const stable = { stabilityThreshold: 600, pollInterval: 150 }
 
-    const incoming = watch(this.incomingDir, { ignoreInitial: false, awaitWriteFinish: stable })
+    // Transient Windows errors (EBUSY/EPERM on temp files) must never reach the process as unhandled 'error' events.
+    const guard = (w: FSWatcher, label: string): FSWatcher => w.on('error', (e) => console.error(`[watch] ${label}:`, e))
+
+    const incoming = guard(watch(this.incomingDir, { ignoreInitial: false, awaitWriteFinish: stable, ignored: isTransient }), 'incoming')
     incoming.on('add', (p) => this.enqueue(p, { mode: 'move', source: this.sourceFromIncoming(p) }))
     this.watchers.push(incoming)
 
     // Photos dropped straight into the library by hand. Dot folders (.incoming) have their own handling.
     const libDir = this.getLibraryDir()
-    const lib = watch(libDir, { ignoreInitial: true, awaitWriteFinish: stable, ignored: (p) => this.isHidden(libDir, p) })
+    const lib = guard(
+      watch(libDir, { ignoreInitial: true, awaitWriteFinish: stable, ignored: (p) => isTransient(p) || this.isHidden(libDir, p) }),
+      'library'
+    )
     lib.on('add', (p) => this.enqueueLibraryFile(libDir, p))
     this.watchers.push(lib)
 
     for (const folder of watchFolders.filter((f) => existsSync(f))) {
-      const w = watch(folder, { ignoreInitial: true, awaitWriteFinish: stable })
+      const w = guard(watch(folder, { ignoreInitial: true, awaitWriteFinish: stable, ignored: isTransient }), folder)
       w.on('add', (p) => this.enqueue(p, { mode: 'copy', source: basename(folder) }))
       this.watchers.push(w)
     }
@@ -108,7 +119,7 @@ export class Ingestor {
     for (const e of entries) {
       if (!e.isFile()) continue
       const p = join(e.parentPath, e.name)
-      if (this.isHidden(libDir, p) || !isImage(p) || this.lib.pathTaken(p) || this.libraryDupes.has(p)) continue
+      if (this.isHidden(libDir, p) || isTransient(p) || !isImage(p) || this.lib.pathTaken(p) || this.libraryDupes.has(p)) continue
       this.enqueueLibraryFile(libDir, p)
       n++
     }
