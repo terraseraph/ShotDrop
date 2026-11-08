@@ -125,6 +125,15 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     additionalProperties: false,
     properties: { name: { type: 'string' }, client: { type: 'string' }, notes: { type: 'string' } }
   } as const
+  // A session's hidden anchor shot (carries .shotdrop.json for sync) is not a shot to any /api/shots route.
+  app.addHook('onRequest', async (req, reply) => {
+    const m = /^\/api\/shots\/(\d+)(?:[/?]|$)/.exec(req.url)
+    if (m && core.lib.isAnchorId(Number(m[1]))) return reply.code(404).send({ error: 'Not found' })
+  })
+  app.addHook('preValidation', async (req) => {
+    const b = req.body as { ids?: unknown } | undefined
+    if (req.method === 'PATCH' && req.url === '/api/shots' && Array.isArray(b?.ids)) b.ids = b.ids.filter((i) => typeof i === 'number' && !core.lib.isAnchorId(i))
+  })
   app.get('/api/sessions', async () => sessions.list())
   app.post(
     '/api/sessions',
@@ -197,7 +206,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   /** Before deleting: which destinations hold copies, and which of them will lose theirs too (mirror deletes). */
   app.get('/api/shots/delete-preview', async (req, reply) => {
     const raw = String((req.query as { ids?: string }).ids ?? '')
-    const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    const ids = raw.split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0 && !core.lib.isAnchorId(n))
     if (!ids.length) return reply.code(400).send({ error: 'ids required' })
     return core.deletePreview(ids)
   })

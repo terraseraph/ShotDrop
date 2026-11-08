@@ -5,6 +5,7 @@ import type { SessionMeta } from '@shared/remote'
 
 /** Hidden anchor shots (one per session, holding its .shotdrop.json for sync) have dot names; real photos never do. */
 const REAL = `name NOT LIKE '.%'`
+export const isAnchorName = (name: string): boolean => name.startsWith('.')
 
 interface ShotRow {
   id: number
@@ -210,7 +211,7 @@ export class Library {
 
   get(id: number): Shot | undefined {
     const row = this.db.prepare(`SELECT * FROM shots WHERE id = ?`).get(id) as ShotRow | undefined
-    return row ? this.toShot(row) : undefined
+    return row && !isAnchorName(row.name) ? this.toShot(row) : undefined // session meta anchors are never shots outside this class
   }
 
   list(q: ShotQuery): { items: Shot[]; total: number } {
@@ -325,6 +326,12 @@ export class Library {
     return this.db
       .prepare(`SELECT s.session AS folder, f.id AS fileId FROM shots s JOIN files f ON f.shot_id = s.id WHERE s.name = '.shotdrop.json'`)
       .all() as { folder: string; fileId: number }[]
+  }
+
+  /** True for the hidden shot that carries a session's .shotdrop.json; routes treat its id as unknown. */
+  isAnchorId(id: number): boolean {
+    const r = this.db.prepare(`SELECT name FROM shots WHERE id = ?`).get(id) as { name: string } | undefined
+    return !!r && isAnchorName(r.name)
   }
 
   count(): number {
@@ -599,7 +606,7 @@ export class Library {
   }
 
   shotIdsWithFlag(flag: Flag): number[] {
-    return (this.db.prepare(`SELECT id FROM shots WHERE flag = ?`).all(flag) as { id: number }[]).map((r) => r.id)
+    return (this.db.prepare(`SELECT id FROM shots WHERE flag = ? AND ${REAL}`).all(flag) as { id: number }[]).map((r) => r.id)
   }
 
   private toShot(r: ShotRow): Shot {

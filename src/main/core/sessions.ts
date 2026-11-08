@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import type { SessionMeta, SessionRow } from '@shared/remote'
@@ -148,9 +148,14 @@ export async function rebuildSessions(libDir: string, lib: Library): Promise<voi
 /** Register the meta file with the sync queue (see Library.setSessionAnchor). Returns the file id, or null if the file isn't there. */
 export async function anchorMeta(libDir: string, lib: Library, folder: string, meta: SessionMeta): Promise<number | null> {
   const path = join(libDir, folder, META_FILE)
-  const st = await stat(path).catch(() => null)
-  if (!st) return null
-  return lib.setSessionAnchor(folder, path, `${folder}/${META_FILE}`, st.size, `meta:${meta.id}:${meta.updatedAt}`)
+  try {
+    const [st, body] = await Promise.all([stat(path), readFile(path)])
+    // files.hash is UNIQUE and a copied folder has identical content, so the folder goes into the hash.
+    const hash = createHash('sha1').update(folder).update('\n').update(body).digest('hex')
+    return lib.setSessionAnchor(folder, path, `${folder}/${META_FILE}`, st.size, hash)
+  } catch {
+    return null // missing file or a DB conflict: never breaks the caller
+  }
 }
 
 /** First free `folder`, then `folder-2`, `folder-3`... */
