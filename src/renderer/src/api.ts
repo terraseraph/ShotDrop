@@ -1,5 +1,7 @@
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, DeletePreview, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
 
+import type { BrowseResult, RemoteSessions } from '@shared/remote'
+
 interface DesktopBridge {
   apiBase: string
   desktop: true
@@ -127,6 +129,21 @@ export const api = {
   metadata: (id: number) => req<ShotMetadata>('GET', `/api/shots/${id}/metadata`),
   exportJpeg: (id: number, o: ExportOptions) => req<{ path: string }>('POST', `/api/shots/${id}/export`, o),
   shareLink: (id: number) => req<{ url: string | null; reason?: string; via?: string }>('GET', `/api/shots/${id}/link`),
+
+  // Browse a destination (read-only). The listing may come from cache first; `browse:updated` says a fresh one is ready.
+  browse: (destId: string, path: string) => req<BrowseResult>('GET', `/api/destinations/${destId}/browse?path=${encodeURIComponent(path)}`),
+  remoteSessions: () => req<RemoteSessions>('GET', '/api/remote/sessions'),
+  remoteThumbUrl: (destId: string, e: { path: string; size: number; mtime: number }) => withKey(`${base}/api/destinations/${destId}/thumb?path=${encodeURIComponent(e.path)}&size=${e.size}&mtime=${e.mtime}`),
+  remoteFileUrl: (destId: string, path: string, download = false) => withKey(`${base}/api/destinations/${destId}/file?path=${encodeURIComponent(path)}${download ? '&download=1' : ''}`),
+  /** Calls back when a live listing of `destId` changed. Returns an unsubscribe. */
+  onBrowseUpdated(fn: (destId: string, path: string) => void): () => void {
+    const es = new EventSource(withKey(`${base}/api/events`))
+    es.addEventListener('browse:updated', (m) => {
+      const e = JSON.parse((m as MessageEvent).data) as { destId: string; path: string }
+      fn(e.destId, e.path)
+    })
+    return () => es.close()
+  },
 
   // Images are served `immutable` and ids restart at 1 per library, so the URL carries a version.
   // File count changes when a better source (JPEG after RAW) re-renders the preview.
