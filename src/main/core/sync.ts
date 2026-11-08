@@ -8,6 +8,7 @@ import type { Bus } from './events'
 import { toolPath } from './bundled'
 import { isUnreachable, offlineDelay, type SyncError } from './retry'
 import type { CloudAccounts } from './cloud'
+import { isPhotoKind, kindOfName, thumbRel, thumbsDirOf } from './remote'
 
 const CONCURRENCY = 2
 const MAX_ATTEMPTS = 5 // real errors only; an unreachable destination waits without spending these
@@ -53,6 +54,8 @@ export class SyncService {
   /** Set by RemoteOpsService: runs its pending moves on every pump, and says whether a queued move still owns an upload's target. */
   onPump?: () => void
   uploadBlocked?: (destId: string, relPath: string) => boolean
+  /** Set by Core: the library thumbnail of a shot (it may not exist yet). */
+  thumbFor?: (shotId: number) => string
 
   constructor(
     private lib: Library,
@@ -221,6 +224,7 @@ export class SyncService {
           this.lib.finishSync(job.id)
           this.offline.delete(dest.id)
           this.recent.push({ t: Date.now(), dest: dest.id, size: file.size })
+          void this.sendThumb(dest, file)
         })
         .catch((e: SyncError) => {
           if (isUnreachable(e)) {
@@ -260,6 +264,8 @@ export class SyncService {
         .then(() => {
           this.lib.finishRemoteDelete(job.id)
           this.offline.delete(dest.id)
+          const dir = thumbsDirOf(dest)
+          if (dir && isPhotoKind(kindOfName(job.rel_path))) void this.removeRemote(dest, thumbRel(dir, job.rel_path)).catch(() => undefined)
         })
         .catch((e: SyncError) => {
           if (isUnreachable(e)) {
@@ -360,6 +366,27 @@ export class SyncService {
       '20s',
       ...cfg
     ])
+  }
+
+  /**
+   * Best effort: after a photo lands, put its library thumbnail beside the destination's other thumbnails. A miss (thumbnail
+   * not built yet, upload failed) is fine: browsing builds one from the photo and uploads it then.
+   */
+  private async sendThumb(dest: Destination, file: FileRow): Promise<void> {
+    const dir = thumbsDirOf(dest)
+    const local = this.thumbFor?.(file.shot_id)
+    if (!dir || !local || !isPhotoKind(kindOfName(file.rel_path))) return
+    await this.sendFile(dest, local, thumbRel(dir, file.rel_path)).catch(() => undefined)
+  }
+
+  /**
+   * Upload one local file that isn't a library file (a thumbnail) to `rel`. Goes through the same path as library uploads,
+   * so missing folders are made one at a time and Drive never gets two folders of the same name.
+   */
+  async sendFile(dest: Destination, local: string, rel: string): Promise<void> {
+    const st = await stat(local)
+    if (!st.size) return
+    await this.transfer(dest, { path: local, size: st.size, rel_path: rel } as FileRow)
   }
 
   private changed(shotId: number): void {

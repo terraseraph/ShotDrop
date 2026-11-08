@@ -49,7 +49,9 @@ const destinationSchema = {
     target: { type: 'string', minLength: 1 },
     filter: { type: 'string', enum: ['all', 'jpeg', 'raw', 'picks'] },
     enabled: { type: 'boolean' },
-    mirrorDeletes: { type: 'boolean' }
+    mirrorDeletes: { type: 'boolean' },
+    thumbs: { type: 'boolean' },
+    thumbsDir: { type: 'string', maxLength: 200 }
   }
 } as const
 

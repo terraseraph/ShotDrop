@@ -1,17 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, readdir, rm, stat } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, posix } from 'node:path'
 import type { Destination } from '@shared/types'
 import type { BrowseResult, RemoteEntry, RemoteSessions, SessionMeta } from '@shared/remote'
 import type { Core } from '../core'
-import { BadPath, remoteFor, safeRel, type RemoteFs } from '../core/remote'
+import { BadPath, isPhotoKind, kindOfName, remoteFor, safeRel, thumbRel, thumbsDirOf, type RemoteFs } from '../core/remote'
 import { RemoteThumbs } from '../core/remote-thumbs'
 import { isUnreachable, type SyncError } from '../core/retry'
 import { destProgressBySession, diffEntries } from '../core/diff'
 
 const FRESH_MS = 15_000 // a listing this young is not re-fetched on every request
+const HOSTED_MS = 5 * 60_000 // uploaded-thumbnail listings: browsing a folder live refreshes them sooner
+const PRUNE_GRACE_MS = 2 * 60_000 // a thumbnail this new may belong to a photo the listing just missed
 const META_NAME = '.shotdrop.json'
 
 const MIME: Record<RemoteEntry['kind'], string> = { jpeg: 'image/jpeg', heif: 'image/heif', raw: 'application/octet-stream', video: 'video/mp4', sidecar: 'application/xml', other: 'application/octet-stream' }
@@ -21,7 +23,8 @@ interface Row { path: string; name: string; dir: number; size: number; mtime: nu
 
 /**
  * Read-only browsing of destinations: /browse (cached listing, then live), /thumb, /file, and the "found" half of
- * /remote/sessions. Nothing here writes to a remote.
+ * /remote/sessions. The only writes are to a destination's thumbnail folder, when it has uploaded thumbnails switched
+ * on: missing ones are uploaded and ones whose photo is gone are removed. Photos are never touched.
  */
 export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
   const cacheDir = dirname(core.previews.thumbDir)
@@ -65,6 +68,51 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
   }
 
   const fsFor = (d: Destination): RemoteFs => remoteFor(d, { rclonePath: core.settings.rclonePath, cloud: core.cloud, libraryHas })
+
+  // ---- uploaded thumbnails (destinations with `thumbs` on) ----
+
+  /** One folder of the thumbnail tree, listed once and shared by every tile in that folder. */
+  const hostedCache = new Map<string, { at: number; list: Promise<RemoteEntry[]> }>()
+  const hostedList = (d: Destination, dir: string, folder: string, fresh = false): Promise<RemoteEntry[]> => {
+    const key = `${d.id}|${dir}|${folder}`
+    const hit = hostedCache.get(key)
+    if (hit && !fresh && Date.now() - hit.at < HOSTED_MS) return hit.list
+    const list = fsFor(d)
+      .list(folder ? `${dir}/${folder}` : dir)
+      .catch(() => [] as RemoteEntry[])
+    hostedCache.set(key, { at: Date.now(), list })
+    return list
+  }
+
+  /** Thumbnails uploaded (or being uploaded) by this run, so a tile asked for twice is sent once. */
+  const sent = new Set<string>()
+  const sendThumb = (d: Destination, dir: string, path: string, local: string, cleanup = false): void => {
+    const key = `${d.id}|${thumbRel(dir, path)}`
+    if (sent.has(key)) return
+    sent.add(key)
+    void core.sync
+      .sendFile(d, local, thumbRel(dir, path))
+      .catch(() => sent.delete(key))
+      .finally(() => cleanup && rm(local, { force: true }).catch(() => undefined))
+  }
+
+  /**
+   * After a live listing of `path`: remove thumbnails whose photo is no longer there, and thumbnail folders whose
+   * folder is gone (deleted or renamed outside ShotDrop). Only ever touches the thumbnail tree.
+   */
+  const prune = async (d: Destination, path: string, entries: RemoteEntry[], listedAt: number): Promise<void> => {
+    const dir = thumbsDirOf(d)
+    // A rename or move still queued: the photo side may have moved before its thumbnails, so don't call them orphans yet.
+    if (!dir || core.lib.pendingMoveTargets(d.id).length) return
+    const files = new Set(entries.filter((e) => !e.dir).map((e) => e.name))
+    const dirs = new Set(entries.filter((e) => e.dir).map((e) => e.name))
+    const fs = fsFor(d)
+    for (const t of await hostedList(d, dir, path, true)) {
+      if (t.mtime > listedAt - PRUNE_GRACE_MS) continue
+      if (t.dir ? dirs.has(t.name) : !t.name.toLowerCase().endsWith('.jpg') || files.has(t.name.slice(0, -4))) continue
+      await (t.dir ? fs.removeDir(t.path) : fs.remove(t.path)).catch(() => undefined)
+    }
+  }
 
   const dest = (req: FastifyRequest): Destination | undefined => core.settings.destinations.find((d) => d.id === (req.params as { id: string }).id)
 
@@ -118,8 +166,10 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
     const job = (async () => {
       const fs = fsFor(d)
       try {
+        const listedAt = Date.now()
         const all = await fs.list(path)
         reach.set(d.id, true)
+        void prune(d, path, all, listedAt).catch(() => undefined)
         const hasMeta = all.some((e) => !e.dir && e.name === META_NAME)
         const entries = all.filter((e) => !e.name.startsWith('.'))
         const meta = hasMeta ? await readMeta(fs, path) : null
@@ -179,7 +229,21 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
     try {
       const path = safeRel(q.path)
       if (!path) throw new BadPath('Bad path')
-      const jpg = await thumbs.get(d.id, fsFor(d), path, Number(q.size) || 0, Number(q.mtime) || 0)
+      // Already in the library: its own thumbnail is built from the whole file, so skip the remote round trip.
+      const shot = db.prepare(`SELECT shot_id FROM files WHERE rel_path = ?`).get(path) as { shot_id: number } | undefined
+      const local = shot ? core.previews.thumbPath(shot.shot_id) : null
+      const dir = isPhotoKind(kindOfName(path)) ? thumbsDirOf(d) : null
+      const folder = posix.dirname(path) === '.' ? '' : posix.dirname(path)
+      const hosted = dir && (await hostedList(d, dir, folder)).some((e) => !e.dir && e.name === `${basename(path)}.jpg`) ? thumbRel(dir, path) : undefined
+      if (local && (await stat(local).catch(() => null))?.size) {
+        if (dir && !hosted) sendThumb(d, dir, path, local)
+        return reply.header('content-type', 'image/jpeg').header('cache-control', 'private, max-age=86400').send(createReadStream(local))
+      }
+      const jpg = await thumbs.get(d.id, fsFor(d), path, Number(q.size) || 0, Number(q.mtime) || 0, hosted, (built) => {
+        if (!dir) return
+        const tmp = join(cacheDir, 'remote-thumbs', `.up-${createHash('sha1').update(`${d.id}|${path}`).digest('hex')}.jpg`)
+        void mkdir(dirname(tmp), { recursive: true }).then(() => writeFile(tmp, built)).then(() => sendThumb(d, dir, path, tmp, true), () => undefined)
+      })
       if (!jpg) return reply.code(204).send()
       return reply.header('content-type', 'image/jpeg').header('cache-control', 'private, max-age=86400').send(jpg)
     } catch (e) {

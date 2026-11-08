@@ -63,6 +63,7 @@ export class Core {
     this.cloud.onConfigChanged = () => void this.rcd.forget()
     this.meta = new MetadataStore(join(opts.dataDir, 'cache'))
     this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud, opts.trash)
+    this.sync.thumbFor = (shotId) => this.previews.thumbPath(shotId)
     this.xmp = new XmpService(
       this.lib,
       this.bus,

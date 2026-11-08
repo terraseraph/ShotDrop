@@ -73,7 +73,13 @@ export interface Destination {
   enabled: boolean
   /** Deleting a photo in ShotDrop also deletes the copies sent here. One-way: deleting here never touches the computer. */
   mirrorDeletes?: boolean
+  /** Also upload a small thumbnail of each photo, so browsing this destination shows previews fast on any device. */
+  thumbs?: boolean
+  /** Advanced: where those thumbnails live, relative to the destination root. Must start with a dot. Default `.shotdrop/thumbs`. */
+  thumbsDir?: string
 }
+
+export const DEFAULT_THUMBS_DIR = '.shotdrop/thumbs'
 
 export type CloudProvider = 'drive' | 'dropbox'
 

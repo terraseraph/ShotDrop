@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { copyFile, mkdir, open, readdir, rename, rm, stat, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
-import type { Destination } from '@shared/types'
+import { DEFAULT_THUMBS_DIR, type Destination } from '@shared/types'
 import type { RemoteEntry } from '@shared/remote'
 import { toolPath } from './bundled'
 import { isUnreachable, type SyncError } from './retry'
@@ -30,6 +30,7 @@ export interface RemoteFs {
   download(path: string, toLocal: string): Promise<void> // temp + rename
   move(from: string, to: string): Promise<void> // server-side where possible
   remove(path: string): Promise<void> // trash where the provider has one
+  removeDir(path: string): Promise<void> // a whole folder, trash where the provider has one; already gone is fine
   reachable(): Promise<boolean>
   upload(fromLocal: string, path: string): Promise<void> // explicit user action only (copy, adopt)
 }
@@ -71,6 +72,25 @@ export function kindOfName(name: string): RemoteEntry['kind'] {
   if (ext === '.xmp') return 'sidecar'
   return 'other'
 }
+
+export const isPhotoKind = (kind: RemoteEntry['kind']): boolean => kind === 'jpeg' || kind === 'raw' || kind === 'heif'
+
+/**
+ * Where this destination keeps uploaded thumbnails, or null when that is off. The folder must start with a dot so browsing,
+ * import and session discovery all skip it; anything else falls back to the default.
+ */
+export function thumbsDirOf(d: Destination): string | null {
+  if (!d.thumbs) return null
+  try {
+    const dir = safeRel(d.thumbsDir ?? '')
+    return dir.startsWith('.') ? dir : DEFAULT_THUMBS_DIR
+  } catch {
+    return DEFAULT_THUMBS_DIR
+  }
+}
+
+/** `2026-11-09/DSC_2934.JPG` → `.shotdrop/thumbs/2026-11-09/DSC_2934.JPG.jpg` (the full name, so a RAW+JPEG pair don't collide). */
+export const thumbRel = (dir: string, rel: string): string => `${dir}/${rel}.jpg`
 
 const unreachable = (message: string): SyncError => Object.assign(new Error(message), { unreachable: true })
 
@@ -175,6 +195,11 @@ class FolderFs implements RemoteFs {
       }
     }
     await rm(p, { recursive: true, force: true })
+  }
+
+  removeDir(path: string): Promise<void> {
+    if (!safeRel(path)) throw new BadPath('Bad path') // never the destination root
+    return this.remove(path)
   }
 
   async reachable(): Promise<boolean> {
@@ -325,6 +350,17 @@ class RcloneFs implements RemoteFs {
     } catch (e) {
       const err = e as SyncError
       if (err.exitCode === 3 || err.exitCode === 4) return
+      throw e
+    }
+  }
+
+  async removeDir(path: string): Promise<void> {
+    const rel = safeRel(path)
+    if (!rel) throw new BadPath('Bad path') // never the destination root
+    try {
+      await this.run(['purge', this.at(rel), '--drive-use-trash=true'])
+    } catch (e) {
+      if ((e as SyncError).exitCode === 3) return
       throw e
     }
   }
