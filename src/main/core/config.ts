@@ -6,9 +6,10 @@ import type { RemoteSettings } from '@shared/remote'
 
 const randomPassword = (): string => randomBytes(4).toString('hex')
 
-export function defaultSettings(picturesDir: string): Settings & Pick<RemoteSettings, 'libraryId'> {
+export function defaultSettings(picturesDir: string): Settings & Pick<RemoteSettings, 'libraryId' | 'ingest'> {
   return {
     libraryId: `lib_${randomBytes(4).toString('hex')}`,
+    ingest: { currentSession: null, currentSessionEndsAt: null },
     libraryDir: join(picturesDir, 'ShotDrop'),
     ftp: {
       enabled: true,
@@ -33,14 +34,14 @@ export function defaultSettings(picturesDir: string): Settings & Pick<RemoteSett
 /** Settings persisted as JSON in the app data dir. Deep-merges with defaults so new keys appear on upgrade. */
 export class ConfigStore {
   private file: string
-  private value: Settings
+  private value: Settings & RemoteSettings
 
   constructor(dataDir: string, picturesDir: string) {
     mkdirSync(dataDir, { recursive: true })
     this.file = join(dataDir, 'settings.json')
     const defaults = defaultSettings(picturesDir)
     if (existsSync(this.file)) {
-      const saved = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<Settings>
+      const saved = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<Settings & RemoteSettings>
       this.value = {
         ...defaults,
         ...saved,
@@ -48,7 +49,8 @@ export class ConfigStore {
         api: { ...defaults.api, ...saved.api },
         remote: { ...defaults.remote, ...saved.remote },
         tunnel: { ...defaults.tunnel, ...saved.tunnel },
-        ptp: { ...defaults.ptp, ...saved.ptp }
+        ptp: { ...defaults.ptp, ...saved.ptp },
+        ingest: { ...defaults.ingest, ...saved.ingest }
       }
     } else {
       this.value = defaults
@@ -56,11 +58,11 @@ export class ConfigStore {
     this.save()
   }
 
-  get(): Settings {
+  get(): Settings & RemoteSettings {
     return structuredClone(this.value)
   }
 
-  update(patch: Partial<Settings>): Settings {
+  update(patch: Partial<Settings & RemoteSettings>): Settings & RemoteSettings {
     this.value = {
       ...this.value,
       ...patch,
@@ -68,7 +70,8 @@ export class ConfigStore {
       api: { ...this.value.api, ...patch.api },
       remote: { ...this.value.remote, ...patch.remote },
       tunnel: { ...this.value.tunnel, ...patch.tunnel },
-      ptp: { ...this.value.ptp, ...patch.ptp }
+      ptp: { ...this.value.ptp, ...patch.ptp },
+      ingest: { ...this.value.ingest, ...patch.ingest }
     }
     this.save()
     return this.get()

@@ -7,6 +7,7 @@ import { registerDiagnostics } from './diagnostics'
 import { registerCloud } from './cloud'
 import { ensureDestLibrary, registerLibrary } from './library'
 import { registerRemoteBrowse } from './remote-routes'
+import { registerCurrentSession, setCurrentSession } from './current-session'
 import { listSources, metadataFile, resolveImage } from '../core/sources'
 import { exportJpeg } from '../core/exporter'
 import { checkPath, ensurePath, listPlaces } from '../core/places'
@@ -139,12 +140,15 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   app.get('/api/sessions', async () => sessions.list())
   app.post(
     '/api/sessions',
-    { schema: { body: { ...sessionBody, required: ['name'], properties: { ...sessionBody.properties, date: { type: 'string' }, makeCurrent: { type: 'boolean' } } } } },
+    { schema: { body: { ...sessionBody, required: ['name'], properties: { ...sessionBody.properties, date: { type: 'string' }, makeCurrent: { type: 'boolean' }, endAfterMin: { type: 'number', minimum: 0 } } } } },
     async (req, reply) => {
-      const b = req.body as { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean }
+      const b = req.body as { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean; endAfterMin?: number }
       if (!sanitizeName(b.name)) return reply.code(400).send({ error: 'Session name is required' })
       if (b.date !== undefined && !DATE_RE.test(b.date)) return reply.code(400).send({ error: 'date must be YYYY-MM-DD' })
-      return sessions.create(b)
+      const created = await sessions.create(b)
+      if (!b.makeCurrent) return created
+      setCurrentSession(core, created.folder, b.endAfterMin)
+      return sessions.row(created.folder)
     }
   )
   app.patch('/api/sessions/:folder', { schema: { body: sessionBody } }, async (req, reply) => {
@@ -558,6 +562,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   registerLibrary(app, core, local)
   // ---- browse destinations (read-only; no `local` guard, so the phone can use them with the PIN) ----
   registerRemoteBrowse(app, core)
+  registerCurrentSession(app, core)
 
   // ---- remote web UI ----
   if (opts.rendererDir && existsSync(opts.rendererDir)) {

@@ -92,7 +92,15 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 export const api = {
   status: () => req<Status>('GET', '/api/status'),
   sessions: () => req<(Session & SessionRow)[]>('GET', '/api/sessions'),
-  createSession: (b: { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean }) => req<Session & SessionRow>('POST', '/api/sessions', b),
+  createSession: (b: { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean; endAfterMin?: number }) => req<Session & SessionRow>('POST', '/api/sessions', b),
+  currentSession: () => req<{ folder: string | null; endsAt: number | null }>('GET', '/api/ingest/current-session'),
+  setCurrentSession: (folder: string | null, endAfterMin?: number) => req<{ folder: string | null; endsAt: number | null }>('PUT', '/api/ingest/current-session', { folder, endAfterMin }),
+  /** Calls back when the current session (or any session's details) changed, on this or another device. Returns an unsubscribe. */
+  onSessionChanged(fn: () => void): () => void {
+    const es = new EventSource(withKey(`${base}/api/events`))
+    es.addEventListener('session:changed', () => fn())
+    return () => es.close()
+  },
   patchSession: (folder: string, b: { name?: string; client?: string; notes?: string }) => req<Session & SessionRow>('PATCH', `/api/sessions/${encodeURIComponent(folder)}`, b),
   shots: () => req<{ items: Shot[]; total: number; seq: number }>('GET', '/api/shots?order=asc&limit=10000'),
   changes: (after: number) =>

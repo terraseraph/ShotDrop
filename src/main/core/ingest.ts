@@ -60,6 +60,9 @@ export class Ingestor {
   private watchers: FSWatcher[] = []
   /** Library files left alone because they're copies of a shot we already have; rescans skip them. */
   private libraryDupes = new Set<string>()
+  /** Where the current session (ingest target) lives; wired up by Core. Clears itself once `endsAt` passes. */
+  currentSessionSource: { get: () => { folder: string | null; endsAt: number | null }; clear: () => void } | null = null
+  private currentTimer: NodeJS.Timeout | null = null
 
   constructor(
     private lib: Library,
@@ -74,9 +77,23 @@ export class Ingestor {
     return join(this.getLibraryDir(), '.incoming')
   }
 
+  /** The folder new files go into, or null for the usual shoot-date folders. Also auto-clears an expired session. */
+  currentFolder(): string | null {
+    const src = this.currentSessionSource
+    const cur = src?.get()
+    if (!src || !cur?.folder) return null
+    if (cur.endsAt !== null && Date.now() >= cur.endsAt) {
+      src.clear()
+      return null
+    }
+    return existsSync(join(this.getLibraryDir(), cur.folder)) ? cur.folder : null
+  }
+
   /** Watch the FTP incoming dir (move) and any user folders (copy). */
   async start(watchFolders: string[]): Promise<void> {
     await this.stop()
+    this.currentTimer = setInterval(() => this.currentFolder(), 30_000)
+    this.currentTimer.unref()
     mkdirSync(this.incomingDir, { recursive: true })
     const stable = { stabilityThreshold: 600, pollInterval: 150 }
 
@@ -131,6 +148,8 @@ export class Ingestor {
   }
 
   async stop(): Promise<void> {
+    if (this.currentTimer) clearInterval(this.currentTimer)
+    this.currentTimer = null
     await Promise.all(this.watchers.map((w) => w.close()))
     this.watchers = []
   }
@@ -202,7 +221,8 @@ export class Ingestor {
     const libDir = this.getLibraryDir()
     // A photo already inside a dated session folder ("2026-11-08 Smith wedding") belongs to that folder, not just to its date.
     const inFolder = opts.mode === 'adopt' ? relative(libDir, path).split(sep)[0] : ''
-    const session = inFolder && /^\d{4}-\d{2}-\d{2}( |$)/.test(inFolder) && relative(libDir, path).split(sep).length > 1 ? inFolder : localDate(capturedAt)
+    const target = opts.mode === 'adopt' ? null : this.currentFolder() // the current session takes everything incoming, whatever its EXIF date
+    const session = target ?? (inFolder && /^\d{4}-\d{2}-\d{2}( |$)/.test(inFolder) && relative(libDir, path).split(sep).length > 1 ? inFolder : localDate(capturedAt))
     const destDir = join(libDir, session)
 
     const ext = extname(path)
