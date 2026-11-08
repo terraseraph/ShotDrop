@@ -1,4 +1,8 @@
+import type { SessionRow } from '@shared/remote'
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, DeletePreview, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
+import type { LibraryMeta } from '@shared/remote'
+
+import type { BrowseResult, RemoteSessions } from '@shared/remote'
 
 interface DesktopBridge {
   apiBase: string
@@ -87,7 +91,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 export const api = {
   status: () => req<Status>('GET', '/api/status'),
-  sessions: () => req<Session[]>('GET', '/api/sessions'),
+  sessions: () => req<(Session & SessionRow)[]>('GET', '/api/sessions'),
+  createSession: (b: { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean }) => req<Session & SessionRow>('POST', '/api/sessions', b),
+  patchSession: (folder: string, b: { name?: string; client?: string; notes?: string }) => req<Session & SessionRow>('PATCH', `/api/sessions/${encodeURIComponent(folder)}`, b),
   shots: () => req<{ items: Shot[]; total: number; seq: number }>('GET', '/api/shots?order=asc&limit=10000'),
   changes: (after: number) =>
     req<{ seq: number; events: ServerEvent[]; reset: boolean; status: Status }>('GET', `/api/changes?after=${after}`),
@@ -115,6 +121,8 @@ export const api = {
   cloudMkdir: (name: string, path: string) => req<void>('POST', `/api/cloud/accounts/${encodeURIComponent(name)}/folders`, { path }),
   cloudInfo: (name: string) => req<{ email: string | null; quota: CloudQuota | null }>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/info`),
   cloudDisconnect: (name: string) => req<void>('DELETE', `/api/cloud/accounts/${encodeURIComponent(name)}`),
+  /** Does this not-yet-saved destination already hold another library's library.json? (local only) */
+  probeDestination: (d: { type: 'folder' | 'rclone'; target: string }) => req<{ library: LibraryMeta | null; reachable: boolean; other: boolean }>('POST', '/api/destinations/probe', d),
   retrySync: () => req<{ retried: number }>('POST', '/api/sync/retry'),
   tunnelInstall: () => req<TunnelState>('POST', '/api/tunnel/install'),
   tunnelStart: () => req<TunnelState>('POST', '/api/tunnel/start'),
@@ -127,6 +135,21 @@ export const api = {
   metadata: (id: number) => req<ShotMetadata>('GET', `/api/shots/${id}/metadata`),
   exportJpeg: (id: number, o: ExportOptions) => req<{ path: string }>('POST', `/api/shots/${id}/export`, o),
   shareLink: (id: number) => req<{ url: string | null; reason?: string; via?: string }>('GET', `/api/shots/${id}/link`),
+
+  // Browse a destination (read-only). The listing may come from cache first; `browse:updated` says a fresh one is ready.
+  browse: (destId: string, path: string) => req<BrowseResult>('GET', `/api/destinations/${destId}/browse?path=${encodeURIComponent(path)}`),
+  remoteSessions: () => req<RemoteSessions>('GET', '/api/remote/sessions'),
+  remoteThumbUrl: (destId: string, e: { path: string; size: number; mtime: number }) => withKey(`${base}/api/destinations/${destId}/thumb?path=${encodeURIComponent(e.path)}&size=${e.size}&mtime=${e.mtime}`),
+  remoteFileUrl: (destId: string, path: string, download = false) => withKey(`${base}/api/destinations/${destId}/file?path=${encodeURIComponent(path)}${download ? '&download=1' : ''}`),
+  /** Calls back when a live listing of `destId` changed. Returns an unsubscribe. */
+  onBrowseUpdated(fn: (destId: string, path: string) => void): () => void {
+    const es = new EventSource(withKey(`${base}/api/events`))
+    es.addEventListener('browse:updated', (m) => {
+      const e = JSON.parse((m as MessageEvent).data) as { destId: string; path: string }
+      fn(e.destId, e.path)
+    })
+    return () => es.close()
+  },
 
   // Images are served `immutable` and ids restart at 1 per library, so the URL carries a version.
   // File count changes when a better source (JPEG after RAW) re-renders the preview.

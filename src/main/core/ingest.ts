@@ -8,6 +8,7 @@ import type { Previewer } from './media'
 import { fileKind, isImage, readExif } from './media'
 import type { Bus } from './events'
 import { XmpService } from './xmp'
+import { rebuildSessions } from './sessions'
 
 export interface IngestOptions {
   /**
@@ -103,6 +104,7 @@ export class Ingestor {
   async rescanLibrary(): Promise<number> {
     const libDir = this.getLibraryDir()
     if (!existsSync(libDir)) return 0
+    await rebuildSessions(libDir, this.lib).catch(() => undefined) // cache of the .shotdrop.json files
     const entries = await readdir(libDir, { recursive: true, withFileTypes: true })
     let n = 0
     for (const e of entries) {
@@ -197,8 +199,10 @@ export class Ingestor {
 
     const exif = await readExif(path).catch(() => null)
     const capturedAt = exif?.capturedAt ?? Date.now()
-    const session = localDate(capturedAt)
     const libDir = this.getLibraryDir()
+    // A photo already inside a dated session folder ("2026-11-08 Smith wedding") belongs to that folder, not just to its date.
+    const inFolder = opts.mode === 'adopt' ? relative(libDir, path).split(sep)[0] : ''
+    const session = inFolder && /^\d{4}-\d{2}-\d{2}( |$)/.test(inFolder) && relative(libDir, path).split(sep).length > 1 ? inFolder : localDate(capturedAt)
     const destDir = join(libDir, session)
 
     const ext = extname(path)
