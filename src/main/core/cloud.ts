@@ -1,6 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, mkdirSync, writeFileSync, renameSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
+import type { LibraryMeta } from '@shared/remote'
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState } from '@shared/types'
 
 const TYPES: Record<CloudProvider, string> = { drive: 'drive', dropbox: 'dropbox' }
@@ -195,4 +199,87 @@ export class CloudAccounts {
     await this.known(name)
     await rclone(this.bin(), ['config', 'delete', name, ...this.cfg()])
   }
+}
+
+// ---- <destination root>/.shotdrop/library.json ----
+
+const LIBRARY_FILE = '.shotdrop/library.json'
+export const newLibraryId = (): string => `lib_${randomBytes(4).toString('hex')}`
+
+export interface LibraryDest { type: 'folder' | 'rclone'; target: string }
+/** How to reach rclone for a destination: binary plus `--config` only when the remote is one ShotDrop linked itself. */
+export interface LibraryRc { bin: string; cfg: string[] }
+
+function parseLibrary(raw: string): LibraryMeta | null {
+  try {
+    const j = JSON.parse(raw) as Partial<LibraryMeta>
+    if (j.schema !== 1 || typeof j.libraryId !== 'string' || !j.libraryId) return null
+    const writers = Array.isArray(j.writers) ? j.writers.filter((w) => w && typeof w.host === 'string' && typeof w.lastSync === 'number') : []
+    return { ...j, schema: 1, libraryId: j.libraryId, name: typeof j.name === 'string' ? j.name : '', writers }
+  } catch {
+    return null
+  }
+}
+
+const remoteLibraryPath = (target: string): string => {
+  if (target.startsWith('-')) throw new Error('Invalid destination')
+  return `${target.replace(/\/+$/, '')}/${LIBRARY_FILE}`
+}
+
+/**
+ * Read library.json. Resolves null when the destination is reachable but has none (or an unreadable one);
+ * rejects when the destination itself can't be reached.
+ */
+export async function readLibraryMeta(dest: LibraryDest, rc: LibraryRc): Promise<LibraryMeta | null> {
+  if (dest.type === 'folder') {
+    await stat(dest.target) // throws when the drive or share is gone
+    return parseLibrary(await readFile(join(dest.target, '.shotdrop', 'library.json'), 'utf8').catch(() => ''))
+  }
+  try {
+    return parseLibrary(await rclone(rc.bin, ['cat', remoteLibraryPath(dest.target), ...rc.cfg], 30_000))
+  } catch (e) {
+    if (/not found|doesn't exist|directory not found|object not found/i.test((e as Error).message)) return null
+    throw e
+  }
+}
+
+export async function writeLibraryMeta(dest: LibraryDest, rc: LibraryRc, meta: LibraryMeta): Promise<void> {
+  const body = JSON.stringify(meta, null, 2)
+  if (dest.type === 'folder') {
+    await stat(dest.target) // never recreate a missing root on the wrong disk
+    const dir = join(dest.target, '.shotdrop')
+    mkdirSync(dir, { recursive: true })
+    const tmp = join(dir, 'library.json.shotdrop-part')
+    writeFileSync(tmp, body)
+    renameSync(tmp, join(dir, 'library.json'))
+    return
+  }
+  const tmpDir = mkdtempSync(join(tmpdir(), 'shotdrop-lib-'))
+  try {
+    const tmp = join(tmpDir, 'library.json')
+    writeFileSync(tmp, body)
+    await rclone(rc.bin, ['copyto', tmp, remoteLibraryPath(dest.target), ...rc.cfg], 60_000)
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Make sure the destination carries our library.json and that this host is listed in writers[].
+ * Another library's file is left alone (the caller warns, never blocks). `touched` limits the writers[] update to
+ * once per app start per destination. Returns what is on the destination afterwards.
+ */
+export async function ensureLibraryMeta(
+  dest: LibraryDest & { id: string },
+  rc: LibraryRc,
+  opts: { libraryId: string; host: string; touched: Set<string> }
+): Promise<LibraryMeta | null> {
+  const existing = await readLibraryMeta(dest, rc)
+  if (existing && existing.libraryId !== opts.libraryId) return existing
+  if (existing && opts.touched.has(dest.id)) return existing
+  const writers = [...(existing?.writers ?? []).filter((w) => w.host !== opts.host), { host: opts.host, lastSync: Date.now() }]
+  const meta: LibraryMeta = { ...(existing ?? {}), schema: 1, libraryId: opts.libraryId, name: existing?.name || `${opts.host} library`, writers }
+  await writeLibraryMeta(dest, rc, meta)
+  opts.touched.add(dest.id)
+  return meta
 }

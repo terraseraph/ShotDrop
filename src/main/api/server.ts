@@ -5,6 +5,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs'
 import { createHmac, randomUUID } from 'node:crypto'
 import { registerDiagnostics } from './diagnostics'
 import { registerCloud } from './cloud'
+import { ensureDestLibrary, registerLibrary } from './library'
 import { listSources, metadataFile, resolveImage } from '../core/sources'
 import { exportJpeg } from '../core/exporter'
 import { checkPath, ensurePath, listPlaces } from '../core/places'
@@ -373,6 +374,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
     const body = req.body as Omit<Destination, 'id'>
     const dest: Destination = { ...body, filter: body.filter ?? 'all', enabled: body.enabled ?? true, id: randomUUID().slice(0, 8) }
     ensureFolder(dest)
+    void ensureDestLibrary(core, dest)
     await core.updateSettings({ destinations: [...core.settings.destinations, dest] })
     return reply.code(201).send(dest)
   })
@@ -511,6 +513,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   // ---- connection check (firewall, ports, self-test) ----
   registerDiagnostics(app, core)
   registerCloud(app, core)
+  registerLibrary(app, core, local)
 
   // ---- remote web UI ----
   if (opts.rendererDir && existsSync(opts.rendererDir)) {

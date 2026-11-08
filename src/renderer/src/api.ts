@@ -1,4 +1,5 @@
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, DeletePreview, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
+import type { LibraryMeta } from '@shared/remote'
 
 interface DesktopBridge {
   apiBase: string
@@ -115,6 +116,8 @@ export const api = {
   cloudMkdir: (name: string, path: string) => req<void>('POST', `/api/cloud/accounts/${encodeURIComponent(name)}/folders`, { path }),
   cloudInfo: (name: string) => req<{ email: string | null; quota: CloudQuota | null }>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/info`),
   cloudDisconnect: (name: string) => req<void>('DELETE', `/api/cloud/accounts/${encodeURIComponent(name)}`),
+  /** Does this not-yet-saved destination already hold another library's library.json? (local only) */
+  probeDestination: (d: { type: 'folder' | 'rclone'; target: string }) => req<{ library: LibraryMeta | null; reachable: boolean; other: boolean }>('POST', '/api/destinations/probe', d),
   retrySync: () => req<{ retried: number }>('POST', '/api/sync/retry'),
   tunnelInstall: () => req<TunnelState>('POST', '/api/tunnel/install'),
   tunnelStart: () => req<TunnelState>('POST', '/api/tunnel/start'),
