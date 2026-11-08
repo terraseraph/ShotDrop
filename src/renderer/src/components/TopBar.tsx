@@ -39,9 +39,10 @@ export function TopBar(p: Props) {
   return (
     <header className="topbar">
       <div className="brand">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" aria-hidden>
-          <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="3" />
+        <svg width="18" height="18" viewBox="41 46 430 430" strokeWidth="16" strokeLinejoin="round" aria-hidden>
+          <path d="M256 56 L377 221.5 A150 150 0 1 1 135 221.5 Z" fill="var(--accent)" stroke="var(--accent)" />
+          <circle cx="256" cy="316" r="96" fill="var(--bg)" />
+          <path d="M256 266 L299 291 L299 341 L256 366 L213 341 L213 291 Z" fill="var(--live)" stroke="var(--live)" />
         </svg>
         <span className="brand-name">ShotDrop</span>
       </div>

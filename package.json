@@ -10,9 +10,11 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "postinstall": "electron-builder install-app-deps",
     "fetch-binaries": "node scripts/fetch-binaries.mjs",
     "dist:portable": "node scripts/fetch-binaries.mjs && electron-vite build && electron-builder --win --x64 --publish never"
+  },
+  "allowScripts": {
+    "better-sqlite3": false
   },
   "build": {
     "appId": "au.com.oztechinnovations.shotdrop",

@@ -21,6 +21,8 @@ function createWindow(apiBase: string): void {
     minHeight: 600,
     backgroundColor: '#0c0c0e',
     title: 'ShotDrop',
+    // Packaged builds take the taskbar icon from the exe (build/icon.ico); dev runs electron.exe, so point it there.
+    icon: app.isPackaged ? undefined : join(app.getAppPath(), 'build/icon.ico'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

@@ -78,6 +78,9 @@ To bump a version, edit the version and sha256 in the fetch script.
   `@img/sharp-wasm32` (WASM fallback, not needed on x64), and all Chromium locales except `en-US`.
 - `npmRebuild: false`. Everything ships N-API prebuilds. electron-builder's rebuild only tried to
   compile better-sqlite3 from source, which needs MSVC and leaves a half-built `build/` folder behind.
+- Same at install time: no `postinstall` rebuild, and `allowScripts` denies better-sqlite3's implicit
+  `node-gyp rebuild`, so `npm install` needs no Python or MSVC (npm 11.x; older npm still compiles it, harmlessly).
+  better-sqlite3 always loads `prebuilds/<platform>-<arch>.node` first, in Node and in Electron.
 
 **Runtime dependencies checked.**
 - VC++ redistributable: not needed by anything we ship (rclone, cloudflared, libvips, or the MSYS2 LibRaw build). No other shipped DLL, `.node` or exe imports `VCRUNTIME140`/`MSVCP140`. libvips

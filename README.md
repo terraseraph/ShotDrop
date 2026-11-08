@@ -21,6 +21,10 @@ Cull while you shoot, hand the gallery to your phone, and sync to your own stora
 
 ShotDrop turns your PC into a wireless landing zone for your camera. Most modern mirrorless bodies can send each shot over Wi-Fi by FTP. ShotDrop runs that FTP server for you, shows every frame in a full-screen gallery as it lands, and copies your photos to Google Drive, Dropbox, a NAS or another drive in the background. It runs entirely on your machine with your own storage: no account, no hosted service, nothing to pay for.
 
+<p align="center">
+  <img src="docs/media/flow.svg" alt="Live sync as you shoot: Camera → ShotDrop on your PC → Google Drive and Dropbox, a NAS, folder or your own SFTP/FTP/WebDAV server, and storage services like Amazon S3, Backblaze B2, Cloudflare R2 and Wasabi" width="900">
+</p>
+
 ![ShotDrop walkthrough: the grid with culling flags and filter chips, the loupe stepping through a shoot with rating and pick, comparing a burst and keeping the best, the Sync page and the phone link popover](docs/media/walkthrough.gif)
 
 <p align="center"><sub>▶ <a href="docs/media/walkthrough.mp4">Full-quality video</a></sub></p>
@@ -93,13 +97,9 @@ No account, no telemetry. One portable folder. Ratings go to XMP sidecars for Li
 
 ## How it works
 
-```mermaid
-flowchart LR
-  cam["📷 Camera"] -- "Wi-Fi + FTP" --> sd["💻 ShotDrop<br/>on your PC"]
-  sd --> cull["⭐ Cull"]
-  sd --> phone["📱 Phone"]
-  sd --> sync["☁️ Drive · Dropbox · NAS"]
-```
+<p align="center">
+  <img src="docs/media/flow.svg" alt="Live sync as you shoot: Camera → ShotDrop on your PC → Google Drive and Dropbox, a NAS, folder or your own SFTP/FTP/WebDAV server, and storage services like Amazon S3, Backblaze B2, Cloudflare R2 and Wasabi" width="900">
+</p>
 
 1. The camera uploads each shot over its built-in FTP client to the FTP server inside ShotDrop.
 2. ShotDrop checks the file is complete, files it by date, reads the metadata and builds previews. The photo appears in the gallery straight away.
