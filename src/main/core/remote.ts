@@ -1,11 +1,27 @@
 import { spawn } from 'node:child_process'
 import { copyFile, mkdir, open, readdir, rename, rm, stat, unlink } from 'node:fs/promises'
-import { dirname, extname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import type { Destination } from '@shared/types'
 import type { RemoteEntry } from '@shared/remote'
 import { toolPath } from './bundled'
 import { isUnreachable, type SyncError } from './retry'
 import type { CloudAccounts } from './cloud'
+import { DaemonDown, RcError, type RcloneDaemon } from './rclone-rcd'
+
+let daemon: RcloneDaemon | null = null
+/** Core installs its daemon here; without one (tests, scripts) RcloneFs spawns rclone per call. */
+export function setRcloneDaemon(d: RcloneDaemon | null): void {
+  daemon = d
+}
+
+const RC_NETWORK_TEXT = /timeout|timed out|connection (reset|refused)|no such host|network is unreachable|dial tcp|i\/o timeout|EOF$/i
+
+/** Map an rc error onto the exit codes the spawn path produces: 3 not found, 5 temporary/network, else 1. */
+function rcToSync(e: RcError): SyncError {
+  const err: SyncError = new Error(e.message)
+  err.exitCode = /(directory|object|file) not found/i.test(e.message) ? 3 : RC_NETWORK_TEXT.test(e.message) || e.status === 429 || e.status === 503 ? 5 : 1
+  return err
+}
 
 /** One level of a destination, read-only unless the caller explicitly uses move/remove. */
 export interface RemoteFs {
@@ -216,11 +232,34 @@ class RcloneFs implements RemoteFs {
     })
   }
 
+  /** The rc `fs` argument: the target without a trailing slash. Paths inside it go in the rc `remote` argument. */
+  private fsArg(): string {
+    return this.target.replace(/\/+$/, '')
+  }
+
+  /**
+   * Runs `viaRc` on the shared rcd when this remote is in ShotDrop's config and the daemon is up, else (or if the daemon
+   * disappears mid-call) `spawned`. rc errors are mapped onto the exit codes retry.ts and the callers already understand.
+   */
+  private async viaRcd<T>(viaRc: (d: RcloneDaemon) => Promise<T>, spawned: () => Promise<T>): Promise<T> {
+    const d = daemon
+    if (!d || !this.deps.cloud.has(this.remoteName) || !(await d.ensure(this.remoteName))) return spawned()
+    try {
+      return await viaRc(d)
+    } catch (e) {
+      if (e instanceof DaemonDown) return spawned()
+      throw e instanceof RcError ? rcToSync(e) : e
+    }
+  }
+
   async list(path: string): Promise<RemoteEntry[]> {
     const rel = safeRel(path)
     let rows: LsJson[]
     try {
-      rows = JSON.parse((await this.run(['lsjson', this.at(rel), '--no-mimetype', '--hash=false'])).toString('utf8') || '[]') as LsJson[]
+      rows = await this.viaRcd(
+        async (d) => ((await d.rc('operations/list', { fs: this.fsArg(), remote: rel, opt: { noMimeType: true, noModTime: false, showHash: false } })) as { list?: LsJson[] }).list ?? [],
+        async () => JSON.parse((await this.run(['lsjson', this.at(rel), '--no-mimetype', '--hash=false'])).toString('utf8') || '[]') as LsJson[]
+      )
     } catch (e) {
       // exit 3 = directory not found: an empty (not yet created) folder, not an error.
       if ((e as SyncError).exitCode === 3) return []
@@ -238,7 +277,11 @@ class RcloneFs implements RemoteFs {
     const tmp = `${toLocal}.shotdrop-part`
     await mkdir(dirname(toLocal), { recursive: true })
     try {
-      await this.run(['copyto', this.at(path), tmp])
+      const rel = safeRel(path)
+      await this.viaRcd(
+        (d) => d.rc('operations/copyfile', { srcFs: this.fsArg(), srcRemote: rel, dstFs: dirname(tmp), dstRemote: basename(tmp) }),
+        () => this.run(['copyto', this.at(path), tmp])
+      )
       await rename(tmp, toLocal)
     } catch (e) {
       await unlink(tmp).catch(() => undefined)
@@ -247,22 +290,42 @@ class RcloneFs implements RemoteFs {
   }
 
   async upload(fromLocal: string, path: string): Promise<void> {
-    await this.run(['copyto', fromLocal, this.at(path)])
+    const rel = safeRel(path)
+    await this.viaRcd(
+      (d) => d.rc('operations/copyfile', { srcFs: dirname(fromLocal), srcRemote: basename(fromLocal), dstFs: this.fsArg(), dstRemote: rel }),
+      () => this.run(['copyto', fromLocal, this.at(path)])
+    )
   }
 
   /** Remote to remote in one rclone call, when both ends are read through the same rclone config. */
   copyTo(fromPath: string, other: RcloneFs, toPath: string): Promise<void> | null {
     if (JSON.stringify(this.cfg()) !== JSON.stringify(other.cfg())) return null
-    return this.run(['copyto', this.at(fromPath), other.at(toPath)]).then(() => undefined)
+    const from = safeRel(fromPath)
+    const to = safeRel(toPath)
+    return this.viaRcd(
+      (d) => d.rc('operations/copyfile', { srcFs: this.fsArg(), srcRemote: from, dstFs: other.fsArg(), dstRemote: to }),
+      () => this.run(['copyto', this.at(fromPath), other.at(toPath)])
+    ).then(() => undefined)
   }
 
   async move(from: string, to: string): Promise<void> {
-    await this.run(['moveto', this.at(from), this.at(to)])
+    const f = safeRel(from)
+    const t = safeRel(to)
+    await this.viaRcd(
+      (d) => d.rc('operations/movefile', { srcFs: this.fsArg(), srcRemote: f, dstFs: this.fsArg(), dstRemote: t }),
+      () => this.run(['moveto', this.at(from), this.at(to)])
+    )
   }
 
   async remove(path: string): Promise<void> {
+    const rel = safeRel(path)
     try {
-      await this.run(['deletefile', this.at(path), '--drive-use-trash=true'])
+      // Drive's use_trash defaults to true in rclone; the spawned path also forces it with a flag. rc has no per-call
+      // backend flag, so a config that sets use_trash=false would permanently delete here.
+      await this.viaRcd(
+        (d) => d.rc('operations/deletefile', { fs: this.fsArg(), remote: rel }),
+        () => this.run(['deletefile', this.at(path), '--drive-use-trash=true'])
+      )
     } catch (e) {
       const err = e as SyncError
       if (err.exitCode === 3 || err.exitCode === 4) return
@@ -272,7 +335,10 @@ class RcloneFs implements RemoteFs {
 
   async reachable(): Promise<boolean> {
     try {
-      await this.run(['lsd', this.at(''), '--max-depth', '0'], 30_000)
+      await this.viaRcd(
+        (d) => d.rc('operations/list', { fs: this.fsArg(), remote: '', opt: { dirsOnly: true, noMimeType: true, noModTime: true, showHash: false } }, 30_000),
+        () => this.run(['lsd', this.at(''), '--max-depth', '0'], 30_000)
+      )
       return true
     } catch (e) {
       // Reachable but the folder doesn't exist yet still counts as reachable.

@@ -15,6 +15,8 @@ import { toolPath } from './bundled'
 import { Bus } from './events'
 import { listInterfaces } from './net'
 import { TunnelService } from './tunnel'
+import { RcloneDaemon } from './rclone-rcd'
+import { setRcloneDaemon } from './remote'
 import { XmpService } from './xmp'
 import { PtpService } from '../ptp/service'
 
@@ -43,6 +45,7 @@ export class Core {
   readonly ftp: FtpService
   readonly sync: SyncService
   readonly cloud: CloudAccounts
+  readonly rcd: RcloneDaemon
   readonly xmp: XmpService
   readonly tunnel: TunnelService
   readonly ptp: PtpService
@@ -55,6 +58,8 @@ export class Core {
     this.lib = new Library(this.db)
     this.previews = new Previewer(join(opts.dataDir, 'cache'))
     this.cloud = new CloudAccounts(join(opts.dataDir, 'rclone.conf'), () => toolPath(this.settings.rclonePath, 'rclone'))
+    this.rcd = new RcloneDaemon({ cloud: this.cloud, rclonePath: () => this.settings.rclonePath, log: (m) => console.warn(m) })
+    setRcloneDaemon(this.rcd)
     this.meta = new MetadataStore(join(opts.dataDir, 'cache'))
     this.sync = new SyncService(this.lib, this.bus, () => this.settings, () => this.emitStatus(), this.cloud, opts.trash)
     this.xmp = new XmpService(
@@ -160,6 +165,7 @@ export class Core {
     await this.tunnel.stop()
     await this.ftp.stop()
     await this.ingest.stop()
+    await this.rcd.stop()
     await this.xmp.drain()
     await shutdownMedia()
     this.db.close()
