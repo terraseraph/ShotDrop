@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify'
-import type { ServerEvent } from '@shared/types'
 import type { Core } from '../core'
 import { safeFolder } from '../core/sessions'
 import { existsSync, statSync } from 'node:fs'

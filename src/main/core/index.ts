@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { existsSync, mkdirSync, statfsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { ftpLoginName, type DeletePreview, type ServerEvent, type Settings, type ShotPatch, type Status } from '@shared/types'
+import { ftpLoginName, type DeletePreview, type Settings, type ShotPatch, type Status } from '@shared/types'
 import { ConfigStore } from './config'
 import { openDb, type DB } from './db'
 import { Library } from './library'

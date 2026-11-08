@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { Destination, ServerEvent, Settings } from '@shared/types'
+import type { Destination } from '@shared/types'
 import type { RemoteOp } from '@shared/remote'
 import type { Core } from './index'
 import type { RemoteOpRow } from './library'
@@ -189,7 +189,7 @@ export class RemoteOpsService {
       this.queueMoves(folder, target)
       // s2's current-session setting (absent on branches without it) must keep pointing at the renamed folder.
       const cur = this.core.settings.ingest
-      if (cur?.currentSession === folder) await this.core.updateSettings({ ingest: { ...cur, currentSession: target } } as Partial<Settings>)
+      if (cur?.currentSession === folder) await this.core.updateSettings({ ingest: { ...cur, currentSession: target } })
       lib.forgetRemoteEntries(folder)
       for (const d of this.core.settings.destinations) sync.forgetDirs(d, folder)
     } finally {
