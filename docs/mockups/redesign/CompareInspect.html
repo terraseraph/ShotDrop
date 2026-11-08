@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compare: Inspect dialog + Before/after slider (mockup)</title>
+<style>
+:root{--bg:#111;--stage:#0d0d0d;--panel:#141414;--panel-2:#1a1a1a;--panel-3:#242424;--raised:#2a2a2a;--line:#222;--line-2:#2e2e2e;--text:#ededed;--text-2:#c9c9c9;--muted:#a3a3a3;--faint:#8a8a8a;--accent:#f2b134;--accent-ink:#1a1200;--accent-dim:#2b2515;--accent-line:#5a4a1e;--live:#3dd68c;--reject:#e5484d;--reject-text:#ff9a9d;--thumb-up:#3dd68c;--love:#ff6b9a;--sync:#5ba7f7;--warn:#f2b134;--mono:'JetBrains Mono','Cascadia Mono',ui-monospace,Consolas,monospace;--font:Inter,'Segoe UI',system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#070707;color:var(--text);font:13px/1.4 var(--font)}button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.page{max-width:1280px;margin:0 auto;padding:24px 20px 60px}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;margin:36px 0 4px;color:#fff}.note{color:var(--muted);margin:0 0 12px;max-width:900px}
+.frame{border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:var(--bg);position:relative}
+.key{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:4px;background:var(--raised);border:1px solid #3a3a3a;color:var(--text-2);font-family:var(--mono);font-size:11px;line-height:1}
+.key.accent{background:#b8841f;border-color:#b8841f;color:var(--accent-ink)}
+.tb{height:28px;padding:0 10px;border-radius:7px;display:inline-flex;align-items:center;gap:6px;color:var(--text-2);white-space:nowrap}.tb:hover,.tb.on{background:var(--panel-3);color:#fff}.tb.primary{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.seg{display:inline-flex;gap:2px;background:var(--panel-2);padding:2px;border-radius:9px}.seg>button{height:24px;padding:0 10px;border-radius:7px;color:var(--muted)}.seg>button.on{background:var(--raised);color:#fff}
+.badge{height:18px;min-width:18px;padding:0 5px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:rgba(0,0,0,.6);color:var(--text);white-space:nowrap}.badge.bad{background:#5a2a2c;color:#ffb3b5}.badge.best{background:var(--live);color:#04170d}
+.mono{font-family:var(--mono);font-size:11.5px}
+/* fake photos */
+.ph{position:absolute;inset:0}
+.ph.a{background:radial-gradient(ellipse at 30% 70%,#3b3a46 0,#1c1b22 35%,transparent 60%),linear-gradient(160deg,#b9aea0,#8c8378 55%,#6e675f)}
+.ph.b{background:radial-gradient(ellipse at 30% 70%,#4a4358 0,#241f2d 35%,transparent 60%),linear-gradient(160deg,#d8c6a8,#a8957a 55%,#6e6150);filter:saturate(1.25) contrast(1.08)}
+.ph::after{content:"";position:absolute;left:18%;top:28%;width:46%;height:42%;background:#0b0b0d;transform:rotate(14deg);box-shadow:0 0 0 6px #1b1b1d}
+.ph.b::after{box-shadow:0 0 0 6px #2d2a24}
+.ph i{position:absolute;right:12%;bottom:10%;width:70px;height:70px;border-radius:50%;background:repeating-radial-gradient(#8a4a32 0 3px,#c9c0b2 3px 6px)}
+/* ---------- screen 1: compare with new pane button ---------- */
+.cmp-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #1c1c1c;font-size:12px;color:var(--muted)}.cmp-bar strong{color:#fff;font-weight:500}
+.grp{display:inline-flex;gap:2px;align-items:center;padding-left:10px;border-left:1px solid var(--raised)}.end{margin-left:auto;display:inline-flex;gap:4px}
+.panes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 14px;height:300px}
+.pane{position:relative;border-radius:8px;overflow:hidden;background:var(--stage);display:flex;flex-direction:column}.pane.on{box-shadow:0 0 0 2px var(--accent)}
+.pimg{flex:1;position:relative;overflow:hidden}
+.tl{position:absolute;top:10px;left:10px;display:flex;gap:4px}.tr{position:absolute;top:10px;right:10px;display:flex;gap:4px;align-items:center}
+.rb{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.55);color:#fff}.rb:hover{background:#000}.rb.hot{outline:2px solid var(--accent);outline-offset:2px}
+.foot{height:34px;display:flex;align-items:center;gap:10px;padding:0 10px;background:#161616;font-size:12px;color:var(--muted)}.foot .n{color:#fff}.flags{margin-left:auto;display:flex;gap:4px;align-items:center}.fl{width:24px;height:22px;border-radius:5px;font-size:11px;font-weight:700;color:var(--muted);background:var(--panel-3)}
+.act{display:flex;align-items:center;gap:14px;min-height:44px;padding:0 14px;border-top:1px solid var(--line);color:var(--faint);font-size:12px}
+.callout{position:absolute;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;z-index:5;white-space:nowrap}
+/* ---------- screen 2: inspect dialog ---------- */
+.stagewrap{position:relative;height:640px;background:#000}
+.scrim{position:absolute;inset:0;background:rgba(10,10,10,.6);backdrop-filter:blur(2px)}
+.dlg{position:absolute;inset:14px;background:var(--panel);border:1px solid var(--line-2);border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column;overflow:hidden}
+.dh{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}.dh .t{color:#fff;font-weight:500}
+.dbody{flex:1;display:flex;min-height:0}
+.canvas{flex:1;position:relative;background:var(--stage);overflow:hidden;min-width:0}
+.nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:56px;border-radius:8px;background:rgba(0,0,0,.5);display:grid;place-items:center;font-size:18px;color:#fff;z-index:3}.nav.l{left:10px}.nav.r{right:10px}
+.zoomtag{position:absolute;left:12px;bottom:12px;display:flex;gap:6px;z-index:3}
+.zb{height:24px;padding:0 8px;border-radius:6px;background:rgba(0,0,0,.6);display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2)}.zb.on{background:var(--accent-dim);color:var(--accent);outline:1px solid var(--accent-line)}
+.clip-hi{position:absolute;inset:0;background:repeating-linear-gradient(45deg,rgba(229,72,77,.0) 0 5px,rgba(229,72,77,.0) 5px 10px)}
+.clip-hi.show::before{content:"";position:absolute;left:0;top:0;width:100%;height:30%;background:repeating-linear-gradient(45deg,rgba(229,72,77,.55) 0 4px,transparent 4px 8px);mix-blend-mode:screen}
+.clip-hi.show::after{content:"";position:absolute;left:30%;top:46%;width:30%;height:22%;background:repeating-linear-gradient(-45deg,rgba(91,167,247,.5) 0 4px,transparent 4px 8px)}
+.side{width:268px;flex:0 0 268px;border-left:1px solid var(--line);overflow:auto;padding:12px;display:flex;flex-direction:column;gap:14px;background:var(--panel)}
+.sec h4{margin:0 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.row{display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:12px}.row span:first-child{color:var(--faint)}.row span:last-child{color:var(--text);font-family:var(--mono);font-size:11.5px;text-align:right}
+.hist{background:#0d0d0d;border-radius:6px;padding:4px;position:relative}.hist svg{display:block;width:100%;height:60px}
+.meter{height:6px;background:#262626;border-radius:3px;overflow:hidden}.meter i{display:block;height:100%;background:var(--live)}
+.rate{display:flex;gap:6px;align-items:center}.rate .fl{width:34px;height:28px;font-size:12px}.fl.pick{background:var(--accent);color:var(--accent-ink)}
+.rbtn{width:34px;height:28px;border-radius:7px;background:var(--panel-3);display:grid;place-items:center;font-size:15px}.rbtn.on{background:var(--accent-dim);outline:1px solid var(--accent-line)}
+.strip{display:flex;gap:6px;padding:8px 12px;border-top:1px solid var(--line);align-items:center}
+.th{position:relative;width:70px;height:46px;border-radius:5px;overflow:hidden;background:#0d0d0d;outline:2px solid transparent}.th.on{outline-color:var(--accent)}.th .ph::after{box-shadow:none}
+.th .k{position:absolute;left:3px;bottom:3px}
+.dfoot{display:flex;gap:14px;align-items:center;padding:0 12px;min-height:36px;border-top:1px solid var(--line);font-size:12px;color:var(--faint)}
+/* ---------- screen 3: slider ---------- */
+.ba{position:relative;height:560px;background:var(--stage);overflow:hidden;user-select:none;touch-action:none}
+.ba .layer{position:absolute;inset:0}
+.ba .top{clip-path:inset(0 0 0 var(--p,50%))}
+.ba.v .top{clip-path:inset(var(--p,50%) 0 0 0)}
+.handle{position:absolute;top:0;bottom:0;left:var(--p,50%);width:0;z-index:4;cursor:ew-resize}
+.ba.v .handle{left:0;right:0;top:var(--p,50%);bottom:auto;width:auto;height:0;cursor:ns-resize}
+.handle::before{content:"";position:absolute;left:-1px;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.ba.v .handle::before{left:0;right:0;top:-1px;bottom:auto;height:2px;width:auto}
+.knob{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#fff;color:#111;display:grid;place-items:center;font-weight:700;box-shadow:0 2px 12px rgba(0,0,0,.6);font-size:13px;letter-spacing:-2px}
+.ba.v .knob{left:50%;top:0;transform:translate(-50%,-50%) rotate(90deg)}
+.lab{position:absolute;z-index:3;background:rgba(0,0,0,.68);border-radius:8px;padding:7px 10px;max-width:42%}
+.lab b{display:block;color:#fff;font-weight:500;font-size:13px}.lab .mono{color:var(--muted)}.lab .tag{display:inline-block;margin-right:6px;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--accent-ink);background:var(--accent);padding:1px 5px;border-radius:4px;vertical-align:1px}
+.lab.l{left:12px;top:12px}.lab.r{right:12px;top:12px;text-align:right}
+.ba.v .lab.l{top:12px}.ba.v .lab.r{top:auto;bottom:12px}
+.pick2{position:absolute;inset:0;background:rgba(10,10,10,.55);z-index:6;display:grid;place-items:center}
+.picker{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:14px;box-shadow:0 30px 80px rgba(0,0,0,.6);width:420px}
+.picker h5{margin:0 0 4px;font-size:13px;color:#fff}.picker p{margin:0 0 10px;color:var(--muted);font-size:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.grid3 .th{width:100%;height:70px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;color:var(--muted);font-size:12px}
+</style></head><body><div class="page">
+<h1>Compare: Inspect dialog + Before/after slider</h1>
+<p class="note">Mockup only (nothing built yet). Placeholder gradients stand in for photos. Same tokens and <code>.tb</code> / <code>.key</code> / <code>.seg</code> as the app. Screens 2 and 3 are lightly interactive: drag the divider, toggle the buttons.</p>
+
+<h2>1 · Entry points on the Compare screen</h2>
+<p class="note">Each pane gets an <b>expand</b> button (top right, next to ✕), and double-clicking a pane opens it too. <span class="key">I</span> or <span class="key">Space</span> inspects the highlighted pane. When exactly two frames are compared, a <b>Before / after</b> button appears in the toolbar (also <span class="key">B</span>). With 3+ frames, selecting two and pressing <span class="key">B</span> works too; it uses the highlighted pane and the next one.</p>
+<div class="frame">
+ <div class="cmp-bar"><span><strong>Comparing 2</strong> · your choice · from 14:32</span>
+  <span class="grp"><button class="tb">+ Add frames</button><button class="tb">Remove <span class="key">−</span></button></span>
+  <span class="grp"><button class="tb on">Linked zoom 100% <span class="key">Z</span></button><button class="tb">Lock pan</button><button class="tb">Sync histogram</button></span>
+  <span class="grp"><button class="tb primary" style="position:relative">◐ Before / after <span class="key accent">B</span></button></span>
+  <span class="end"><button class="tb">Clear <span class="key">⇧C</span></button><button class="tb on">Done <span class="key">Esc</span></button></span></div>
+ <div class="panes" style="grid-template-columns:1fr 1fr">
+  <div class="pane on"><div class="pimg"><div class="ph a"><i></i></div><div class="tl"><span class="badge">sharp 0.99</span></div>
+   <div class="tr"><button class="rb hot" title="Inspect (I / double-click)">⤢</button><button class="rb">✕</button></div></div>
+   <div class="foot"><span class="n">DSC_2934</span><span class="mono">1/30s · ƒ/6.3 · ISO 12800</span><span class="flags"><button class="fl">P</button><button class="fl">X</button><span class="key">1</span></span></div></div>
+  <div class="pane"><div class="pimg"><div class="ph b"><i></i></div><div class="tl"><span class="badge bad">soft 0.60</span></div>
+   <div class="tr"><button class="rb">⤢</button><button class="rb">✕</button></div></div>
+   <div class="foot"><span class="n">DSC_2935</span><span class="mono">1/30s · ƒ/6.3 · ISO 12800</span><span class="flags"><button class="fl">P</button><button class="fl">X</button><span class="key">2</span></span></div></div>
+ </div>
+ <div class="act"><span>Highlight with <span class="key">1</span>–<span class="key">2</span> · <span class="key">I</span> inspect · <span class="key">B</span> before / after · <span class="key">P</span> pick · <span class="key">X</span> reject</span></div>
+</div>
+
+<h2>2 · Inspect dialog</h2>
+<p class="note">Near-fullscreen sheet over a scrim. The image fills the canvas (Fit by default). Zoom: <span class="key">Z</span> toggles Fit / 100%, mouse wheel / pinch zooms toward the cursor, click toggles zoom at that point, drag pans, <span class="key">0</span> back to Fit. ← → step through the compared frames (the filmstrip below shows them; click one to jump). The right panel has histogram, clipping, sharpness and EXIF. <b>Linked zoom</b> option keeps zoom/pan when stepping so you can flick between frames at the same spot. <span class="key">Esc</span> closes. The <b>Compare with…</b> button starts the slider with a second frame.</p>
+<div class="frame"><div class="stagewrap">
+ <div style="position:absolute;inset:0;opacity:.4"><div class="cmp-bar"><strong>Comparing 3</strong></div></div><div class="scrim"></div>
+ <div class="dlg">
+  <div class="dh"><span class="t">DSC_2934</span><span class="mono">2 of 3 · 6000×4000</span>
+   <span style="margin-left:14px;display:inline-flex;gap:2px"><button class="tb" id="fit">Fit <span class="key">0</span></button><button class="tb on" id="z100">100% <span class="key">Z</span></button><button class="tb">Linked zoom</button></span>
+   <span style="display:inline-flex;gap:2px;margin-left:6px"><button class="tb on" id="bClip">Clipping <span class="key">J</span></button><button class="tb">Focus peaking <span class="key">F</span></button></span>
+   <span style="margin-left:auto;display:inline-flex;gap:4px"><button class="tb primary">◐ Compare with… <span class="key accent">B</span></button><button class="tb on">Close <span class="key">Esc</span></button></span></div>
+  <div class="dbody">
+   <div class="canvas"><div class="ph a"><i></i></div><div class="clip-hi show" id="clipOv"></div>
+    <button class="nav l">‹</button><button class="nav r">›</button>
+    <div class="tl" style="left:60px"><span class="badge best">best</span><span class="badge">sharp 0.99</span></div>
+    <div class="zoomtag"><span class="zb on">100%</span><span class="zb"><span class="key">⎵</span> hold to pan</span><span class="zb"><span class="key" style="background:#7a1e22">▨</span> highlights <span class="key" style="background:#1f4770">▨</span> shadows</span></div></div>
+   <aside class="side">
+    <div class="sec"><h4>Histogram</h4><div class="hist"><svg viewBox="0 0 64 24" preserveAspectRatio="none"><g fill="#ddd"><rect x="0" y="4" width="1" height="20"/><rect x="1" y="2" width="1" height="22"/><rect x="2" y="6" width="1" height="18"/><rect x="3" y="9" width="1" height="15"/><rect x="4" y="13" width="1" height="11"/><rect x="5" y="16" width="1" height="8"/><rect x="6" y="18" width="1" height="6"/><rect x="7" y="19" width="1" height="5"/><rect x="8" y="20" width="1" height="4"/><rect x="9" y="21" width="1" height="3"/><rect x="10" y="21" width="1" height="3"/><rect x="11" y="22" width="3" height="2"/><rect x="14" y="22" width="30" height="2"/><rect x="44" y="21" width="8" height="3"/><rect x="52" y="19" width="6" height="5"/><rect x="58" y="16" width="4" height="8"/></g><rect x="63" y="0" width="1" height="24" fill="rgba(229,72,77,.85)"/></svg></div>
+     <div class="row" style="margin-top:6px"><span>Highlights clipped</span><span style="color:#ff9a9d">1.8%</span></div><div class="row"><span>Shadows crushed</span><span>14.2%</span></div></div>
+    <div class="sec"><h4>Focus</h4><div class="row"><span>Sharpness (vs burst)</span><span>0.99</span></div><div class="meter"><i style="width:99%"></i></div>
+     <div class="row" style="margin-top:6px"><span>Faces / eyes</span><span>0 · —</span></div></div>
+    <div class="sec"><h4>Exposure</h4><div class="row"><span>Shutter</span><span>1/30s</span></div><div class="row"><span>Aperture</span><span>ƒ/6.3</span></div><div class="row"><span>ISO</span><span>12800</span></div><div class="row"><span>Focal length</span><span>35 mm</span></div></div>
+    <div class="sec"><h4>Camera</h4><div class="row"><span>Body</span><span>NIKON Z 6_2</span></div><div class="row"><span>Lens</span><span>24-70mm f/4</span></div><div class="row"><span>Captured</span><span>14:32:08</span></div><div class="row"><span>File</span><span>NEF + JPG</span></div></div>
+    <div class="sec"><h4>Cull</h4><div class="rate"><button class="fl pick">P</button><button class="fl">X</button><span style="width:6px"></span><button class="rbtn" style="color:var(--reject)">👎</button><button class="rbtn">👍</button><button class="rbtn on" style="color:var(--love)">♥</button></div>
+     <div style="margin-top:6px;color:var(--faint);font-size:11px">Same controls as the pane (follows your Thumbs / 5-star setting). <span class="key">P</span> <span class="key">X</span> <span class="key">⇧1</span>–<span class="key">⇧3</span></div></div>
+   </aside></div>
+  <div class="strip">
+   <div class="th"><div class="ph a"></div><span class="key k">1</span></div><div class="th on"><div class="ph a" style="filter:brightness(1.05)"></div><span class="key k">2</span></div><div class="th"><div class="ph b"></div><span class="key k">3</span></div>
+   <span style="margin-left:auto;color:var(--faint);font-size:12px"><span class="key">←</span> <span class="key">→</span> previous / next compared frame</span></div>
+  <div class="dfoot"><span><span class="key">Z</span> zoom</span><span><span class="key">J</span> clipping</span><span><span class="key">H</span> histogram</span><span><span class="key">B</span> before / after</span><span><span class="key">P</span> pick · <span class="key">X</span> reject</span><span style="margin-left:auto"><span class="key">Esc</span> close</span></div>
+ </div></div></div>
+
+<h2>3 · Before / after slider</h2>
+<p class="note">Two frames, pixel-aligned, same zoom and pan. Drag anywhere to move the divider (or the round handle). <span class="key">←</span> <span class="key">→</span> nudge 1%, <span class="key">⇧←</span> <span class="key">⇧→</span> nudge 10%, <span class="key">Home</span> / <span class="key">End</span> jump to an edge, <span class="key">0</span> recentre. <span class="key">S</span> swaps sides, <span class="key">V</span> flips horizontal/vertical. Zoom and pan work as in the inspect dialog, applied to both images at once. Labels show file name plus key EXIF; differing values are highlighted amber. Starts from the toolbar when two frames are compared, or from the inspect dialog via <b>Compare with…</b> (small picker below, showing the compared frames first).</p>
+<div class="frame">
+ <div class="cmp-bar"><span><strong>Before / after</strong> · DSC_2934 vs DSC_2935</span>
+  <span class="grp"><span class="seg" id="orient"><button class="on" data-o="h">Left | Right</button><button data-o="v">Top / Bottom</button></span><button class="tb" id="swap">⇄ Swap sides <span class="key">S</span></button></span>
+  <span class="grp"><button class="tb on">100% <span class="key">Z</span></button><button class="tb">Histogram</button></span>
+  <span class="end"><button class="tb" id="pickbtn">Change frame…</button><button class="tb on">Back to compare <span class="key">Esc</span></button></span></div>
+ <div class="ba" id="ba" style="--p:50%">
+  <div class="layer"><div class="ph a" id="imgL"><i></i></div></div>
+  <div class="layer top"><div class="ph b" id="imgR"><i></i></div></div>
+  <div class="lab l" id="labL"><b><span class="tag">A</span>DSC_2934</b><span class="mono">1/30s · ƒ/6.3 · <span style="color:var(--accent)">ISO 12800</span> · sharp 0.99</span></div>
+  <div class="lab r" id="labR"><b><span class="tag">B</span>DSC_2935</b><span class="mono">1/30s · ƒ/6.3 · <span style="color:var(--accent)">ISO 6400</span> · sharp 0.60</span></div>
+  <div class="handle" id="handle"><div class="knob">‹›</div></div>
+  <div class="pick2" id="picker" hidden><div class="picker"><h5>Compare DSC_2934 with…</h5><p>Pick the second frame. Compared frames first.</p>
+   <div class="grid3"><div class="th"><div class="ph b"></div><span class="key k">1</span></div><div class="th"><div class="ph a" style="filter:hue-rotate(20deg)"></div><span class="key k">2</span></div><div class="th"><div class="ph b" style="filter:brightness(.8)"></div><span class="key k">3</span></div></div>
+   <div style="margin-top:10px;text-align:right"><button class="tb" id="pclose">Cancel <span class="key">Esc</span></button></div></div></div>
+ </div>
+ <div class="act"><span><span class="key">←</span><span class="key">→</span> nudge · <span class="key">⇧</span> ×10 · <span class="key">S</span> swap · <span class="key">V</span> split direction · <span class="key">P</span> / <span class="key">X</span> pick / reject the frame on the side you're hovering (A / B buttons also in toolbar)</span></div>
+</div>
+<div class="legend"><span>Amber EXIF value = differs between the two frames</span><span>Labels fade to 40% while dragging so they don't cover the image</span><span>Loupe-style zoom: wheel / pinch, click to toggle 100%, drag with Space held to pan (drag alone moves the divider)</span></div>
+</div>
+<script>
+const ba=document.getElementById('ba'),h=document.getElementById('handle');let drag=false;
+function setP(v){v=Math.max(0,Math.min(100,v));ba.style.setProperty('--p',v+'%')}
+function pos(e){const r=ba.getBoundingClientRect();return ba.classList.contains('v')?(e.clientY-r.top)/r.height*100:(e.clientX-r.left)/r.width*100}
+ba.addEventListener('pointerdown',e=>{if(e.target.closest('.pick2'))return;drag=true;ba.setPointerCapture(e.pointerId);setP(pos(e));ba.classList.add('drag')});
+ba.addEventListener('pointermove',e=>{if(drag)setP(pos(e))});
+ba.addEventListener('pointerup',()=>{drag=false;ba.classList.remove('drag')});
+document.querySelectorAll('#orient button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#orient button').forEach(x=>x.classList.toggle('on',x===b));ba.classList.toggle('v',b.dataset.o==='v');setP(50)});
+document.getElementById('swap').onclick=()=>{const l=document.getElementById('imgL'),r=document.getElementById('imgR');const t=l.className;l.className=r.className;r.className=t;const a=document.getElementById('labL'),b=document.getElementById('labR');const tmp=a.innerHTML;a.innerHTML=b.innerHTML;b.innerHTML=tmp};
+document.getElementById('pickbtn').onclick=()=>document.getElementById('picker').hidden=false;
+document.getElementById('pclose').onclick=()=>document.getElementById('picker').hidden=true;
+document.getElementById('picker').addEventListener('click',e=>{if(e.target.closest('.th'))document.getElementById('picker').hidden=true});
+document.getElementById('bClip').onclick=e=>{e.currentTarget.classList.toggle('on');document.getElementById('clipOv').classList.toggle('show')};
+</script></body></html>

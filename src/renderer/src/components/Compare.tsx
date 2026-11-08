@@ -5,6 +5,9 @@ import type { Cull } from '@shared/cull'
 import { api } from '../api'
 import { fmtAperture, fmtIso, fmtShutter } from '../format'
 import { firm } from '../motion'
+import { RatingBadge, keyRating, maxKey, useRatingSystem } from '../rating'
+import { BeforeAfter } from './BeforeAfter'
+import { InspectDialog } from './InspectDialog'
 import './Compare.css'
 
 interface Props {
@@ -46,6 +49,7 @@ function columns(n: number, mobile: boolean): number {
   return 5
 }
 
+const EXPAND = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg>
 const X = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
 
 export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate, onClear, onKeep, onAdd, onClose, mobile = false }: Props) {
@@ -56,6 +60,8 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
   const [lock, setLock] = useState(false)
   const [hist, setHist] = useState(false)
   const [pan, setPan] = useState<Pan>({ x: 0.5, y: 0.5 })
+  const [inspect, setInspect] = useState(false) // the near-fullscreen inspect dialog for the highlighted pane
+  const [ba, setBa] = useState<{ a: number; b: number } | null>(null) // before/after slider, as indices into the list
   const drag = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
   const panes = useRef<HTMLDivElement>(null)
   const h = Math.min(hi, Math.max(0, list.length - 1))
@@ -65,8 +71,16 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
   const ids = list.map((s) => s.id)
   const remove = (id: number): void => onKeep(ids.filter((x) => x !== id))
   // Keep the ref fresh so the key handler never acts on a stale list.
-  const st = useRef({ list, h, props: { onPick, onReject, onRate, onClear, onClose, remove } })
-  st.current = { list, h, props: { onPick, onReject, onRate, onClear, onClose, remove } }
+  const system = useRatingSystem()
+  const st = useRef({ list, h, system, busy: false, props: { onPick, onReject, onRate, onClear, onClose, remove } })
+  st.current = { list, h, system, busy: inspect || !!ba, props: { onPick, onReject, onRate, onClear, onClose, remove } }
+
+  /** Before/after from the toolbar or `B`: the two compared frames, or the highlighted one and its neighbour. */
+  const startSlider = (): void => {
+    const { list: l, h: i } = st.current
+    if (l.length < 2) return
+    setBa(l.length === 2 ? { a: 0, b: 1 } : i + 1 < l.length ? { a: i, b: i + 1 } : { a: i - 1, b: i })
+  }
 
   const keepOne = (): void => {
     const { list: l, h: i, props } = st.current
@@ -78,10 +92,12 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.target as HTMLElement).closest('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return
-      const { list: l, h: i, props } = st.current
+      const { list: l, h: i, system: sys, busy, props } = st.current
+      if (busy) return // the inspect dialog or slider owns the keys
       const stop = (): void => { e.preventDefault(); e.stopImmediatePropagation() }
       const digit = /^Digit([0-9])$/.exec(e.code)?.[1]
-      if (digit && e.shiftKey && l[i] && Number(digit) >= 1 && Number(digit) <= 5) { props.onRate(l[i].id, Number(digit)); stop() } // Shift+1..5 rates
+      const rate = digit && e.shiftKey && Number(digit) >= 1 ? keyRating(sys, Number(digit)) : null
+      if (rate !== null && l[i]) { props.onRate(l[i].id, rate); stop() } // Shift+1..5 rates (Shift+1..3 for thumbs)
       else if (digit && !e.shiftKey && Number(digit) >= 1 && Number(digit) <= l.length) { setHi(Number(digit) - 1); stop() } // 1..9 highlights a pane
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { setHi((x) => Math.min(l.length - 1, x + 1)); stop() }
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { setHi((x) => Math.max(0, x - 1)); stop() }
@@ -89,6 +105,8 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
       else if ((e.key === 'x' || e.key === 'X') && l[i]) { props.onReject(l[i].id); stop() }
       else if (e.key === '-' && l[i]) { props.remove(l[i].id); stop() } // drop the highlighted frame from the comparison
       else if (e.key === 'z' || e.key === 'Z') { setZoom((z) => !z); stop() }
+      else if ((e.key === 'i' || e.key === 'I' || e.key === ' ') && l[i]) { setInspect(true); stop() }
+      else if (e.key === 'b' || e.key === 'B') { startSlider(); stop() }
       else if (e.key === 'C') { props.onClear(); stop() }
       else if (e.key === 'Enter') { keepOne(); stop() }
       else if (e.key === 'Escape') { props.onClose(); stop() }
@@ -108,6 +126,17 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
         <p>Choose frames to compare in the grid: tick the corner box, long-press, or right-click a photo. Or open a burst and press C.</p>
         <button className="tb primary" onClick={onClose}>Go to grid</button>
       </div>
+    )
+  }
+
+  if (ba && list[ba.a] && list[ba.b]) {
+    return (
+      <BeforeAfter
+        shots={list} a={ba.a} b={ba.b} cull={cull} maxSharp={maxSharp}
+        onChange={(a, b) => setBa({ a, b })}
+        onPick={onPick} onReject={onReject} onUnflag={onUnflag} onRate={onRate}
+        onClose={() => setBa(null)}
+      />
     )
   }
 
@@ -154,6 +183,13 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
           {!mobile && <button className={`tb ${lock ? 'on' : ''}`} aria-pressed={lock} onClick={() => setLock((l) => !l)}>Lock pan</button>}
           <button className={`tb ${hist ? 'on' : ''}`} aria-pressed={hist} onClick={() => setHist((v) => !v)}>{mobile ? 'Histogram' : 'Sync histogram'}</button>
         </span>
+        {list.length > 1 && (
+          <span className="cmp-group" aria-label="Slider">
+            <button className={`tb ${list.length === 2 ? 'primary' : ''}`} onClick={startSlider} title={list.length === 2 ? 'Sweep a divider between the two frames' : 'Sweep a divider between the highlighted frame and the next'}>
+              ◐ Before / after {!mobile && <span className={`key ${list.length === 2 ? 'accent' : ''}`}>B</span>}
+            </button>
+          </span>
+        )}
         <span className="cmp-end">
           <button className="tb" onClick={onClear} title="Clear the chosen frames">Clear {!mobile && <span className="key">⇧C</span>}</button>
           <button className="tb on" onClick={onClose}>Done {!mobile && <span className="key">Esc</span>}</button>
@@ -171,7 +207,7 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
           const bad = c?.soft || c?.blink
           const w = s.width ?? 0, ht = s.height ?? 0
           return (
-            <motion.div key={s.id} layout className={`cmp-pane ${i === h ? 'on' : ''} ${bad ? 'dim' : ''} ${s.flag === -1 ? 'rej' : ''}`} transition={firm} onClick={() => setHi(i)}>
+            <motion.div key={s.id} layout className={`cmp-pane ${i === h ? 'on' : ''} ${bad ? 'dim' : ''} ${s.flag === -1 ? 'rej' : ''}`} transition={firm} onClick={() => setHi(i)} onDoubleClick={() => { setHi(i); setInspect(true) }}>
               <div className={`cmp-img ${zoom && !lock ? 'grab' : ''}`} onPointerDown={(e) => down(e, s)} onPointerMove={move} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
                 {zoom && w && ht ? (
                   <img src={api.fullUrl(s, 'jpeg')} alt={s.name} draggable={false} className="cmp-full" style={{ width: w, height: ht, left: `calc(50% - ${pan.x * w}px)`, top: `calc(50% - ${pan.y * ht}px)` }} />
@@ -186,7 +222,8 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
                   {c?.best && c.size > 1 && sharp && <span className="badge">sharp {sharp}</span>}
                 </div>
                 <div className="cmp-tr">
-                  {s.rating > 0 && <span className="badge">★{s.rating}</span>}
+                  <RatingBadge rating={s.rating} />
+                  <button className="cmp-x cmp-expand" aria-label={`Inspect ${s.name}`} title="Inspect larger (I, or double-click)" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setHi(i); setInspect(true) }}>{EXPAND}</button>
                   <button className="cmp-x" aria-label={`Remove ${s.name} from compare`} title="Remove from compare" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); remove(s.id) }}>{X}</button>
                 </div>
                 {hist && <Hist bins={s.histogram} />}
@@ -206,13 +243,23 @@ export function Compare({ shots, burst, cull, onPick, onReject, onUnflag, onRate
       </div>
 
       <div className="cmp-act">
-        {!mobile && <span>Highlight with <span className="key">1</span>–<span className="key">{Math.min(9, list.length)}</span> or arrows · <span className="key">⇧1</span>–<span className="key">⇧5</span> rate · <span className="key">P</span> pick · <span className="key">X</span> reject · <span className="key">−</span> remove</span>}
+        {!mobile && <span>Highlight with <span className="key">1</span>–<span className="key">{Math.min(9, list.length)}</span> or arrows · <span className="key">⇧1</span>–<span className="key">⇧{maxKey(system)}</span> rate · <span className="key">P</span> pick · <span className="key">X</span> reject · <span className="key">−</span> remove · <span className="key">I</span> inspect{list.length > 1 && <> · <span className="key">B</span> before / after</>}</span>}
         {list.length > 1 && (
           <button className="tb primary" onClick={keepOne} title={cur ? `Pick ${cur.name}` : undefined}>
             Pick {mobile ? 'highlighted' : 'this one'}, reject the other {list.length - 1} {!mobile && <span className="key accent">⏎</span>}
           </button>
         )}
       </div>
+
+      {inspect && (
+        <InspectDialog
+          shots={list} index={h} cull={cull} maxSharp={maxSharp}
+          onIndex={setHi}
+          onPick={onPick} onReject={onReject} onUnflag={onUnflag} onRate={onRate}
+          onCompare={(other) => { setInspect(false); setBa({ a: h, b: other }) }}
+          onClose={() => setInspect(false)}
+        />
+      )}
     </div>
   )
 }
