@@ -161,14 +161,14 @@ export const api = {
   adoptFolder: (destId: string, b: { path: string; name: string; client?: string }) => req<SessionMeta>('POST', `/api/destinations/${destId}/adopt`, b),
   onTransfer(fn: (j: TransferJob) => void): () => void {
     const es = new EventSource(withKey(`${base}/api/events`))
-    es.addEventListener('transfer:progress', (m) => fn(JSON.parse((m as MessageEvent).data) as TransferJob))
+    es.addEventListener('transfer:progress', (m) => { const { type: _t, ...job } = JSON.parse((m as MessageEvent).data) as Extract<ServerEvent, { type: 'transfer:progress' }>; fn(job) })
     return () => es.close()
   },
   /** Calls back when a live listing of `destId` changed. Returns an unsubscribe. */
   onBrowseUpdated(fn: (destId: string, path: string) => void): () => void {
     const es = new EventSource(withKey(`${base}/api/events`))
     es.addEventListener('browse:updated', (m) => {
-      const e = JSON.parse((m as MessageEvent).data) as { destId: string; path: string }
+      const e = JSON.parse((m as MessageEvent).data) as Extract<ServerEvent, { type: 'browse:updated' }>
       fn(e.destId, e.path)
     })
     return () => es.close()

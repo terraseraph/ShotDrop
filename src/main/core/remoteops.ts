@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { Destination, ServerEvent, Settings } from '@shared/types'
-import type { RemoteOp, RemoteSettings } from '@shared/remote'
+import type { Destination } from '@shared/types'
+import type { RemoteOp } from '@shared/remote'
 import type { Core } from './index'
 import type { RemoteOpRow } from './library'
 import { remoteFor } from './remote'
@@ -59,7 +59,7 @@ export class RemoteOpsService {
   }
 
   private emit(row: RemoteOpRow | undefined): void {
-    if (row) this.core.bus.emit({ type: 'remoteop:updated', op: toOp(row) } as unknown as ServerEvent)
+    if (row) this.core.bus.emit({ type: 'remoteop:updated', op: toOp(row) })
   }
 
   list(): RemoteOp[] {
@@ -76,7 +76,7 @@ export class RemoteOpsService {
 
   pump(): void {
     const { lib, sync } = this.core
-    for (const job of lib.nextRemoteMoves(sync.skippedDests())) {
+    for (const job of lib.nextRemoteMoves(sync.skippedDests(), this.core.settings.destinations.map((d) => d.id))) {
       const dest = this.core.settings.destinations.find((d) => d.id === job.dest_id)
       if (!dest || this.running.has(dest.id)) continue
       // An upload or delete still touching either end: wait, the next pump tries again.
@@ -188,8 +188,8 @@ export class RemoteOpsService {
       }
       this.queueMoves(folder, target)
       // s2's current-session setting (absent on branches without it) must keep pointing at the renamed folder.
-      const cur = (this.core.settings as Settings & Partial<RemoteSettings>).ingest
-      if (cur?.currentSession === folder) await this.core.updateSettings({ ingest: { ...cur, currentSession: target } } as Partial<Settings>)
+      const cur = this.core.settings.ingest
+      if (cur?.currentSession === folder) await this.core.updateSettings({ ingest: { ...cur, currentSession: target } })
       lib.forgetRemoteEntries(folder)
       for (const d of this.core.settings.destinations) sync.forgetDirs(d, folder)
     } finally {
@@ -265,7 +265,7 @@ export class RemoteOpsService {
   }
 
   private emitChanged(...folders: string[]): void {
-    for (const folder of new Set(folders)) this.core.bus.emit({ type: 'session:changed', folder } as unknown as ServerEvent)
+    for (const folder of new Set(folders)) this.core.bus.emit({ type: 'session:changed', folder })
   }
 }
 

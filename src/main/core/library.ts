@@ -441,7 +441,8 @@ export class Library {
 
   dropSyncForDest(destId: string): void {
     this.db.prepare(`DELETE FROM sync_jobs WHERE dest_id = ?`).run(destId)
-    this.dropRemoteDeletes(destId)
+    // Every queued op goes, running ones too: nothing may survive as an orphan once its destination is gone.
+    this.db.prepare(`DELETE FROM remote_ops WHERE dest_id = ?`).run(destId)
   }
 
   // ---- remote deletes ("mirror deletes") ----
@@ -474,13 +475,14 @@ export class Library {
       .run(destId, fileId)
   }
 
-  nextRemoteDeletes(limit: number, skipDests: string[] = []): { id: number; dest_id: string; rel_path: string; attempts: number }[] {
+  nextRemoteDeletes(limit: number, skipDests: string[] = [], knownDests: string[] = []): { id: number; dest_id: string; rel_path: string; attempts: number }[] {
     return this.db
       .prepare(
         `SELECT id, dest_id, src AS rel_path, attempts FROM remote_ops
-         WHERE op = 'delete' AND status = 'pending' AND dest_id NOT IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT ?`
+         WHERE op = 'delete' AND status = 'pending' AND dest_id IN (SELECT value FROM json_each(?))
+           AND dest_id NOT IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT ?`
       )
-      .all(JSON.stringify(skipDests), limit) as { id: number; dest_id: string; rel_path: string; attempts: number }[]
+      .all(JSON.stringify(knownDests), JSON.stringify(skipDests), limit) as { id: number; dest_id: string; rel_path: string; attempts: number }[]
   }
 
   setRemoteDeleteStatus(id: number, status: 'pending' | 'running' | 'error', error: string | null = null): void {
@@ -536,15 +538,16 @@ export class Library {
   }
 
   /** The oldest unfinished op of each destination, if it's a pending move. Strictly in order, so a later op never runs before the one it depends on. */
-  nextRemoteMoves(skipDests: string[] = []): { id: number; dest_id: string; src: string; dst: string; attempts: number }[] {
+  nextRemoteMoves(skipDests: string[] = [], knownDests: string[] = []): { id: number; dest_id: string; src: string; dst: string; attempts: number }[] {
     return this.db
       .prepare(
         `SELECT id, dest_id, src, dst, attempts FROM remote_ops o
-         WHERE op = 'move' AND status = 'pending' AND dest_id NOT IN (SELECT value FROM json_each(?))
+         WHERE op = 'move' AND status = 'pending' AND dest_id IN (SELECT value FROM json_each(?))
+           AND dest_id NOT IN (SELECT value FROM json_each(?))
            AND id = (SELECT MIN(id) FROM remote_ops WHERE dest_id = o.dest_id)
          ORDER BY id`
       )
-      .all(JSON.stringify(skipDests)) as { id: number; dest_id: string; src: string; dst: string; attempts: number }[]
+      .all(JSON.stringify(knownDests), JSON.stringify(skipDests)) as { id: number; dest_id: string; src: string; dst: string; attempts: number }[]
   }
 
   /** Pending or running move targets of a destination: uploads under these prefixes wait for the move. */

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
-import type { Destination, ServerEvent } from '@shared/types'
+import type { Destination } from '@shared/types'
 import type { BrowseResult, RemoteEntry, RemoteSessions, SessionMeta } from '@shared/remote'
 import type { Core } from '../core'
 import { BadPath, remoteFor, safeRel, type RemoteFs } from '../core/remote'
@@ -128,7 +128,7 @@ export function registerRemoteBrowse(app: FastifyInstance, core: Core): void {
         if (path) db.prepare(`UPDATE remote_entries SET meta_json = ? WHERE dest_id = ? AND path = ?`).run(meta ? JSON.stringify(meta) : null, d.id, path)
         lastLive.set(key, Date.now())
         const changed = before !== JSON.stringify(childRows(d.id, path).map((r) => [r.path, r.size, r.mtime]))
-        if (changed) core.bus.emit({ type: 'browse:updated', destId: d.id, path } as unknown as ServerEvent)
+        if (changed) core.bus.emit({ type: 'browse:updated', destId: d.id, path })
         return { entries, meta }
       } catch (e) {
         if (isUnreachable(e as SyncError)) reach.set(d.id, false)

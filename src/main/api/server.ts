@@ -18,7 +18,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Core } from '../core'
 import { DATE_RE, SessionService, safeFolder, sanitizeName } from '../core/sessions'
-import type { RemoteSettings } from '@shared/remote'
 import type { Destination, ExportOptions, Flag, ServerEvent, Settings, ShotPatch, ShotSource, SyncStatus } from '@shared/types'
 
 const isLoopback = (ip: string): boolean => ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
@@ -121,9 +120,9 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   const sessions = new SessionService(
     core.lib,
     () => core.settings.libraryDir,
-    () => (core.settings as Settings & Partial<RemoteSettings>).ingest?.currentSession ?? null,
+    () => core.settings.ingest?.currentSession ?? null,
     () => core.settings.destinations.filter((d) => d.enabled).map((d) => d.id),
-    (folder) => core.bus.emit({ type: 'session:changed', folder } as unknown as ServerEvent),
+    (folder) => core.bus.emit({ type: 'session:changed', folder }),
     () => core.sync.pump()
   )
   const remoteOps = new RemoteOpsService(core)

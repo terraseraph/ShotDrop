@@ -1,3 +1,4 @@
+import type { TransferJob, RemoteOp } from './remote'
 // Types shared by the server (main process) and the UI (renderer / remote browser).
 
 export type Flag = -1 | 0 | 1 // reject | none | pick
@@ -125,6 +126,9 @@ export interface Settings {
   tunnel: { autoStart: boolean; cloudflaredPath: string }
   /** Wi-Fi camera over PTP/IP (live view + downloads). */
   ptp: PtpSettings
+  /** Identifies this library in its destinations' library.json. */
+  libraryId: string
+  ingest: { currentSession: string | null; currentSessionEndsAt: number | null }
 }
 
 export interface PtpSettings {
@@ -231,6 +235,10 @@ export type ServerEvent =
   | { type: 'shot:removed'; id: number }
   | { type: 'status'; status: Status }
   | { type: 'ingest:error'; file: string; error: string }
+  | { type: 'browse:updated'; destId: string; path: string }
+  | ({ type: 'transfer:progress' } & TransferJob)
+  | { type: 'session:changed'; folder: string | null }
+  | { type: 'remoteop:updated'; op: RemoteOp }
 
 // ---- RAW sources, metadata, export ----
 

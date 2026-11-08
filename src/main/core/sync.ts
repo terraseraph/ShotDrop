@@ -247,7 +247,7 @@ export class SyncService {
     const free = CONCURRENCY - this.active
     if (free <= 0) return
     let started = 0
-    for (const job of this.lib.nextRemoteDeletes(free + this.busy.size, skip)) {
+    for (const job of this.lib.nextRemoteDeletes(free + this.busy.size, skip, this.settings().destinations.map((d) => d.id))) {
       if (started >= free) break
       const dest = this.settings().destinations.find((d) => d.id === job.dest_id)
       const key = `${job.dest_id}|${job.rel_path}`
