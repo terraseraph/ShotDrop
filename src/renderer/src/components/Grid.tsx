@@ -36,6 +36,8 @@ interface Props {
   chosen?: number[] // frames chosen for Compare (Ctrl/Shift-click)
   onChosen?: (ids: number[]) => void
   onCompare?: () => void
+  /** Move these frames to another session (opens the sheet). */
+  onMove?: (ids: number[]) => void
 }
 
 type Size = 'S' | 'M' | 'L'
@@ -372,6 +374,7 @@ export function Grid(p: Props) {
       { label: 'Open in Loupe', key: 'Enter', act: () => onOpen(id) },
       { label: s.flag === 1 ? 'Unpick' : 'Pick', key: 'P', act: () => onPatch([id], { flag: s.flag === 1 ? 0 : 1 }) },
       { label: s.flag === -1 ? 'Unreject' : 'Reject', key: 'X', act: () => onPatch([id], { flag: s.flag === -1 ? 0 : -1 }) },
+      !!p.onMove && { label: `Move ${withThis.length > 1 ? `${withThis.length} frames` : 'frame'} to session…`, act: () => p.onMove?.(withThis) },
       choosing && { label: 'Clear chosen frames', key: 'Esc', act: () => p.onChosen?.([]) },
     ]
     const x = Math.min(menu.x, window.innerWidth - 248)
@@ -428,6 +431,7 @@ export function Grid(p: Props) {
           <div className="gx-mchosen">
             <strong>{chosen.length} chosen</strong>
             <button className="tb" onClick={() => p.onChosen?.([])}>Clear</button>
+            {p.onMove && <button className="tb" onClick={() => p.onMove?.(chosen)}>Move</button>}
             <button className="tb primary" disabled={chosen.length < 2} onClick={p.onCompare}>Compare {chosen.length}</button>
           </div>
         ) : p.onChosen && shots.length > 1 ? (

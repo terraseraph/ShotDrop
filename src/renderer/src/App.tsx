@@ -28,6 +28,7 @@ import { PinGate } from './components/PinGate'
 import { Shortcuts } from './components/Shortcuts'
 import { DeleteWarning } from './components/DeleteWarning'
 import { DeleteConfirm } from './components/DeleteConfirm'
+import { MoveToSessionSheet } from './components/MoveToSessionSheet'
 import { MobileLoupe, MobileTop } from './components/MobileLoupe'
 import type { Burst } from './components/Loupe'
 import { ActionBar } from './components/ActionBar'
@@ -64,6 +65,15 @@ export default function App() {
   const [syncOpen, setSyncOpen] = useState(false)
   const [compareIds, setCompareIds] = useState<number[]>([])
   const [session, setSession] = useState('')
+  const [moving, setMoving] = useState<number[] | null>(null)
+  useEffect(() => {
+    const h = (e: Event): void => {
+      const d = (e as CustomEvent<{ from: string; to: string }>).detail
+      setSession((cur) => (cur === d.from ? d.to : cur))
+    }
+    window.addEventListener('shotdrop:session-renamed', h)
+    return () => window.removeEventListener('shotdrop:session-renamed', h)
+  }, [])
   const [source, setSource] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [infoOpen, setInfoOpen] = useState(true)
@@ -370,6 +380,7 @@ export default function App() {
                   chosen={compareIds}
                   onChosen={setCompareIds}
                   onCompare={() => setView('compare')}
+                  onMove={setMoving}
                 />
               ) : (
                 <Compare
@@ -422,6 +433,18 @@ export default function App() {
             setDeleting(null)
             if (d.advance) move(1)
             for (const s of d.shots) void lib.remove(s.id)
+          }}
+        />
+      )}
+      {moving && (
+        <MoveToSessionSheet
+          ids={moving}
+          fromSession={session}
+          onClose={() => setMoving(null)}
+          onMoved={(n, folder) => {
+            setMoving(null)
+            setCompareIds([])
+            lib.toast(`Moved ${n} photo${n === 1 ? '' : 's'} to ${folder}`)
           }}
         />
       )}

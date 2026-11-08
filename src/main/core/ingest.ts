@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs'
 import { copyFile, readdir, rename, rmdir, unlink } from 'node:fs/promises'
-import { basename, dirname, extname, join, relative, sep } from 'node:path'
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { watch, type FSWatcher } from 'chokidar'
 import type { Library } from './library'
 import type { Previewer } from './media'
@@ -63,6 +63,8 @@ export class Ingestor {
   /** Where the current session (ingest target) lives; wired up by Core. Clears itself once `endsAt` passes. */
   currentSessionSource: { get: () => { folder: string | null; endsAt: number | null }; clear: () => void } | null = null
   private currentTimer: NodeJS.Timeout | null = null
+  /** Library paths a rename or move is shuffling: the watcher would see unlink+add and re-ingest them. Counted, so overlapping calls nest. */
+  private muted = new Map<string, number>()
 
   constructor(
     private lib: Library,
@@ -134,6 +136,30 @@ export class Ingestor {
     return n
   }
 
+  /** Ignore watcher events at or under these paths until unmute(). */
+  mute(paths: string[]): void {
+    for (const p of paths) this.muted.set(resolve(p), (this.muted.get(resolve(p)) ?? 0) + 1)
+  }
+
+  /** Lifts a mute after `holdMs`, so add events still in chokidar's write-finish window are swallowed too. */
+  unmute(paths: string[], holdMs = 3000): void {
+    setTimeout(() => {
+      for (const p of paths) {
+        const k = resolve(p)
+        const n = (this.muted.get(k) ?? 1) - 1
+        if (n <= 0) this.muted.delete(k)
+        else this.muted.set(k, n)
+      }
+    }, holdMs).unref?.()
+  }
+
+  private isMuted(p: string): boolean {
+    if (!this.muted.size) return false
+    const r = resolve(p)
+    for (const m of this.muted.keys()) if (r === m || r.startsWith(m + sep)) return true
+    return false
+  }
+
   /** Anything under a dot folder or dot file inside the library (.incoming, .trash...). */
   private isHidden(libDir: string, p: string): boolean {
     const rel = relative(libDir, p)
@@ -143,7 +169,7 @@ export class Ingestor {
   /** Loose files at the library root go into a day folder; files already in a subfolder stay put. */
   private enqueueLibraryFile(libDir: string, p: string): void {
     // Sidecars next to photos are picked up with their photo; ShotDrop writes its own .xmp files here too.
-    if (!isImage(p)) return
+    if (!isImage(p) || this.isMuted(p)) return
     this.enqueue(p, { mode: dirname(p) === libDir ? 'move' : 'adopt', source: null })
   }
 
