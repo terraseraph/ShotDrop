@@ -1,7 +1,7 @@
 import type { Label, Shot, ShotPatch } from '@shared/types'
+import { RatingButtons } from '../rating'
 
 const LABELS: Exclude<Label, null>[] = ['red', 'yellow', 'green', 'blue', 'purple']
-const STAR = 'm12 2 3 6.6 7 .9-5.1 4.9 1.3 7.1L12 18l-6.2 3.5 1.3-7.1L2 9.5l7-.9z'
 const LABEL_VAR: Record<Exclude<Label, null>, string> = { red: 'var(--l-red)', yellow: 'var(--l-yellow)', green: 'var(--l-green)', blue: 'var(--l-blue)', purple: 'var(--l-purple)' }
 
 interface Props {
@@ -12,21 +12,13 @@ interface Props {
   onShare: () => void
 }
 
-/** Phone culling: 44px star row, then a thumb-reach bar (Pick, Reject, Label, Burst, Share). */
+/** Phone culling: 44px rating row (stars or thumbs), then a thumb-reach bar (Pick, Reject, Label, Burst, Share). */
 export function ActionBar({ shot, onPatch, onBurst, onShare }: Props) {
   if (!shot) return null
   const nextLabel = (): void => onPatch({ label: shot.label === null ? LABELS[0] : (LABELS[LABELS.indexOf(shot.label) + 1] ?? null) })
   return (
     <div className="action-bar">
-      <div className="m-stars" role="radiogroup" aria-label={`Rating ${shot.rating} of 5`}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} role="radio" aria-checked={shot.rating === n} aria-label={`${n} star${n > 1 ? 's' : ''}`} onClick={() => onPatch({ rating: shot.rating === n ? 0 : n })}>
-            <svg width="26" height="26" viewBox="0 0 24 24" fill={n <= shot.rating ? 'var(--star)' : 'none'} stroke={n <= shot.rating ? 'none' : '#555'} strokeWidth="2" aria-hidden>
-              <path d={STAR} />
-            </svg>
-          </button>
-        ))}
-      </div>
+      <RatingButtons shot={shot} onPatch={onPatch} className="m-stars" size={26} />
       <div className="m-cull">
         <button className={`cull ${shot.flag === 1 ? 'on' : ''}`} aria-pressed={shot.flag === 1} onClick={() => onPatch({ flag: shot.flag === 1 ? 0 : 1 })}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden><path d="m5 12 5 5L20 7" /></svg>

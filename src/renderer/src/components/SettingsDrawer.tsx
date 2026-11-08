@@ -13,6 +13,7 @@ import { TabBar } from './TabBar'
 import { type PrefKey, type Drive, dropProps, fetchPlaces, getPref, lastPart, setPref } from './fsApi'
 import { lanUrl } from './ViewOnPhone'
 import { Dialog } from './Dialog'
+import { THUMBS, ThumbIcon, setRatingSystem } from '../rating'
 import './FolderPicker.css'
 import './Phone.css'
 import './Settings.css'
@@ -60,6 +61,8 @@ function useLiveSettings(toast: Toast) {
     },
     [toast, load]
   )
+  // The gallery reads the rating system from its own store; keep it in step with what Settings shows.
+  useEffect(() => { if (s?.ratingSystem) setRatingSystem(s.ratingSystem) }, [s?.ratingSystem])
   return { s, apply, load }
 }
 
@@ -239,6 +242,13 @@ export function SettingsDrawer({ status, tab, onClose, toast, onSetup, onOpenSyn
             </Sec>
 
             <Sec id="culling" title="Culling" i={2}>
+              <Row label="Rate with">
+                <div className="seg" role="radiogroup" aria-label="Rate with">
+                  <button role="radio" aria-checked={s.ratingSystem === 'thumbs'} className={s.ratingSystem === 'thumbs' ? 'on' : ''} onClick={() => void apply({ ratingSystem: 'thumbs' })}>Thumbs and heart</button>
+                  <button role="radio" aria-checked={s.ratingSystem === 'stars'} className={s.ratingSystem === 'stars' ? 'on' : ''} onClick={() => void apply({ ratingSystem: 'stars' })}>5 stars</button>
+                </div>
+                <span className="st-muted st-rate-demo">{s.ratingSystem === 'stars' ? <>Keys <span className="key">1</span>–<span className="key">5</span></> : <>{THUMBS.map(({ t, key }) => <span key={t}><span className="key">{key}</span><ThumbIcon t={t} size={13} /></span>)}<span>saved as 1, 4 and 5 stars</span></>}</span>
+              </Row>
               <Row label="Group bursts and mark the best"><Switch on={bursts === '1'} onChange={(v) => setBursts(v ? '1' : '0')} label="Bursts" /><span className="st-muted">Flags soft frames and eyes closed too</span></Row>
               <Row label="Write XMP sidecars"><Switch on={s.xmpSidecars} onChange={(v) => void apply({ xmpSidecars: v })} label="XMP sidecars" /><span className="st-muted">Lightroom and Capture One see your ratings</span></Row>
               <Row label="Shift + key moves to next"><Switch on={shift === '1'} onChange={(v) => setShift(v ? '1' : '0')} label="Shift advances" /></Row>
@@ -370,6 +380,7 @@ export function MobileSettings({ status, toast }: { status: Status | null; toast
               {check && <div className="mrow stack"><NetworkCheck watch={`${status?.ftp.running}-${status?.ftp.port}`} toast={toast} /></div>}
             </MGroup>
             <MGroup title="CULLING">
+              <button className="mrow tap" onClick={() => void apply({ ratingSystem: s.ratingSystem === 'stars' ? 'thumbs' : 'stars' })}><div className="t"><div>Rate with</div></div><span className="st-text2">{s.ratingSystem === 'stars' ? '5 stars' : 'Thumbs and heart'}</span><span className="chev">›</span></button>
               <div className="mrow"><div className="t"><div>Group bursts, mark best</div><div className="s">Also flags soft and eyes closed</div></div><Switch className="m" on={bursts === '1'} onChange={(v) => setBursts(v ? '1' : '0')} label="Bursts" /></div>
               <div className="mrow"><div className="t"><div>Write XMP sidecars</div><div className="s">Lightroom and Capture One see ratings</div></div><Switch className="m" on={s.xmpSidecars} onChange={(v) => void apply({ xmpSidecars: v })} label="XMP sidecars" /></div>
               <button className="mrow tap" onClick={() => setDel(del === 'bin' ? 'permanent' : 'bin')}><div className="t"><div>Delete goes to</div></div><span className="st-text2">{del === 'bin' ? 'Recycle bin' : 'Permanent'}</span><span className="chev">›</span></button>

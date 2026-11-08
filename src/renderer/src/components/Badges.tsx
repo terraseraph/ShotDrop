@@ -1,4 +1,5 @@
 import type { Shot } from '@shared/types'
+import { RatingBadge } from '../rating'
 
 export function Stars({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'md' }) {
   if (!rating) return null
@@ -15,7 +16,7 @@ export function Badges({ shot }: { shot: Shot }) {
     <span className="badges">
       {shot.files.some((f) => f.kind === 'video') && <span className="badge" aria-label="Video">▶</span>}
       {shot.label && <span className={`label-dot ${shot.label}`} aria-label={`${shot.label} label`} />}
-      {shot.rating > 0 && <span className="badge" aria-label={`${shot.rating} stars`}>★{shot.rating}</span>}
+      <RatingBadge rating={shot.rating} />
       {shot.flag === 1 && <span className="badge pick" aria-label="Pick">P</span>}
       {shot.flag === -1 && <span className="badge rej" aria-label="Rejected">X</span>}
     </span>

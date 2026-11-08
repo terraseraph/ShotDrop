@@ -4,6 +4,7 @@ import type { Shot, ShotPatch } from '@shared/types'
 import { api } from '../api'
 import { fmtAperture, fmtIso, fmtShutter } from '../format'
 import { fade } from '../motion'
+import { RateKeys, RatingButtons } from '../rating'
 import './GridPreview.css'
 
 interface Props {
@@ -21,7 +22,7 @@ interface Props {
 
 /**
  * Full-size look at a frame without leaving the grid (Space or double-click).
- * Arrows, 1-5, P and X still go to the app's culling keys, which act on the selected frame: this one.
+ * Arrows, the rating keys, P and X still go to the app's culling keys, which act on the selected frame: this one.
  */
 export function GridPreview({ shot, index, total, chosen, onPrev, onNext, onPatch, onToggleChosen, onLoupe, onClose }: Props) {
   const [full, setFull] = useState(false) // 100%: the real file, scrollable
@@ -68,11 +69,7 @@ export function GridPreview({ shot, index, total, chosen, onPrev, onNext, onPatc
           <span>{index + 1} of {total}{exif ? ` · ${exif}` : ''}{w && h ? ` · ${w}×${h}` : ''}</span>
         </span>
         <span className="gp-tools">
-          <span className="gp-stars" role="group" aria-label="Rating">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} className={shot.rating >= n ? 'on' : ''} aria-label={`${n} star${n > 1 ? 's' : ''}`} onClick={() => onPatch({ rating: shot.rating === n ? 0 : n })}>★</button>
-            ))}
-          </span>
+          <RatingButtons shot={shot} onPatch={onPatch} className="gp-stars" size={15} />
           <button className={`tb ${shot.flag === 1 ? 'gp-pick' : ''}`} aria-pressed={shot.flag === 1} onClick={() => onPatch({ flag: shot.flag === 1 ? 0 : 1 })}>Pick <span className="key">P</span></button>
           <button className={`tb ${shot.flag === -1 ? 'gp-rej' : ''}`} aria-pressed={shot.flag === -1} onClick={() => onPatch({ flag: shot.flag === -1 ? 0 : -1 })}>Reject <span className="key">X</span></button>
           {chosen !== null && (
@@ -95,7 +92,7 @@ export function GridPreview({ shot, index, total, chosen, onPrev, onNext, onPatc
       </div>
 
       <div className="gp-hint" onClick={(e) => e.stopPropagation()}>
-        <span className="key">←</span> <span className="key">→</span> browse · <span className="key">1</span>–<span className="key">5</span> rate · click the photo to zoom to 100% · <span className="key">Space</span> close
+        <span className="key">←</span> <span className="key">→</span> browse · <RateKeys /> rate · click the photo to zoom to 100% · <span className="key">Space</span> close
       </div>
     </motion.div>
   )

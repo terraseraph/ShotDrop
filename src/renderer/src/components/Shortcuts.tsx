@@ -1,3 +1,5 @@
+import { useRatingSystem } from '../rating'
+
 const KEYS: [string, string][] = [
   ['← →', 'Previous / next'],
   ['1 – 5', 'Rate (0 clears)'],
@@ -15,13 +17,16 @@ const KEYS: [string, string][] = [
   ['?', 'This list']
 ]
 
+const THUMB_KEYS: [string, string] = ['1 2 3', 'Thumbs down / up / love (0 clears)']
+
 export function Shortcuts({ onClose }: { onClose: () => void }) {
+  const keys = useRatingSystem() === 'thumbs' ? KEYS.map((k, i) => (i === 1 ? THUMB_KEYS : k)) : KEYS
   return (
     <div className="modal-backdrop scrim" onClick={onClose}>
       <div className="modal sheet" role="dialog" aria-label="Keyboard shortcuts" onClick={(e) => e.stopPropagation()}>
         <h2>Keyboard shortcuts</h2>
         <dl className="keys">
-          {KEYS.map(([k, v]) => (
+          {keys.map(([k, v]) => (
             <div key={k}>
               <dt>
                 <span className="key" style={{ height: 22 }}>{k}</span>

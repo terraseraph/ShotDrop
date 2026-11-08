@@ -9,6 +9,7 @@ import { TabBar } from './TabBar'
 import { SessionRail, dayName, useNames } from './SessionRail'
 import { CullPanel, DetectorChips, FlagBadges, flaggedBy, type CullUI } from './CullPanel'
 import { GridPreview } from './GridPreview'
+import { RateKeys, RatingBadge } from '../rating'
 import './Grid.css'
 
 interface Props {
@@ -297,7 +298,7 @@ export function Grid(p: Props) {
           {video && <span className="badge">VIDEO</span>}
         </span>
         <span className="gx-b">
-          {s.rating > 0 && <span className="badge">★{s.rating}</span>}
+          <RatingBadge rating={s.rating} />
           {s.flag === 1 && <span className="badge pick">P</span>}
           {s.flag === -1 && <span className="badge rej">X</span>}
           {s.label && <span className="badge" style={{ background: `var(--l-${s.label})`, color: '#111' }}>{s.label[0].toUpperCase()}</span>}
@@ -471,7 +472,7 @@ export function Grid(p: Props) {
         ) : (
           <div className="gx-selbar">
             <span>{selected ? `${selected.name} selected` : 'Nothing selected'}</span>
-            <span><span className="key">1</span>–<span className="key">5</span> rate · <span className="key">P</span> pick · <span className="key">X</span> reject · tick the corner box, long-press or right-click to compare · <span className="key">Space</span> preview · <span className="key">Enter</span> loupe · <span className="key">⌫</span> delete</span>
+            <span><RateKeys /> rate · <span className="key">P</span> pick · <span className="key">X</span> reject · tick the corner box, long-press or right-click to compare · <span className="key">Space</span> preview · <span className="key">Enter</span> loupe · <span className="key">⌫</span> delete</span>
             <span style={{ marginLeft: 'auto' }}>Grouped by minute · bursts grouped automatically · {counts}</span>
           </div>
         )}

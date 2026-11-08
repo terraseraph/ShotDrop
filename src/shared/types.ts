@@ -4,6 +4,7 @@ export type Flag = -1 | 0 | 1 // reject | none | pick
 export type Label = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | null
 export type FileKind = 'jpeg' | 'heif' | 'raw' | 'video' | 'sidecar' | 'other'
 export type SyncStatus = 'pending' | 'running' | 'done' | 'error'
+export type RatingSystem = 'thumbs' | 'stars'
 
 export interface ShotFile {
   id: number
@@ -119,6 +120,8 @@ export interface Settings {
   destinations: Destination[]
   rclonePath: string
   xmpSidecars: boolean // write <name>.xmp next to each shot with rating/flag/label
+  /** How ratings are shown and set. Thumbs are stored on the star scale (down 1, up 4, love 5); see shared/rating.ts. */
+  ratingSystem: RatingSystem
   tunnel: { autoStart: boolean; cloudflaredPath: string }
   /** Wi-Fi camera over PTP/IP (live view + downloads). */
   ptp: PtpSettings

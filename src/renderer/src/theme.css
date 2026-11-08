@@ -21,6 +21,9 @@
   --accent-line: #5a4a1e;
   --pick: #f2b134;
   --star: #f2b134;
+  --thumb-down: #e5484d;
+  --thumb-up: #3dd68c;
+  --love: #ff6b9a;
   --live: #3dd68c; /* cameras connected, incoming, up to date */
   --live-dim: #15301f;
   --sync: #5ba7f7; /* outgoing, queued, running */
@@ -91,6 +94,7 @@
 .badge { height: 18px; min-width: 18px; padding: 0 5px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: rgba(0, 0, 0, 0.6); color: var(--text); white-space: nowrap; }
 .badge.pick { background: var(--accent); color: var(--accent-ink); }
 .badge.rej { background: var(--reject); color: #fff; }
+.badge.rbadge { padding: 0 4px; }
 .badge.best { background: var(--live); color: #04170d; }
 .badge.new { background: var(--live); color: #04170d; }
 
