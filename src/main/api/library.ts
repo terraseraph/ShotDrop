@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, preHandlerHookHandler } from 'fastify'
 import { hostname } from 'node:os'
 import type { Destination, Settings } from '@shared/types'
 import type { LibraryMeta, RemoteSettings } from '@shared/remote'
@@ -35,15 +35,7 @@ export async function ensureDestLibrary(core: Core, dest: Destination): Promise<
 }
 
 /** GET /api/destinations/:id/info and POST /api/destinations/probe (the same check for a destination not saved yet). Local only. */
-export function registerLibrary(app: FastifyInstance, core: Core): void {
-  const localOnly = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const loopback = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1'
-    if (!loopback || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) {
-      return reply.code(403).send({ error: 'Only available on the ShotDrop computer' })
-    }
-  }
-  const local = { preHandler: localOnly }
-
+export function registerLibrary(app: FastifyInstance, core: Core, local: { preHandler: preHandlerHookHandler }): void {
   const look = async (dest: LibraryDest): Promise<{ library: LibraryMeta | null; reachable: boolean }> => {
     try {
       return { library: await readLibraryMeta(dest, rcFor(core, dest)), reachable: true }
@@ -67,7 +59,7 @@ export function registerLibrary(app: FastifyInstance, core: Core): void {
           type: 'object',
           required: ['type', 'target'],
           additionalProperties: false,
-          properties: { type: { enum: ['folder', 'rclone'] }, target: { type: 'string', minLength: 1 } }
+          properties: { type: { enum: ['folder', 'rclone'] }, target: { type: 'string', minLength: 1, pattern: '^[^-]' } }
         }
       }
     },

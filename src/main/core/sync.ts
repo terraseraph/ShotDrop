@@ -351,10 +351,9 @@ async function removeFromFolder(root: string, relPath: string, trash?: (p: strin
 }
 
 function wants(d: Destination, f: FileRow, picked: boolean, shotKinds: Set<FileKind>): boolean {
-  // ShotDrop's own dot-files (.shotdrop/..., .shotdrop.json) go wherever the destination wants anything from that shot.
+  // ShotDrop's own dot-files (.shotdrop/..., .shotdrop.json) go to every enabled destination, whatever its filter.
   if (f.rel_path.startsWith('.shotdrop/') || f.rel_path.split('/').pop() === '.shotdrop.json') {
-    const photoKinds = [...shotKinds].filter((k) => k !== 'sidecar')
-    return photoKinds.length === 0 || photoKinds.some((k) => wants(d, { ...f, rel_path: '', kind: k }, picked, shotKinds))
+    return d.enabled
   }
   if (f.kind === 'sidecar') {
     // A sidecar follows its photos: it goes wherever at least one of them goes.

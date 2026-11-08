@@ -221,7 +221,10 @@ function parseLibrary(raw: string): LibraryMeta | null {
   }
 }
 
-const remoteLibraryPath = (target: string): string => `${target.replace(/\/+$/, '')}/${LIBRARY_FILE}`
+const remoteLibraryPath = (target: string): string => {
+  if (target.startsWith('-')) throw new Error('Invalid destination')
+  return `${target.replace(/\/+$/, '')}/${LIBRARY_FILE}`
+}
 
 /**
  * Read library.json. Resolves null when the destination is reachable but has none (or an unreadable one);

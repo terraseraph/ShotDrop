@@ -513,7 +513,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   // ---- connection check (firewall, ports, self-test) ----
   registerDiagnostics(app, core)
   registerCloud(app, core)
-  registerLibrary(app, core)
+  registerLibrary(app, core, local)
 
   // ---- remote web UI ----
   if (opts.rendererDir && existsSync(opts.rendererDir)) {
