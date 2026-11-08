@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { existsSync, mkdirSync, statfsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
-import { ftpLoginName, type DeletePreview, type Settings, type ShotPatch, type Status } from '@shared/types'
+import { ftpLoginName, type DeletePreview, type ServerEvent, type Settings, type ShotPatch, type Status } from '@shared/types'
 import { ConfigStore } from './config'
 import { openDb, type DB } from './db'
 import { Library } from './library'
@@ -72,6 +72,14 @@ export class Core {
       (fileId, shotId) => this.sync.fileAdded(fileId, shotId),
       this.xmp
     )
+    this.ingest.currentSessionSource = {
+      get: () => ({ folder: this.config.get().ingest.currentSession, endsAt: this.config.get().ingest.currentSessionEndsAt }),
+      clear: () => {
+        const folder = this.config.get().ingest.currentSession ?? ''
+        this.config.update({ ingest: { currentSession: null, currentSessionEndsAt: null } })
+        this.bus.emit({ type: 'session:changed', folder } as unknown as ServerEvent)
+      }
+    }
     this.ftp = new FtpService(
       () => this.ingest.incomingDir,
       (path, user) => this.ingest.enqueue(path, { mode: 'move', source: user }),
