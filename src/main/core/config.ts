@@ -2,11 +2,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { Settings } from '@shared/types'
+import type { RemoteSettings } from '@shared/remote'
 
 const randomPassword = (): string => randomBytes(4).toString('hex')
 
-export function defaultSettings(picturesDir: string): Settings {
+export function defaultSettings(picturesDir: string): Settings & Pick<RemoteSettings, 'libraryId'> {
   return {
+    libraryId: `lib_${randomBytes(4).toString('hex')}`,
     libraryDir: join(picturesDir, 'ShotDrop'),
     ftp: {
       enabled: true,

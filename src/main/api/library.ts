@@ -1,0 +1,85 @@
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { hostname } from 'node:os'
+import type { Destination, Settings } from '@shared/types'
+import type { LibraryMeta, RemoteSettings } from '@shared/remote'
+import type { Core } from '../core'
+import { toolPath } from '../core/bundled'
+import { ensureLibraryMeta, newLibraryId, readLibraryMeta, type LibraryDest, type LibraryRc } from '../core/cloud'
+
+/** Destinations whose library.json writers[] entry this app run has already refreshed. */
+const touched = new Set<string>()
+
+type Full = Settings & RemoteSettings
+
+const rcFor = (core: Core, dest: LibraryDest): LibraryRc => {
+  const remote = dest.target.split(':')[0]
+  return { bin: toolPath(core.settings.rclonePath, 'rclone'), cfg: dest.type === 'rclone' && core.cloud.has(remote) ? core.cloud.cfgArgs() : [] }
+}
+
+/** This library's id, generated once and kept in settings. */
+async function libraryId(core: Core): Promise<string> {
+  const have = (core.settings as Full).libraryId
+  if (have) return have
+  const id = newLibraryId()
+  await core.updateSettings({ libraryId: id } as Partial<Settings>)
+  return id
+}
+
+/** Best effort: writes library.json if absent, refreshes this host's writers[] entry once per app start. Never throws. */
+export async function ensureDestLibrary(core: Core, dest: Destination): Promise<LibraryMeta | null> {
+  try {
+    return await ensureLibraryMeta(dest, rcFor(core, dest), { libraryId: await libraryId(core), host: hostname(), touched })
+  } catch {
+    return null
+  }
+}
+
+/** GET /api/destinations/:id/info and POST /api/destinations/probe (the same check for a destination not saved yet). Local only. */
+export function registerLibrary(app: FastifyInstance, core: Core): void {
+  const localOnly = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const loopback = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1'
+    if (!loopback || req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) {
+      return reply.code(403).send({ error: 'Only available on the ShotDrop computer' })
+    }
+  }
+  const local = { preHandler: localOnly }
+
+  const look = async (dest: LibraryDest): Promise<{ library: LibraryMeta | null; reachable: boolean }> => {
+    try {
+      return { library: await readLibraryMeta(dest, rcFor(core, dest)), reachable: true }
+    } catch {
+      return { library: null, reachable: false }
+    }
+  }
+
+  app.get('/api/destinations/:id/info', local, async (req, reply) => {
+    const dest = core.settings.destinations.find((d) => d.id === (req.params as { id: string }).id)
+    if (!dest) return reply.code(404).send({ error: 'Not found' })
+    return { ...(await look(dest)), listedAt: null as number | null }
+  })
+
+  app.post(
+    '/api/destinations/probe',
+    {
+      ...local,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['type', 'target'],
+          additionalProperties: false,
+          properties: { type: { enum: ['folder', 'rclone'] }, target: { type: 'string', minLength: 1 } }
+        }
+      }
+    },
+    async (req) => {
+      const r = await look(req.body as LibraryDest)
+      const ours = (core.settings as Full).libraryId
+      return { ...r, other: !!r.library && r.library.libraryId !== ours }
+    }
+  )
+
+  // Refresh this host's writers[] entry shortly after start, once per destination.
+  setTimeout(() => {
+    for (const d of core.settings.destinations) if (d.enabled) void ensureDestLibrary(core, d)
+  }, 15_000).unref()
+}

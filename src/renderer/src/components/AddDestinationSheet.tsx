@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import type { CloudAccount, CloudFolder, CloudProvider, CloudQuota, CloudState, Destination, DestinationFilter, LibraryCounts, Settings, Status } from '@shared/types'
+import type { LibraryMeta } from '@shared/remote'
 import { api } from '../api'
 import { fmtSize } from '../format'
 import { fade, slideIn } from '../motion'
@@ -80,6 +81,7 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
   const [name, setName] = useState('')
   const [nameEdited, setNameEdited] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [other, setOther] = useState<LibraryMeta | null>(null) // another library already lives at the chosen target
   const cloud = kind === 'drive' || kind === 'dropbox'
   const chips = useChips(s, status)
 
@@ -169,6 +171,19 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
     const d = m && chips.drives.find((x) => x.path.toUpperCase().startsWith(m[1].toUpperCase()))
     return d && d.label && d.label !== d.path.slice(0, 2) ? `${d.label} (${m![1].toUpperCase()})` : local ? lastPart(local) : 'Folder'
   }, [cloud, kind, path, local, chips.drives])
+  // Before saving: does the chosen target already hold a different library's library.json? A warning, never a block.
+  useEffect(() => {
+    setOther(null)
+    if (editing || !target || (cloud && (!account || browsing))) return
+    let live = true
+    const t = setTimeout(() => {
+      api.probeDestination({ type: kind === 'folder' ? 'folder' : 'rclone', target }).then((r) => live && setOther(r.other ? r.library : null), () => undefined)
+    }, 600)
+    return () => {
+      live = false
+      clearTimeout(t)
+    }
+  }, [editing, target, kind, cloud, account, browsing])
   const finalName = (nameEdited ? name : autoName).trim() || autoName
   const needsSignIn = cloud && !account
   const ready = !linking && (needsSignIn || !!target)
@@ -371,6 +386,12 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
             </div>
           </section>
 
+          {other && (
+            <div className="ad-warn" role="alert">
+              <strong>Another library already syncs here.</strong> {other.name ? `“${other.name}”` : 'It'}{(() => { const w = [...other.writers].sort((a, b) => b.lastSync - a.lastSync)[0]; return w ? `, last written by ${w.host} on ${new Date(w.lastSync).toLocaleDateString()}` : '' })()}. You can still add it; photos from both libraries will mix in this folder.
+            </div>
+          )}
+
           {cloud && account && (
             <div className="fp-check ok" role="status"><Icon name="check" size={14} />Signed in{info[account.name]?.quota?.free != null ? ` · ${fmtSize(info[account.name]!.quota!.free!)} free` : ''}{counts ? ` · today's ${fmtSize(counts[filter].bytes)} fits` : ''}</div>
           )}
@@ -441,6 +462,9 @@ function FolderBrowser({ account, start, toast, onUse, onFullAccess }: {
       </nav>
       <div className="ad-flist">
         {folders === null && <span className="ad-empty">Loading…</span>}
+        {folders && folders.length <= 1 && onFullAccess && (
+          <p className="ad-note"><Icon name="shield" size={14} /><span>Empty because of safe mode? ShotDrop can only see folders it created with this link. <button className="ad-link" onClick={onFullAccess}>Upgrade to all folders</button></span></p>
+        )}
         {folders?.length === 0 && <span className="ad-empty">{path.length ? 'No folders inside this one.' : 'No folders yet. Create one above.'}</span>}
         {folders?.map((f) => (
           <button key={f.name} onClick={() => setPath([...path, f.name])}><Icon name="folder" /><span>{f.name}</span><Icon name="next" size={14} /></button>
