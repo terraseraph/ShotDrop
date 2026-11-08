@@ -1,0 +1,45 @@
+/* More… service picker and guided remote forms (docs/mockups/redesign/AddDestRemotes.html, AddDestRemotesFlow.html) */
+.rs-pick { display: flex; flex-direction: column; gap: 16px; }
+.rs-group { display: flex; flex-direction: column; gap: 8px; }
+.rs-group .lbl { display: flex; align-items: center; gap: 8px; }
+.rs-note { margin-left: auto; color: var(--faint); font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.rs-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.rs-svc { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 9px; border: 1px solid var(--raised); background: var(--panel-2); text-align: left; transition: border-color 0.15s; }
+.rs-svc:hover { border-color: #3a3a3a; }
+.rs-svc:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rs-svc strong { display: block; color: #fff; font-weight: 500; font-size: 12.5px; }
+.rs-svc small { color: var(--faint); font-size: 11px; }
+.rs-badge { border-radius: 7px; display: grid; place-items: center; font-size: 11px; font-weight: 700; flex: 0 0 auto; }
+.rs-adv { align-self: flex-start; display: inline-flex; gap: 6px; align-items: center; }
+
+.rs-form { display: flex; flex-direction: column; gap: 12px; }
+.rs-head { display: flex; align-items: center; gap: 10px; }
+.rs-head strong { color: #fff; font-size: 15px; font-weight: 600; }
+.rs-back { margin-left: auto; color: var(--faint); }
+.rs-paste { width: 100%; resize: none; padding: 10px 12px; border-radius: 9px; border: 1px dashed #3a3a3a; background: var(--panel); color: var(--text); font: inherit; font-size: 12px; }
+.rs-paste:focus { outline: 2px solid var(--focus); outline-offset: 0; border-style: solid; }
+.rs-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.rs-field { display: flex; flex-direction: column; gap: 6px; grid-column: span 2; min-width: 0; }
+.rs-field.narrow { grid-column: span 1; }
+/* SFTP: "Sign in with" sits between User and the password or key it switches. */
+.rs-method { order: 1; }
+.rs-field.late { order: 2; }
+.rs-l { color: var(--faint); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.rs-l em { font-style: normal; color: #6a6a6a; }
+.rs-auto { color: var(--live); font-weight: 500; font-size: 11px; }
+.rs-in { display: flex; align-items: center; gap: 8px; }
+.rs-in .ad-input { height: 36px; }
+.rs-field select.ad-input { height: 36px; }
+.rs-show { font-size: 12px; color: var(--faint); }
+.rs-toggle { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+.rs-toggle input { accent-color: var(--accent); }
+.rs-seg { align-self: flex-start; }
+.rs-trust, .rs-fail { padding: 12px 14px; border-radius: 10px; font-size: 12px; }
+.rs-trust { background: var(--warn-dim); color: var(--warn); }
+.rs-fail { background: rgba(229, 72, 77, 0.12); color: #ff9a9d; }
+.rs-trust strong, .rs-fail strong { display: block; color: #fff; font-size: 13px; font-weight: 500; }
+.rs-trust p, .rs-fail p { margin: 4px 0 0; color: var(--muted); }
+.rs-trust code { color: var(--text); }
+.rs-fail details { margin-top: 6px; color: var(--faint); }
+.rs-fail details code { display: block; margin-top: 4px; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+.rs-row { display: flex; gap: 8px; margin-top: 10px; }

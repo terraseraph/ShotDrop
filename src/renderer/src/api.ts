@@ -1,5 +1,6 @@
 import type { SessionRow } from '@shared/remote'
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, DeletePreview, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
+import type { ExternalRemote, RemoteAccount, ServiceId } from '@shared/services'
 import type { LibraryMeta } from '@shared/remote'
 
 import type { BrowseResult, RemoteOp, RemoteSessions, SessionMeta, TransferJob } from '@shared/remote'
@@ -125,13 +126,27 @@ export const api = {
   resync: (id: string) => req<{ queued: number }>('POST', `/api/destinations/${id}/resync`),
   libraryCounts: () => req<LibraryCounts>('GET', '/api/library/counts'),
   rescanLibrary: () => req<{ queued: number }>('POST', '/api/library/rescan'),
-  cloudAccounts: () => req<{ accounts: CloudAccount[]; linking: CloudState['linking'] }>('GET', '/api/cloud/accounts'),
+  cloudAccounts: () => req<{ accounts: CloudAccount[]; remotes: RemoteAccount[]; linking: CloudState['linking'] }>('GET', '/api/cloud/accounts'),
   cloudLink: (provider: CloudProvider, o: CloudLinkOptions = {}) => req<CloudAccount>('POST', '/api/cloud/link', { provider, ...o }),
   cloudCancel: () => req<void>('DELETE', '/api/cloud/link'),
   cloudFolders: (name: string, path: string) => req<CloudFolder[]>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/folders?path=${encodeURIComponent(path)}`),
   cloudMkdir: (name: string, path: string) => req<void>('POST', `/api/cloud/accounts/${encodeURIComponent(name)}/folders`, { path }),
   cloudInfo: (name: string) => req<{ email: string | null; quota: CloudQuota | null }>('GET', `/api/cloud/accounts/${encodeURIComponent(name)}/info`),
   cloudDisconnect: (name: string) => req<void>('DELETE', `/api/cloud/accounts/${encodeURIComponent(name)}`),
+  /** Create and test a guided remote. Resolves with the account, a host key to confirm (SFTP), or a plain-language failure. */
+  async cloudConnect(service: ServiceId, values: Record<string, string>, hostKey?: string): Promise<
+    | { ok: true; account: RemoteAccount }
+    | { ok: false; needsTrust: { fingerprint: string; keyType: string; hostKey: string } }
+    | { ok: false; error: { title: string; fix: string; raw: string } }
+  > {
+    const res = await fetch(`${base}/api/cloud/remotes`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ service, values, ...(hostKey ? { hostKey } : {}) }) })
+    const j = await res.json().catch(() => ({}))
+    if (res.status === 201) return { ok: true, account: j as RemoteAccount }
+    if (res.status === 409 && j.needsTrust) return { ok: false, needsTrust: j.needsTrust }
+    return { ok: false, error: { title: j.title ?? "Couldn't connect", fix: j.fix ?? j.error ?? `${res.status} ${res.statusText}`, raw: j.error ?? '' } }
+  },
+  cloudExternal: () => req<{ remotes: ExternalRemote[] }>('GET', '/api/cloud/external'),
+  cloudExternalFolders: (name: string, path: string) => req<CloudFolder[]>('GET', `/api/cloud/external/${encodeURIComponent(name)}/folders?path=${encodeURIComponent(path)}`),
   /** Does this not-yet-saved destination already hold another library's library.json? (local only) */
   probeDestination: (d: { type: 'folder' | 'rclone'; target: string }) => req<{ library: LibraryMeta | null; reachable: boolean; other: boolean }>('POST', '/api/destinations/probe', d),
   retrySync: () => req<{ retried: number }>('POST', '/api/sync/retry'),

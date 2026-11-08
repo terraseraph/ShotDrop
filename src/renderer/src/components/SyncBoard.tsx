@@ -6,6 +6,7 @@ import { ago, fmtSize } from '../format'
 import { fade, firm } from '../motion'
 import { Icon } from './Icon'
 import { AddDestinationSheet, FILTERS, KIND_ICON, KIND_LABEL, KIND_TINT, type Kind, kindOf, WHERE_DELETES_GO } from './AddDestinationSheet'
+import type { RemoteAccount } from '@shared/services'
 import { fetchPlaces, getJson, lastPart } from './fsApi'
 import { TabBar } from './TabBar'
 import { Dialog } from './Dialog'
@@ -55,13 +56,14 @@ interface Row {
 /** Everything both the desktop page and the phone screen need: accounts, per-destination rows, and the actions. */
 function useSyncModel(s: Settings | null, status: Status | null, reload: () => void, toast: Toast) {
   const [accounts, setAccounts] = useState<CloudAccount[]>([])
+  const [remotes, setRemotes] = useState<RemoteAccount[]>([])
   const [info, setInfo] = useState<Record<string, { email: string | null; quota: CloudQuota | null }>>({})
   const [counts, setCounts] = useState<LibraryCounts | null>(null)
   const [host, setHost] = useState<string | null>(null)
   const [relinking, setRelinking] = useState<string | null>(null)
   const nDest = s?.destinations.length ?? 0
   const picks = status?.sync // refresh counts when the queue moves
-  const loadAccounts = useCallback(() => void api.cloudAccounts().then((r) => setAccounts(r.accounts), () => undefined), [])
+  const loadAccounts = useCallback(() => void api.cloudAccounts().then((r) => { setAccounts(r.accounts); setRemotes(r.remotes ?? []) }, () => undefined), [])
   useEffect(() => { if (desktop) loadAccounts() }, [loadAccounts, nDest])
   useEffect(() => {
     for (const a of accounts) if (!info[a.name]) void api.cloudInfo(a.name).then((i) => setInfo((c) => ({ ...c, [a.name]: i })), () => undefined)
@@ -72,7 +74,7 @@ function useSyncModel(s: Settings | null, status: Status | null, reload: () => v
   const live = new Map((status?.destinations ?? []).map((d) => [d.id, d]))
   const avg = counts && counts.all.files ? counts.all.bytes / counts.all.files : 0
   const rows: Row[] = (s?.destinations ?? []).map((d) => {
-    const k = kindOf(d, accounts)
+    const k = kindOf(d, accounts, remotes)
     const ds = live.get(d.id)
     const acct = k.account ? info[k.account.name] : undefined
     const left = ds ? Math.max(0, ds.total - ds.done) : 0
@@ -376,7 +378,7 @@ function AddMenu({ onPick }: { onPick: (k: Kind) => void }) {
     { kind: 'drive', hint: 'sign in' },
     { kind: 'dropbox', hint: 'sign in' },
     { kind: 'folder', hint: 'browse' },
-    { kind: 'custom', hint: 'advanced' }
+    { kind: 'remote', hint: 'S3, SFTP, WebDAV…' }
   ]
   return (
     <motion.div role="menu" className="sx-menu sx-addmenu sheet" initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }} transition={firm}>
