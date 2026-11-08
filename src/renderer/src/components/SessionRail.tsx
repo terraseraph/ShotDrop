@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { Shot } from '@shared/types'
 import { fmtDay, useSessionNames } from '../sessions'
 import { NewSessionSheet, useCurrentSession } from './NewSessionSheet'
+import { FoundFolders } from './FoundFolders'
+import { SessionDestChips } from './SessionDestChips'
 
 const KEY = 'shotdrop.names'
 const LIVE_MS = 2 * 60_000
@@ -113,11 +115,14 @@ export function SessionRail({ allShots, session, source, onSession, onSource }: 
       {days.map(([d, n]) => {
         const isCur = current.folder === d
         return (
-          <Row key={d} id={`day:${d}`} auto={dayName(d)} name={names[`day:${d}`]} count={n} live={isCur ? true : undefined} active={session === d} onClick={() => onSession(session === d ? '' : d)} onRename={rename}
+          <Fragment key={d}>
+          <Row id={`day:${d}`} auto={dayName(d)} name={names[`day:${d}`]} count={n} live={isCur ? true : undefined} active={session === d} onClick={() => onSession(session === d ? '' : d)} onRename={rename}
             action={isCur ? { label: 'End session', onClick: () => void current.set(null) } : { label: 'Make current', onClick: () => void current.set(d) }} />
+          <SessionDestChips folder={d} />
+          </Fragment>
         )
       })}
-      {/* b2-import: per-destination chips mount here (below the days, above CAMERAS) */}
+      <FoundFolders />
       {newOpen && <NewSessionSheet onClose={() => setNewOpen(false)} onCreated={(f) => onSession(f)} />}
       <div className="gx-rail-h" style={{ paddingTop: 16 }}>CAMERAS</div>
       {cams.map(([src, c]) => (

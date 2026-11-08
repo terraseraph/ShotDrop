@@ -2,7 +2,7 @@ import type { SessionRow } from '@shared/remote'
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, DeletePreview, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
 import type { LibraryMeta } from '@shared/remote'
 
-import type { BrowseResult, RemoteSessions } from '@shared/remote'
+import type { BrowseResult, RemoteSessions, SessionMeta, TransferJob } from '@shared/remote'
 
 interface DesktopBridge {
   apiBase: string
@@ -145,10 +145,22 @@ export const api = {
   shareLink: (id: number) => req<{ url: string | null; reason?: string; via?: string }>('GET', `/api/shots/${id}/link`),
 
   // Browse a destination (read-only). The listing may come from cache first; `browse:updated` says a fresh one is ready.
-  browse: (destId: string, path: string) => req<BrowseResult>('GET', `/api/destinations/${destId}/browse?path=${encodeURIComponent(path)}`),
+  browse: (destId: string, path: string, diff = false) => req<BrowseResult>('GET', `/api/destinations/${destId}/browse?path=${encodeURIComponent(path)}${diff ? '&diff=1' : ''}`),
   remoteSessions: () => req<RemoteSessions>('GET', '/api/remote/sessions'),
   remoteThumbUrl: (destId: string, e: { path: string; size: number; mtime: number }) => withKey(`${base}/api/destinations/${destId}/thumb?path=${encodeURIComponent(e.path)}&size=${e.size}&mtime=${e.mtime}`),
   remoteFileUrl: (destId: string, path: string, download = false) => withKey(`${base}/api/destinations/${destId}/file?path=${encodeURIComponent(path)}${download ? '&download=1' : ''}`),
+  // Import / copy / send / adopt (b2). Import and copy return a job; progress arrives as `transfer:progress`.
+  transfers: () => req<TransferJob[]>('GET', '/api/transfers'),
+  cancelTransfer: (id: number) => req<void>('DELETE', `/api/transfers/${id}`),
+  importFrom: (destId: string, b: { paths: string[]; recursive?: boolean; session?: string }) => req<TransferJob>('POST', `/api/destinations/${destId}/import`, b),
+  copyFrom: (destId: string, b: { paths: string[]; toDestId: string; toPath: string }) => req<TransferJob>('POST', `/api/destinations/${destId}/copy`, b),
+  sendSession: (destId: string, b: { session: string; onlyMissing?: boolean; resendDiffers?: boolean }) => req<{ queued: number }>('POST', `/api/destinations/${destId}/send`, b),
+  adoptFolder: (destId: string, b: { path: string; name: string; client?: string }) => req<SessionMeta>('POST', `/api/destinations/${destId}/adopt`, b),
+  onTransfer(fn: (j: TransferJob) => void): () => void {
+    const es = new EventSource(withKey(`${base}/api/events`))
+    es.addEventListener('transfer:progress', (m) => fn(JSON.parse((m as MessageEvent).data) as TransferJob))
+    return () => es.close()
+  },
   /** Calls back when a live listing of `destId` changed. Returns an unsubscribe. */
   onBrowseUpdated(fn: (destId: string, path: string) => void): () => void {
     const es = new EventSource(withKey(`${base}/api/events`))

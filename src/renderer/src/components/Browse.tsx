@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowseResult, RemoteEntry } from '@shared/remote'
 import { api } from '../api'
 import { fmtSize } from '../format'
+import { BrowseActions, STATE_LABEL } from './BrowseActions'
 import './Browse.css'
 
 export interface BrowseDest { id: string; name: string }
 
 /** Cached listing first, then the live one: `browse:updated` (or a short re-ask while the answer is cached) swaps it in. */
-export function useBrowse(destId: string) {
-  const [path, setPath] = useState('')
+export function useBrowse(destId: string, initialPath = '', diff = false) {
+  const [path, setPath] = useState(initialPath)
   const [res, setRes] = useState<BrowseResult | null>(null)
   const [error, setError] = useState<{ message: string; offline: boolean } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -19,7 +20,7 @@ export function useBrowse(destId: string) {
     async (p: string, quiet = false): Promise<void> => {
       if (!quiet) setLoading(true)
       try {
-        const r = await api.browse(destId, p)
+        const r = await api.browse(destId, p, diff)
         if (pathRef.current !== p) return
         setRes(r)
         setError(null)
@@ -32,7 +33,7 @@ export function useBrowse(destId: string) {
         if (!quiet && pathRef.current === p) setLoading(false)
       }
     },
-    [destId]
+    [destId, diff]
   )
 
   useEffect(() => {
@@ -95,18 +96,23 @@ export function Viewer({ destId, e, onClose }: { destId: string; e: RemoteEntry;
   )
 }
 
-/** Read-only look inside a destination. Nothing here changes what is stored there. */
-export function Browse({ dest, onClose }: { dest: BrowseDest; onClose: () => void }) {
-  const b = useBrowse(dest.id)
+/** Look inside a destination. Browsing never changes what is stored there; the action bar does only what you click. */
+export function Browse({ dest, onClose, initialPath = '', diff = false }: { dest: BrowseDest; onClose: () => void; initialPath?: string; diff?: boolean }) {
+  const b = useBrowse(dest.id, initialPath, diff)
   const [open, setOpen] = useState<RemoteEntry | null>(null)
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [note, setNote] = useState('')
   useEffect(() => {
     const k = (ev: KeyboardEvent): void => { if (ev.key === 'Escape' && !open) onClose() }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [onClose, open])
+  useEffect(() => setSel(new Set()), [b.path])
   const entries = b.res?.entries ?? []
   const dirs = entries.filter((e) => e.dir)
   const files = entries.filter((e) => !e.dir)
+  const toggle = (e: RemoteEntry): void => setSel((s) => { const n = new Set(s); if (n.has(e.path)) n.delete(e.path); else n.add(e.path); return n })
+  const picked = entries.filter((e) => sel.has(e.path))
   return (
     <div className="bw" role="dialog" aria-label={`Browse ${dest.name}`}>
       <div className="bw-head">
@@ -125,21 +131,29 @@ export function Browse({ dest, onClose }: { dest: BrowseDest; onClose: () => voi
         {b.res && !entries.length && <div className="bw-empty">This folder is empty.</div>}
         {dirs.length > 0 && (
           <div className="bw-dirs">
-            {dirs.map((d) => <button key={d.path} className="bw-dir" onClick={() => b.setPath(d.path)}><span aria-hidden>📁</span>{d.name}</button>)}
+            {dirs.map((d) => (
+              <span key={d.path} className={`bw-dir-wrap ${sel.has(d.path) ? 'sel' : ''}`}>
+                <input type="checkbox" aria-label={`Select ${d.name}`} checked={sel.has(d.path)} onChange={() => toggle(d)} />
+                <button className="bw-dir" onClick={() => b.setPath(d.path)}><span aria-hidden>📁</span>{d.name}</button>
+              </span>
+            ))}
           </div>
         )}
         {files.length > 0 && (
           <div className="bw-grid">
             {files.map((f) => (
-              <button key={f.path} className={`bw-tile ${f.inLibrary ? 'in' : ''}`} title={`${f.name} · ${fmtSize(f.size)}`} onDoubleClick={() => setOpen(f)} onKeyDown={(ev) => ev.key === 'Enter' && setOpen(f)}>
+              <button key={f.path} className={`bw-tile ${f.inLibrary ? 'in' : ''} ${sel.has(f.path) ? 'sel' : ''}`} title={`${f.name} · ${fmtSize(f.size)}`} onClick={() => f.state !== 'waiting' && toggle(f)} onDoubleClick={() => f.state !== 'waiting' && setOpen(f)} onKeyDown={(ev) => ev.key === 'Enter' && f.state !== 'waiting' && setOpen(f)}>
                 <RemoteThumb destId={dest.id} e={f} />
                 <span className="bw-cap">{f.name}</span>
-                {f.inLibrary && <span className="bw-in">On this PC</span>}
+                {f.state ? <span className={`bw-st ${f.state}`}>{STATE_LABEL[f.state]}</span> : f.inLibrary && <span className="bw-in">On this PC</span>}
+                {sel.has(f.path) && <span className="bw-check" aria-hidden>✓</span>}
               </button>
             ))}
           </div>
         )}
       </div>
+      {note && <div className="bw-note-bar">{note}</div>}
+      <BrowseActions dest={dest} path={b.path} picked={picked} entries={entries} meta={b.res?.meta} diff={diff} onNote={setNote} onReload={() => void b.reload()} />
       {open && <Viewer destId={dest.id} e={open} onClose={() => setOpen(null)} />}
     </div>
   )

@@ -15,6 +15,7 @@ export interface RemoteFs {
   move(from: string, to: string): Promise<void> // server-side where possible
   remove(path: string): Promise<void> // trash where the provider has one
   reachable(): Promise<boolean>
+  upload(fromLocal: string, path: string): Promise<void> // explicit user action only (copy, adopt)
 }
 
 export interface RemoteDeps {
@@ -126,6 +127,20 @@ class FolderFs implements RemoteFs {
     }
   }
 
+  async upload(fromLocal: string, path: string): Promise<void> {
+    await this.rootCheck()
+    const to = this.abs(path)
+    const tmp = `${to}.shotdrop-part`
+    await mkdir(dirname(to), { recursive: true })
+    try {
+      await copyFile(fromLocal, tmp)
+      await rename(tmp, to)
+    } catch (e) {
+      await unlink(tmp).catch(() => undefined)
+      throw e
+    }
+  }
+
   async move(from: string, to: string): Promise<void> {
     await this.rootCheck()
     await mkdir(dirname(this.abs(to)), { recursive: true })
@@ -231,6 +246,16 @@ class RcloneFs implements RemoteFs {
     }
   }
 
+  async upload(fromLocal: string, path: string): Promise<void> {
+    await this.run(['copyto', fromLocal, this.at(path)])
+  }
+
+  /** Remote to remote in one rclone call, when both ends are read through the same rclone config. */
+  copyTo(fromPath: string, other: RcloneFs, toPath: string): Promise<void> | null {
+    if (JSON.stringify(this.cfg()) !== JSON.stringify(other.cfg())) return null
+    return this.run(['copyto', this.at(fromPath), other.at(toPath)]).then(() => undefined)
+  }
+
   async move(from: string, to: string): Promise<void> {
     await this.run(['moveto', this.at(from), this.at(to)])
   }
@@ -258,4 +283,13 @@ class RcloneFs implements RemoteFs {
 
 export function remoteFor(dest: Destination, deps: RemoteDeps): RemoteFs {
   return dest.type === 'folder' ? new FolderFs(dest.target, deps) : new RcloneFs(dest.target, deps)
+}
+
+/** One rclone call remote to remote. Returns false when it can't (a folder is involved): the caller downloads, then uploads. */
+export async function copyRemoteToRemote(from: Destination, fromPath: string, to: Destination, toPath: string, deps: RemoteDeps): Promise<boolean> {
+  if (from.type !== 'rclone' || to.type !== 'rclone') return false
+  const job = new RcloneFs(from.target, deps).copyTo(fromPath, new RcloneFs(to.target, deps), toPath)
+  if (!job) return false
+  await job
+  return true
 }

@@ -72,7 +72,19 @@ export function openDb(dataDir: string): DB {
       dest_id TEXT, path TEXT, name TEXT, dir INTEGER, size INTEGER, mtime INTEGER, kind TEXT, seen_at INTEGER,
       PRIMARY KEY(dest_id, path)
     );
+    -- Import and copy jobs (Browse). Their file lists live in memory; a restart marks unfinished ones as interrupted.
+    CREATE TABLE IF NOT EXISTS transfer_jobs (
+      id INTEGER PRIMARY KEY, kind TEXT NOT NULL, dest_id TEXT NOT NULL, to_dest_id TEXT,
+      total INTEGER NOT NULL, done INTEGER NOT NULL DEFAULT 0, failed INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL, error TEXT, created_at INTEGER NOT NULL
+    );
   `)
+  // Session meta of a found folder, as JSON on the folder's own row.
+  try {
+    db.exec(`ALTER TABLE remote_entries ADD COLUMN meta_json TEXT`)
+  } catch {
+    /* already there */
+  }
   // Columns added after v0.1; CREATE TABLE IF NOT EXISTS won't add them to an existing library.
   for (const col of ['hist TEXT', 'clipped REAL', 'dark REAL', 'sharpness REAL', 'hash TEXT', 'faces INTEGER', 'blink REAL']) {
     try {
@@ -84,5 +96,6 @@ export function openDb(dataDir: string): DB {
   // Anything left "running" from a previous crash goes back to the queue.
   db.prepare(`UPDATE sync_jobs SET status = 'pending' WHERE status = 'running'`).run()
   db.prepare(`UPDATE remote_deletes SET status = 'pending' WHERE status = 'running'`).run()
+  db.prepare(`UPDATE transfer_jobs SET status = 'error', error = 'Interrupted by a restart' WHERE status = 'running'`).run()
   return db
 }
