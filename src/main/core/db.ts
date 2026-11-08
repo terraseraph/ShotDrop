@@ -64,6 +64,9 @@ export function openDb(dataDir: string): DB {
       updated_at INTEGER NOT NULL,
       UNIQUE(dest_id, rel_path)
     );
+
+    -- Local cache of each session folder's .shotdrop.json; a library rescan rebuilds it from disk.
+    CREATE TABLE IF NOT EXISTS sessions (folder TEXT PRIMARY KEY, id TEXT UNIQUE, name TEXT, client TEXT, notes TEXT, created_by TEXT, created_at INTEGER, updated_at INTEGER);
   `)
   // Columns added after v0.1; CREATE TABLE IF NOT EXISTS won't add them to an existing library.
   for (const col of ['hist TEXT', 'clipped REAL', 'dark REAL', 'sharpness REAL', 'hash TEXT', 'faces INTEGER', 'blink REAL']) {

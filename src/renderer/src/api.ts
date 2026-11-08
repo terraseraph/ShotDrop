@@ -1,3 +1,4 @@
+import type { SessionRow } from '@shared/remote'
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState, DeletePreview, Destination, LibraryCounts, ExportOptions, ServerEvent, Session, Settings, Shot, ShotMetadata, ShotPatch, ShotSource, ShotSources, Status, TunnelState } from '@shared/types'
 import type { LibraryMeta } from '@shared/remote'
 
@@ -88,7 +89,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 export const api = {
   status: () => req<Status>('GET', '/api/status'),
-  sessions: () => req<Session[]>('GET', '/api/sessions'),
+  sessions: () => req<(Session & SessionRow)[]>('GET', '/api/sessions'),
+  createSession: (b: { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean }) => req<Session & SessionRow>('POST', '/api/sessions', b),
+  patchSession: (folder: string, b: { name?: string; client?: string; notes?: string }) => req<Session & SessionRow>('PATCH', `/api/sessions/${encodeURIComponent(folder)}`, b),
   shots: () => req<{ items: Shot[]; total: number; seq: number }>('GET', '/api/shots?order=asc&limit=10000'),
   changes: (after: number) =>
     req<{ seq: number; events: ServerEvent[]; reset: boolean; status: Status }>('GET', `/api/changes?after=${after}`),
