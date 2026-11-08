@@ -189,7 +189,7 @@ export class RemoteOpsService {
       this.queueMoves(folder, target)
       // s2's current-session setting (absent on branches without it) must keep pointing at the renamed folder.
       const cur = (this.core.settings as Settings & Partial<RemoteSettings>).ingest
-      if (cur?.currentSession === folder) void this.core.updateSettings({ ingest: { ...cur, currentSession: target } } as Partial<Settings>)
+      if (cur?.currentSession === folder) await this.core.updateSettings({ ingest: { ...cur, currentSession: target } } as Partial<Settings>)
       lib.forgetRemoteEntries(folder)
       for (const d of this.core.settings.destinations) sync.forgetDirs(d, folder)
     } finally {
