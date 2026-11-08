@@ -8,6 +8,7 @@ import { BrandGuide } from './BrandGuide'
 import { CheckCard, problemsOf, useDiagnostics } from './CheckCard'
 import { ListeningLog, type LogLine } from './ListeningLog'
 import { QrCode } from './QrCode'
+import { Switch } from './SettingsDrawer'
 import './Setup.css'
 
 interface Props {
@@ -93,6 +94,25 @@ export function SetupScreen({ status, shots, onBack, onGallery, dialog, onFirstF
     setSettings(await api.patchSettings({ ftp: { ...settings.ftp, users } }))
   }
   const regenerate = (): void => void patchFtp(users.map((u, i) => (i === uIdx ? { ...u, password: newPassword() } : u)))
+  // A blank user name is anonymous login (see FtpUser). Only one login can be anonymous, or both would file under "anonymous".
+  const anonTaken = users.some((u, i) => i !== uIdx && !u.username)
+  const toggleAnonymous = (): void => {
+    const taken = new Set(users.map((u) => u.username))
+    let n = 1
+    while (taken.has(n === 1 ? 'camera' : `camera${n}`)) n++
+    const next = user?.username ? { username: '', password: '' } : { username: n === 1 ? 'camera' : `camera${n}`, password: newPassword() }
+    void patchFtp(users.map((u, i) => (i === uIdx ? { ...u, ...next } : u)))
+  }
+  const anon = !!user && !user.username
+  const anonRow = user && (
+    <div className="su-field wide su-anon">
+      <Switch on={anon} onChange={toggleAnonymous} label="Anonymous login" disabled={!anon && anonTaken} />
+      <div>
+        <div className="t">Anonymous login <span className={anon ? 'on' : ''}>{anon ? 'On' : 'Off'}</span></div>
+        <div className="d">{!anon && anonTaken ? 'Another camera already logs in anonymously.' : 'Allow login without a user name or password.'}</div>
+      </div>
+    </div>
+  )
   const addCamera = async (): Promise<void> => {
     const n = users.length + 1
     await patchFtp([...users, { username: `camera${n}`, password: newPassword(), label: `Camera ${n}` }])
@@ -233,6 +253,7 @@ export function SetupScreen({ status, shots, onBack, onGallery, dialog, onFirstF
               <div className="l">PASSWORD {user?.username && <button className="tb" onClick={regenerate}>regenerate</button>}</div>
               <div className="v">{user?.username ? pass || 'any' : 'none'}</div>
             </div>
+            {anonRow}
           </>
         )}
       </div>
@@ -298,6 +319,7 @@ export function SetupScreen({ status, shots, onBack, onGallery, dialog, onFirstF
             <div className="su-field"><div className="l">PORT</div><div className="v">{ftp?.port}</div></div>
             <div className="su-field"><div className="l">USER</div><div className="v">{login}</div></div>
             <div className="su-field wide"><div className="l">PASSWORD</div><div className="v">{user?.username ? pass || 'any' : 'none'}</div></div>
+            {anonRow}
           </div>
         </div>
       </div>

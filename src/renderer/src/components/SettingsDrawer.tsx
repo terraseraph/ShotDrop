@@ -63,9 +63,9 @@ function useLiveSettings(toast: Toast) {
   return { s, apply, load }
 }
 
-function Switch({ on, onChange, label, className = '' }: { on: boolean; onChange: (v: boolean) => void; label: string; className?: string }) {
+export function Switch({ on, onChange, label, className = '', disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; className?: string; disabled?: boolean }) {
   return (
-    <button role="switch" aria-checked={on} aria-label={label} className={`sw ${on ? 'on' : ''} ${className}`} onClick={() => onChange(!on)}>
+    <button role="switch" aria-checked={on} aria-label={label} disabled={disabled} className={`sw ${on ? 'on' : ''} ${className}`} onClick={() => onChange(!on)}>
       <i />
     </button>
   )
