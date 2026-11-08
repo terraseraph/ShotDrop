@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { Shot } from '@shared/types'
 import { fmtDay, useSessionNames } from '../sessions'
+import { FoundFolders } from './FoundFolders'
+import { SessionDestChips } from './SessionDestChips'
 
 const KEY = 'shotdrop.names'
 const LIVE_MS = 2 * 60_000
@@ -102,8 +104,12 @@ export function SessionRail({ allShots, session, source, onSession, onSource }: 
       <div className="gx-rail-h">SHOOT DAYS</div>
       <Row id="" auto="All days" count={allShots.length} active={!session} onClick={() => onSession('')} onRename={() => {}} />
       {days.map(([d, n]) => (
-        <Row key={d} id={`day:${d}`} auto={dayName(d)} name={names[`day:${d}`]} count={n} active={session === d} onClick={() => onSession(session === d ? '' : d)} onRename={rename} />
+        <Fragment key={d}>
+        <Row id={`day:${d}`} auto={dayName(d)} name={names[`day:${d}`]} count={n} active={session === d} onClick={() => onSession(session === d ? '' : d)} onRename={rename} />
+        <SessionDestChips folder={d} />
+        </Fragment>
       ))}
+      <FoundFolders />
       <div className="gx-rail-h" style={{ paddingTop: 16 }}>CAMERAS</div>
       {cams.map(([src, c]) => (
         <Row key={src} id={`cam:${src}`} auto={c.model ? `${c.model} · ${src}` : src} name={names[`cam:${src}`]} count={c.n} live={now - c.last < LIVE_MS} active={source === src} onClick={() => onSource(source === src ? '' : src)} onRename={rename} />
