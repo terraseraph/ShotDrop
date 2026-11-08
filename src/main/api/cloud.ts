@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { CloudLinkOptions, CloudProvider } from '@shared/types'
+import { SERVICES, friendlyRemoteError, type ServiceId } from '@shared/services'
 import type { Core } from '../core'
 
 /** Cloud sign-in and folder browsing. Local-only: linking runs programs and stores account tokens. */
@@ -17,7 +18,7 @@ export function registerCloud(app: FastifyInstance, core: Core): void {
 
   app.get('/api/cloud/accounts', local, async (_req, reply) => {
     try {
-      return { accounts: await core.cloud.list(), ...core.cloud.state() }
+      return { accounts: await core.cloud.list(), remotes: await core.cloud.remotes(), ...core.cloud.state() }
     } catch (e) {
       return fail(reply, e)
     }
@@ -47,6 +48,39 @@ export function registerCloud(app: FastifyInstance, core: Core): void {
   })
 
   app.delete('/api/cloud/link', local, async (_req, reply) => reply.code(core.cloud.cancelLink() ? 204 : 404).send())
+
+  const connectSchema = {
+    type: 'object',
+    required: ['service', 'values'],
+    additionalProperties: false,
+    properties: {
+      service: { type: 'string', enum: SERVICES.map((s) => s.id) },
+      values: { type: 'object', additionalProperties: { type: 'string', maxLength: 2000 }, maxProperties: 20 },
+      hostKey: { type: 'string', maxLength: 4000 }
+    }
+  } as const
+
+  // Creates the remote and tests it. 201 = connected, 409 = SFTP host key to confirm, 422 = the test failed (remote removed).
+  app.post('/api/cloud/remotes', { ...local, schema: { body: connectSchema } }, async (req, reply) => {
+    const { service, values, hostKey } = req.body as { service: ServiceId; values: Record<string, string>; hostKey?: string }
+    try {
+      const r = await core.cloud.connect(service, values, hostKey)
+      return r.ok ? reply.code(201).send(r.account) : reply.code(409).send(r)
+    } catch (e) {
+      const raw = (e as Error).message
+      return reply.code(422).send({ error: raw, ...friendlyRemoteError(raw) })
+    }
+  })
+
+  app.get('/api/cloud/external', local, async () => ({ remotes: await core.cloud.external() }))
+
+  app.get('/api/cloud/external/:name/folders', local, async (req, reply) => {
+    try {
+      return await core.cloud.externalFolders(name(req), (req.query as { path?: string }).path ?? '')
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
 
   app.get('/api/cloud/accounts/:name/folders', local, async (req, reply) => {
     try {

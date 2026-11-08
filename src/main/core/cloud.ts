@@ -2,9 +2,11 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, mkdirSync, writeFileSync, renameSync, mkdtempSync, rmSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { LibraryMeta } from '@shared/remote'
+import { missing, serviceById, serviceOf, withDefaults, type ConnectResult, type ExternalRemote, type RemoteAccount, type ServiceId } from '@shared/services'
+import { buildRemote, remoteName, scanHostKey, validHostKey, whereOf } from './remotes'
 import type { CloudAccount, CloudFolder, CloudLinkOptions, CloudProvider, CloudQuota, CloudState } from '@shared/types'
 
 const TYPES: Record<CloudProvider, string> = { drive: 'drive', dropbox: 'dropbox' }
@@ -85,9 +87,13 @@ export class CloudAccounts {
     return { linking: l ? { provider: l.provider, authUrl: l.authUrl, startedAt: l.startedAt } : null }
   }
 
+  private async dump(): Promise<Record<string, Record<string, string>>> {
+    if (!existsSync(this.confPath)) return {}
+    return JSON.parse(await rclone(this.bin(), ['config', 'dump', ...this.cfg()])) as Record<string, Record<string, string>>
+  }
+
   async list(): Promise<CloudAccount[]> {
-    if (!existsSync(this.confPath)) return []
-    const dump = JSON.parse(await rclone(this.bin(), ['config', 'dump', ...this.cfg()])) as Record<string, Record<string, string>>
+    const dump = await this.dump()
     return Object.entries(dump)
       .filter(([, v]) => v.type === 'drive' || v.type === 'dropbox')
       .map(([name, v]) => ({
@@ -167,8 +173,75 @@ export class CloudAccounts {
     return true
   }
 
+  /** Remotes set up through the guided forms (S3 family, SFTP, FTP, WebDAV). */
+  async remotes(): Promise<RemoteAccount[]> {
+    const dump = await this.dump()
+    return Object.entries(dump).flatMap(([name, v]) => {
+      const def = v.type === 'drive' || v.type === 'dropbox' || name.startsWith('_') ? undefined : serviceOf(v)
+      return def ? [{ name, service: def.id, where: whereOf(v), ...(v.type === 'sftp' && !v.known_hosts_file ? { unpinned: true } : {}) }] : []
+    })
+  }
+
   private async known(name: string): Promise<void> {
-    if (!(await this.list()).some((a) => a.name === name)) throw new Error('Unknown account')
+    if ((await this.list()).some((a) => a.name === name)) return
+    if (!(await this.remotes()).some((a) => a.name === name)) throw new Error('Unknown account')
+  }
+
+  /**
+   * Create a guided remote and prove it works by listing its top level (buckets, or the home folder). On failure the remote
+   * is removed again, so the config only holds remotes that connected once. SFTP first returns the server's host key for the
+   * user to confirm; the confirmed key is pinned in a known_hosts file for that remote.
+   */
+  async connect(service: ServiceId, values: Record<string, string>, hostKey?: string): Promise<ConnectResult> {
+    const def = serviceById(service)
+    if (!def) throw new Error('Unknown service')
+    const v = withDefaults(def, values)
+    const miss = missing(def, v)
+    if (miss.length) throw new Error(`Fill in: ${miss.join(', ')}`)
+    const name = remoteName(service, randomBytes(2).toString('hex'))
+    let knownHosts: string | undefined
+    let unpinned = false
+    if (service === 'sftp') {
+      const port = Number(v.port) || 22
+      if (!hostKey) {
+        const scan = await scanHostKey(v.host, port)
+        if (scan) return { ok: false, needsTrust: scan }
+        unpinned = true // no ssh-keyscan here, or the server didn't answer it: the test below says which
+      } else {
+        if (!validHostKey(hostKey, v.host, port)) throw new Error('That host key is not for this server')
+        const dir = join(dirname(this.confPath), 'ssh')
+        mkdirSync(dir, { recursive: true })
+        knownHosts = join(dir, `${name}.known_hosts`)
+        writeFileSync(knownHosts, `${hostKey.trim()}\n`)
+      }
+    }
+    const { type, params } = buildRemote(def, v, knownHosts)
+    await rclone(this.bin(), ['config', 'create', name, type, ...Object.entries(params).map(([k, x]) => `${k}=${x}`), '--non-interactive', '--obscure', ...this.cfg()])
+    try {
+      await rclone(this.bin(), ['lsjson', '--dirs-only', '--max-depth', '1', '--no-modtime', '--no-mimetype', '--contimeout', '15s', '--timeout', '30s', '--low-level-retries', '1', '--retries', '1', `${name}:`, ...this.cfg()], 60_000)
+    } catch (e) {
+      await rclone(this.bin(), ['config', 'delete', name, ...this.cfg()]).catch(() => undefined)
+      if (knownHosts) rmSync(knownHosts, { force: true })
+      throw e
+    }
+    this.onConfigChanged?.()
+    return { ok: true, account: { name, service, where: whereOf({ type, ...params }), ...(unpinned ? { unpinned } : {}) } }
+  }
+
+  /** Remotes in the user's own rclone config (no --config), offered as ready to use. Names and types only. */
+  async external(): Promise<ExternalRemote[]> {
+    try {
+      const out = await rclone(this.bin(), ['listremotes', '--long'], 20_000)
+      return out.split(/\r?\n/).map((l) => /^(.+?):\s+(\S+)\s*$/.exec(l.trim())).flatMap((m) => (m ? [{ name: m[1], type: m[2] }] : []))
+    } catch {
+      return []
+    }
+  }
+
+  async externalFolders(name: string, path = ''): Promise<CloudFolder[]> {
+    if (!(await this.external()).some((r) => r.name === name)) throw new Error('Unknown account')
+    const out = await rclone(this.bin(), ['lsjson', '--dirs-only', '--no-modtime', '--no-mimetype', `${name}:${path}`])
+    return (JSON.parse(out) as { Name: string }[]).map((e) => ({ name: e.Name })).sort((a, b) => a.name.localeCompare(b.name))
   }
 
   async folders(name: string, path = ''): Promise<CloudFolder[]> {
@@ -202,6 +275,7 @@ export class CloudAccounts {
   async disconnect(name: string): Promise<void> {
     await this.known(name)
     await rclone(this.bin(), ['config', 'delete', name, ...this.cfg()])
+    rmSync(join(dirname(this.confPath), 'ssh', `${name}.known_hosts`), { force: true })
     this.onConfigChanged?.()
   }
 }

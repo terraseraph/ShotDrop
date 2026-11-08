@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import type { CloudAccount, CloudFolder, CloudProvider, CloudQuota, CloudState, Destination, DestinationFilter, LibraryCounts, Settings, Status } from '@shared/types'
 import type { LibraryMeta } from '@shared/remote'
@@ -7,19 +7,24 @@ import { fmtSize } from '../format'
 import { fade, slideIn } from '../motion'
 import { Icon } from './Icon'
 import { FolderPicker } from './FolderPicker'
+import { RemoteForm, ServiceBadge, ServicePicker } from './RemoteSetup'
+import { serviceById, type ExternalRemote, type RemoteAccount, type ServiceId } from '@shared/services'
+import './RemoteSetup.css'
 import { dropProps, join, lastPart, useChips } from './fsApi'
 import './FolderPicker.css'
 import './AddDestinationSheet.css'
 
-export type Kind = CloudProvider | 'folder' | 'custom'
+/** `remote` = a guided service (S3 family, SFTP, FTP, WebDAV) or a remote from the user's own rclone config; `custom` = typed remote:path. */
+export type Kind = CloudProvider | 'folder' | 'remote' | 'custom'
 
-export const KIND_LABEL: Record<Kind, string> = { drive: 'Google Drive', dropbox: 'Dropbox', folder: 'Folder / NAS', custom: 'rclone remote' }
-export const KIND_ICON: Record<Kind, string> = { drive: 'drive', dropbox: 'dropbox', folder: 'folder', custom: 'terminal' }
+export const KIND_LABEL: Record<Kind, string> = { drive: 'Google Drive', dropbox: 'Dropbox', folder: 'Folder / NAS', remote: 'More…', custom: 'rclone remote' }
+export const KIND_ICON: Record<Kind, string> = { drive: 'drive', dropbox: 'dropbox', folder: 'folder', remote: 'server', custom: 'terminal' }
 /** Tile and card tints from the boards: Drive green, Dropbox purple, folders blue, rclone grey. */
 export const KIND_TINT: Record<Kind, { fg: string; bg: string }> = {
   drive: { fg: '#3dd68c', bg: '#1f2a1f' },
   dropbox: { fg: '#c9a0f0', bg: '#2a1f30' },
   folder: { fg: '#5ba7f7', bg: '#1b2330' },
+  remote: { fg: '#f2b134', bg: '#2b2515' },
   custom: { fg: '#a3a3a3', bg: '#242424' }
 }
 
@@ -32,11 +37,13 @@ export const FILTERS: { id: DestinationFilter; label: string; icon: string; titl
 export const FILTER_WORD: Record<DestinationFilter, string> = { all: 'everything', jpeg: 'JPEGs', raw: 'RAW files', picks: 'picks' }
 
 /** Which kind of destination a saved target is, and for cloud ones which linked account it uses. */
-export function kindOf(d: Pick<Destination, 'type' | 'target'>, accounts: CloudAccount[]): { kind: Kind; account: CloudAccount | null; path: string } {
+export function kindOf(d: Pick<Destination, 'type' | 'target'>, accounts: CloudAccount[], remotes: RemoteAccount[] = []): { kind: Kind; account: CloudAccount | null; remote?: RemoteAccount; path: string } {
   if (d.type === 'folder') return { kind: 'folder', account: null, path: d.target }
   const i = d.target.indexOf(':')
   const account = accounts.find((a) => a.name === d.target.slice(0, i)) ?? null
-  return account ? { kind: account.provider, account, path: d.target.slice(i + 1) } : { kind: 'custom', account: null, path: d.target }
+  if (account) return { kind: account.provider, account, path: d.target.slice(i + 1) }
+  const remote = remotes.find((r) => r.name === d.target.slice(0, i))
+  return remote ? { kind: 'remote', account: null, remote, path: d.target.slice(i + 1) } : { kind: 'custom', account: null, path: d.target }
 }
 
 interface Props {
@@ -60,6 +67,7 @@ export const WHERE_DELETES_GO: Record<Kind, string> = {
   drive: "Goes to Drive's trash, restorable for 30 days.",
   dropbox: 'Dropbox keeps deleted files restorable for 30 days.',
   folder: 'Goes to the recycle bin. On a network share it is deleted outright.',
+  remote: 'Deleted on the server. Whether it can be restored depends on the service.',
   custom: 'Deleted on the remote. Whether it can be restored depends on the service.'
 }
 
@@ -82,35 +90,46 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
   const [nameEdited, setNameEdited] = useState(false)
   const [busy, setBusy] = useState(false)
   const [other, setOther] = useState<LibraryMeta | null>(null) // another library already lives at the chosen target
+  // More…: the guided service being filled in, the remote it produced (or an existing one from the user's rclone config).
+  const [service, setService] = useState<ServiceId | null>(null)
+  const [remote, setRemote] = useState<RemoteAccount | null>(null)
+  const [ext, setExt] = useState<ExternalRemote | null>(null)
+  const [formGo, setFormGo] = useState<{ fn: (() => void) | null; label: string }>({ fn: null, label: '' })
+  const created = useRef<string | null>(null) // remote made in this sheet and not yet used: removed again on close
   const cloud = kind === 'drive' || kind === 'dropbox'
+  const viaRemote = kind === 'remote' && !!(remote || ext)
   const chips = useChips(s, status)
 
   useEffect(() => {
     if (!sIn) void api.settings().then(setS, () => undefined)
   }, [sIn])
 
-  const loadAccounts = useCallback(async (): Promise<CloudAccount[]> => {
+  const loadAccounts = useCallback(async (): Promise<{ accounts: CloudAccount[]; remotes: RemoteAccount[] }> => {
     try {
       const r = await api.cloudAccounts()
       setAccounts(r.accounts)
-      return r.accounts
+      return { accounts: r.accounts, remotes: r.remotes ?? [] }
     } catch (e) {
       toast((e as Error).message, 'error')
       setAccounts([])
-      return []
+      return { accounts: [], remotes: [] }
     }
   }, [toast])
 
   useEffect(() => {
     void loadAccounts().then((list) => {
       if (!editing) return
-      const k = kindOf(editing, list)
+      const k = kindOf(editing, list.accounts, list.remotes)
       setKind(k.kind)
       setAccount(k.account)
       setFilter(editing.filter)
       setName(editing.name)
       setNameEdited(true)
-      if (k.account) setPath(k.path.split('/').filter(Boolean))
+      if (k.remote) {
+        setRemote(k.remote)
+        setService(k.remote.service)
+      }
+      if (k.account || k.remote) setPath(k.path.split('/').filter(Boolean))
       else setLocal(k.path)
     })
     api.libraryCounts().then(setCounts, () => undefined)
@@ -163,18 +182,23 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
   }
 
   const mine = (accounts ?? []).filter((a) => a.provider === kind)
-  const target = cloud ? (account ? `${account.name}:${path.join('/')}` : '') : local.trim()
+  const remoteName = remote?.name ?? ext?.name
+  const def = service ? serviceById(service) : undefined
+  // Bucket-based services need at least a bucket: the top level of an S3 or B2 remote isn't writable.
+  const needsBucket = !!remote && (def?.type === 's3' || def?.type === 'b2')
+  const target = cloud ? (account ? `${account.name}:${path.join('/')}` : '') : kind === 'remote' ? (remoteName && !(needsBucket && !path.length) ? `${remoteName}:${path.join('/')}` : '') : local.trim()
   const autoName = useMemo(() => {
     if (cloud) return `${KIND_LABEL[kind]}${path.length ? ` · ${path[path.length - 1]}` : ''}`
+    if (kind === 'remote') return `${def?.label ?? ext?.name ?? 'Remote'}${path.length ? ` · ${path[path.length - 1]}` : ''}`
     if (kind === 'custom') return 'Custom remote'
     const m = /^([A-Za-z]:)\\[^\\]*$/.exec(local)
     const d = m && chips.drives.find((x) => x.path.toUpperCase().startsWith(m[1].toUpperCase()))
     return d && d.label && d.label !== d.path.slice(0, 2) ? `${d.label} (${m![1].toUpperCase()})` : local ? lastPart(local) : 'Folder'
-  }, [cloud, kind, path, local, chips.drives])
+  }, [cloud, kind, path, local, chips.drives, def, ext])
   // Before saving: does the chosen target already hold a different library's library.json? A warning, never a block.
   useEffect(() => {
     setOther(null)
-    if (editing || !target || (cloud && (!account || browsing))) return
+    if (editing || !target || ((cloud || kind === 'remote') && browsing) || (cloud && !account)) return
     let live = true
     const t = setTimeout(() => {
       api.probeDestination({ type: kind === 'folder' ? 'folder' : 'rclone', target }).then((r) => live && setOther(r.other ? r.library : null), () => undefined)
@@ -186,19 +210,41 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
   }, [editing, target, kind, cloud, account, browsing])
   const finalName = (nameEdited ? name : autoName).trim() || autoName
   const needsSignIn = cloud && !account
-  const ready = !linking && (needsSignIn || !!target)
+  const inForm = kind === 'remote' && !!service && !remote
+  const ready = !linking && (needsSignIn || (inForm ? !!formGo.fn : !!target && !(kind === 'remote' && browsing)))
+
+  /** Forget a remote this sheet created but never saved a destination for. */
+  const dropCreated = (): void => {
+    if (created.current) void api.cloudDisconnect(created.current).catch(() => undefined)
+    created.current = null
+  }
+  const close = (): void => {
+    dropCreated()
+    onClose()
+  }
+  /** Back to the service list (or to the form, from a connected remote): undoes any remote made here. */
+  const backToServices = (): void => {
+    dropCreated()
+    setRemote(null)
+    setExt(null)
+    setService(null)
+    setBrowsing(false)
+  }
 
   const submit = async (): Promise<void> => {
     if (!ready || busy) return
     if (needsSignIn) return void connect(kind as CloudProvider, fullAccess)
+    if (inForm) return formGo.fn?.()
     setBusy(true)
     try {
+      const where = cloud ? [KIND_LABEL[kind], ...path].join(' › ') : kind === 'remote' ? [def?.label ?? ext?.name, ...path].join(' › ') : target
       if (editing) {
         await api.patchDestination(editing.id, { target, name: finalName })
         await api.resync(editing.id)
-        onDone(`${finalName} now syncs into ${cloud ? [KIND_LABEL[kind], ...path].join(' › ') : target}`)
+        onDone(`${finalName} now syncs into ${where}`)
       } else {
         await api.addDestination({ name: finalName, type: kind === 'folder' ? 'folder' : 'rclone', target, filter, enabled: true, mirrorDeletes: mirror })
+        created.current = null // in use now: keep it
         onDone(`Added ${finalName}. Today's shoot is copying now.`)
       }
     } catch (e) {
@@ -210,7 +256,11 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !linking) onClose()
+      if (e.key === 'Escape' && !linking) {
+        // Esc steps back out of More… before it closes the sheet.
+        if (kind === 'remote' && !editing && (service || ext)) backToServices()
+        else close()
+      }
       else if (e.key === 'Enter' && !isField(e.target) && !e.shiftKey) {
         e.preventDefault()
         void submit()
@@ -225,30 +275,45 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
 
   const pick = (k: Kind): void => {
     if (editing || linking) return
+    if (k !== 'custom') backToServices()
     setKind(k)
     setBrowsing(false)
     if (k === 'custom') setLocal('')
+  }
+  const onConnected = (a: RemoteAccount): void => {
+    created.current = a.name
+    setRemote(a)
+    setPath([])
+    setBrowsing(true)
+  }
+  const useExternal = (r: ExternalRemote): void => {
+    setExt(r)
+    setPath(['ShotDrop'])
+    setBrowsing(true)
   }
   const dayHint = <>A folder per shoot day is made for you. Drop any folder from Explorer onto this sheet to use it.</>
 
   return (
     <>
-      <motion.div className="ad-scrim scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} onClick={() => !linking && onClose()} />
-      <motion.aside className="ad-sheet sheet" role="dialog" aria-label={editing ? 'Change folder' : 'Add destination'} {...slideIn} {...dropProps((p) => !cloud && kind !== 'custom' && setLocal(p))}>
+      <motion.div className="ad-scrim scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} onClick={() => !linking && close()} />
+      <motion.aside className="ad-sheet sheet" role="dialog" aria-label={editing ? 'Change folder' : 'Add destination'} {...slideIn} {...dropProps((p) => kind === 'folder' && setLocal(p))}>
         <header className="ad-head">
           <h2>{editing ? `Change folder · ${editing.name}` : 'Add destination'}</h2>
-          <button className="tb ad-cancel" onClick={onClose} disabled={!!linking}>Cancel <span className="key">Esc</span></button>
+          <button className="tb ad-cancel" onClick={close} disabled={!!linking}>Cancel <span className="key">Esc</span></button>
         </header>
 
         <div className="ad-body">
           {!editing && (
             <div className="ad-types" role="tablist" aria-label="Where to send photos">
-              {(['drive', 'dropbox', 'folder', 'custom'] as Kind[]).map((k) => (
-                <button key={k} role="tab" aria-selected={kind === k} className={`ad-type ${kind === k ? 'on' : ''}`} onClick={() => pick(k)} disabled={!!linking && kind !== k}>
-                  <span className="ad-type-i" style={kind === k && k === 'folder' ? { color: 'var(--accent)', background: 'var(--warn-dim)' } : { color: KIND_TINT[k].fg }}><Icon name={KIND_ICON[k]} size={18} /></span>
-                  {KIND_LABEL[k]}
-                </button>
-              ))}
+              {(['drive', 'dropbox', 'folder', 'remote'] as Kind[]).map((k) => {
+                const on = kind === k || (k === 'remote' && kind === 'custom') // Advanced lives under More…
+                return (
+                  <button key={k} role="tab" aria-selected={on} className={`ad-type ${on ? 'on' : ''}`} onClick={() => pick(k)} disabled={!!linking && !on}>
+                    <span className="ad-type-i" style={on && (k === 'folder' || k === 'remote') ? { color: 'var(--accent)', background: 'var(--warn-dim)' } : { color: KIND_TINT[k].fg }}><Icon name={KIND_ICON[k]} size={18} /></span>
+                    {KIND_LABEL[k]}
+                  </button>
+                )
+              })}
             </div>
           )}
 
@@ -282,7 +347,8 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
                   {account && (
                     browsing ? (
                       <FolderBrowser
-                        account={account}
+                        name={account.name}
+                        rootLabel={KIND_LABEL[account.provider]}
                         start={path}
                         toast={toast}
                         onUse={(p) => {
@@ -322,13 +388,51 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
               )
             ) : kind === 'folder' ? (
               <FolderPicker value={local} onChange={setLocal} s={s} status={status} dayFolder needBytes={counts?.[filter].bytes} hint={dayHint} />
+            ) : kind === 'remote' ? (
+              viaRemote ? (
+                <>
+                  <div className="ad-acct on">
+                    {def && remote ? <ServiceBadge def={def} size={32} /> : <span className="ad-acct-i" style={{ color: '#a3a3a3', background: '#242424' }}><Icon name="terminal" /></span>}
+                    <span className="ad-acct-main">
+                      <strong>{def && remote ? def.label : ext?.name}</strong>
+                      <span>{remote ? remote.where : `${ext?.type} · from your rclone config`}{remote?.unpinned ? " · server identity not checked (ssh-keyscan wasn't available)" : ''}</span>
+                    </span>
+                    <span className="pill ok">Connected</span>
+                    {!editing && <button className="ad-link" onClick={backToServices}>Change</button>}
+                  </div>
+                  {browsing ? (
+                    <FolderBrowser
+                      name={remoteName!}
+                      rootLabel={def && remote ? def.label : ext!.name}
+                      external={!remote}
+                      levelNoun={needsBucket ? 'bucket' : 'folder'}
+                      start={path}
+                      toast={toast}
+                      onUse={(p) => {
+                        setPath(p)
+                        setBrowsing(false)
+                      }}
+                    />
+                  ) : (
+                    <div className="fp-path">
+                      <Icon name="folder" />
+                      <span className="mono fp-val">{[def && remote ? def.label : ext?.name, ...path].join(' › ')}<span className="fp-day"> › {'{shoot day}'}</span></span>
+                      <button className="fp-btn primary" onClick={() => setBrowsing(true)}>Choose folder…</button>
+                    </div>
+                  )}
+                </>
+              ) : def ? (
+                <RemoteForm key={def.id} def={def} onConnected={onConnected} onBack={backToServices} registerSubmit={(fn, label) => setFormGo((cur) => (cur.fn === fn && cur.label === label ? cur : { fn, label }))} />
+              ) : (
+                <ServicePicker onService={setService} onExternal={useExternal} onAdvanced={() => pick('custom')} />
+              )
             ) : (
               <>
                 <div className="fp-path">
                   <Icon name="terminal" />
                   <input className="ad-input mono ad-bare" data-submit="1" value={local} placeholder="myremote:Photos/ShotDrop (from rclone config)" onChange={(e) => setLocal(e.target.value)} aria-label="rclone remote path" />
                 </div>
-                <div className="fp-hint">Any remote you set up with <code>rclone config</code>: S3, B2, SFTP, OneDrive…</div>
+                <div className="fp-hint">Advanced: any remote from your own <code>rclone config</code>. {!editing && <button className="ad-link" onClick={() => pick('remote')}>Back to the service list</button>}</div>
               </>
             )}
             {kind !== 'folder' && status && !status.sync.rcloneAvailable && <p className="ad-warn">rclone wasn't found, so cloud uploads can't run. The portable build includes it; in a dev checkout run <code>npm run fetch-binaries</code>.</p>}
@@ -400,7 +504,7 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
         <footer className="ad-foot">
           <span>{editing ? 'Copies everything again into the new folder.' : "Starts copying today's shoot right away."}</span>
           <button className="tb primary ad-go" disabled={!ready || busy} onClick={() => void submit()}>
-            {busy ? 'Saving…' : needsSignIn ? `Sign in to ${KIND_LABEL[kind]}` : editing ? 'Save' : 'Add and start'} <span className="key accent">⏎</span>
+            {busy ? 'Saving…' : needsSignIn ? `Sign in to ${KIND_LABEL[kind]}` : inForm ? formGo.label || 'Test and connect' : kind === 'remote' && !viaRemote ? 'Choose a service' : editing ? 'Save' : 'Add and start'} <span className="key accent">⏎</span>
           </button>
         </footer>
       </motion.aside>
@@ -408,9 +512,17 @@ export function AddDestinationSheet({ status, s: sIn, editing, initialKind, onCl
   )
 }
 
-/** Cloud folder browser: Create folder comes first (Drive's safe mode can only see folders ShotDrop made). */
-function FolderBrowser({ account, start, toast, onUse, onFullAccess }: {
-  account: CloudAccount
+/**
+ * Folder browser for a linked account or remote: Create folder comes first (Drive's safe mode can only see folders ShotDrop
+ * made). For S3 and B2 the top level is the bucket list, so a bucket has to be chosen before "Use this folder".
+ */
+function FolderBrowser({ name: remote, rootLabel, external, levelNoun = 'folder', start, toast, onUse, onFullAccess }: {
+  name: string
+  rootLabel: string
+  /** In the user's own rclone config: list without ShotDrop's config, and new folders are made on first upload. */
+  external?: boolean
+  /** 'bucket' when the top level holds buckets. */
+  levelNoun?: 'folder' | 'bucket'
   start: string[]
   toast: (t: string, tone?: 'info' | 'error') => void
   onUse: (path: string[]) => void
@@ -420,37 +532,38 @@ function FolderBrowser({ account, start, toast, onUse, onFullAccess }: {
   const [folders, setFolders] = useState<CloudFolder[] | null>(null)
   const [name, setName] = useState('')
   const joined = path.join('/')
+  const noun = levelNoun === 'bucket' && !path.length ? 'bucket' : 'folder'
 
   useEffect(() => {
     let live = true
     setFolders(null)
-    api.cloudFolders(account.name, joined).then(
+    ;(external ? api.cloudExternalFolders(remote, joined) : api.cloudFolders(remote, joined)).then(
       (f) => live && setFolders(f),
       () => live && setFolders([]) // a folder that doesn't exist yet is fine: it's made on first upload
     )
     return () => {
       live = false
     }
-  }, [account.name, joined])
+  }, [remote, joined, external])
 
   const create = async (): Promise<void> => {
     const n = name.trim().replace(/[\\/]+/g, '-')
     if (!n) return
     try {
-      await api.cloudMkdir(account.name, [...path, n].join('/'))
+      if (!external) await api.cloudMkdir(remote, [...path, n].join('/'))
       setName('')
       setPath([...path, n])
     } catch (e) {
       toast((e as Error).message, 'error')
     }
   }
-  const crumbs = [account.provider === 'drive' ? 'Google Drive' : 'Dropbox', ...path]
+  const crumbs = [rootLabel, ...path]
 
   return (
     <div className="ad-fb">
       <div className="ad-fb-new">
-        <input className="ad-input" placeholder="New folder, e.g. Harlow & Finn" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); void create() } }} />
-        <button className="fp-btn" disabled={!name.trim()} onClick={() => void create()}>+ Create folder</button>
+        <input className="ad-input" placeholder={noun === 'bucket' ? 'New bucket, e.g. shotdrop-photos' : 'New folder, e.g. Harlow & Finn'} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); void create() } }} />
+        <button className="fp-btn" disabled={!name.trim()} onClick={() => void create()}>+ Create {noun}</button>
       </div>
       {onFullAccess && (
         <p className="ad-note"><Icon name="shield" size={14} /><span>Safe mode: ShotDrop only sees folders it made. <button className="ad-link" onClick={onFullAccess}>Show all my folders</button> (one more sign-in).</span></p>
@@ -465,14 +578,14 @@ function FolderBrowser({ account, start, toast, onUse, onFullAccess }: {
         {folders && folders.length <= 1 && onFullAccess && (
           <p className="ad-note"><Icon name="shield" size={14} /><span>Empty because of safe mode? ShotDrop can only see folders it created with this link. <button className="ad-link" onClick={onFullAccess}>Upgrade to all folders</button></span></p>
         )}
-        {folders?.length === 0 && <span className="ad-empty">{path.length ? 'No folders inside this one.' : 'No folders yet. Create one above.'}</span>}
+        {folders?.length === 0 && <span className="ad-empty">{path.length ? 'No folders inside this one.' : `No ${noun}s yet. Create one above.`}</span>}
         {folders?.map((f) => (
           <button key={f.name} onClick={() => setPath([...path, f.name])}><Icon name="folder" /><span>{f.name}</span><Icon name="next" size={14} /></button>
         ))}
       </div>
       <div className="ad-fb-foot">
-        <span>Photos copy into {path.length ? 'this folder' : 'the top level'}, one folder per shoot day.</span>
-        <button className="fp-btn primary" onClick={() => onUse(path)}>Use this folder</button>
+        <span>{levelNoun === 'bucket' && !path.length ? 'Open a bucket first.' : `Photos copy into ${path.length ? 'this folder' : 'the top level'}, one folder per shoot day.`}</span>
+        <button className="fp-btn primary" disabled={levelNoun === 'bucket' && !path.length} onClick={() => onUse(path)}>Use this folder</button>
       </div>
     </div>
   )
