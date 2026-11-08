@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { CloudAccount, CloudQuota, DestStatus, Destination, LibraryCounts, Settings, Status } from '@shared/types'
+import { DEFAULT_THUMBS_DIR, type CloudAccount, type CloudQuota, type DestStatus, type Destination, type LibraryCounts, type Settings, type Status } from '@shared/types'
 import { api, desktop } from '../api'
 import { ago, fmtSize } from '../format'
 import { fade, firm } from '../motion'
@@ -136,7 +136,11 @@ From now on, deleting a photo in ShotDrop also deletes the copy ShotDrop sent to
 One way only: deleting something in ${r.d.name} never touches this computer. Photos deleted before now are not affected.`)) return
     return run(() => api.patchDestination(r.d.id, { mirrorDeletes: on }), on ? `Deleting in ShotDrop now deletes from ${r.d.name} too` : `${r.d.name} keeps its copies from now on`)
   }
-  return { rows, counts, host, relinking, loadAccounts, run, reconnect, remove, toggle, retry, mirror }
+  const thumbs = (r: Row): Promise<void> =>
+    run(() => api.patchDestination(r.d.id, { thumbs: !r.d.thumbs }), r.d.thumbs ? `${r.d.name} stops getting thumbnails. Ones already there stay` : `Photos sent to ${r.d.name} now get a thumbnail too`)
+  const thumbsDir = (r: Row, dir: string): Promise<void> =>
+    run(() => api.patchDestination(r.d.id, { thumbsDir: dir }), `${r.d.name} thumbnails now go in ${dir || DEFAULT_THUMBS_DIR}`)
+  return { rows, counts, host, relinking, loadAccounts, run, reconnect, remove, toggle, retry, mirror, thumbs, thumbsDir }
 }
 
 const pillOf = (r: Row): { cls: string; text: string } => {
@@ -187,6 +191,8 @@ export function SyncBoard({ s, status, reload, toast }: Props) {
   const m = useSyncModel(s, status, reload, toast)
   const [sheet, setSheet] = useState<{ editing?: Destination; kind?: Kind } | null>(null)
   const [menu, setMenu] = useState<string | null>(null)
+  const [thumbDir, setThumbDir] = useState<string | null>(null) // the "Thumbnail folder" field, open inside the menu
+  useEffect(() => setThumbDir(null), [menu])
   const [browse, setBrowse] = useState<{ id: string; name: string } | null>(null)
   const [queue, setQueue] = useState<{ file: string; destId: string; status: string; error: string | null }[] | null>(null)
   const cams = status?.cameras ?? []
@@ -313,6 +319,19 @@ export function SyncBoard({ s, status, reload, toast }: Props) {
                           <button role="menuitem" onClick={() => { setMenu(null); setBrowse({ id: r.d.id, name: r.d.name }) }}>Browse files…</button>
                           <button role="menuitem" onClick={() => { setMenu(null); setSheet({ editing: r.d }) }}>Change folder…</button>
                           <button role="menuitemcheckbox" aria-checked={!!r.d.mirrorDeletes} onClick={() => { setMenu(null); void m.mirror(r) }}>{r.d.mirrorDeletes ? '✓ ' : ''}Delete here when I delete in ShotDrop</button>
+                          <button role="menuitemcheckbox" aria-checked={!!r.d.thumbs} title="Puts a small preview of each photo in a hidden folder here, so browsing shows thumbnails fast on any device" onClick={() => { setMenu(null); void m.thumbs(r) }}>{r.d.thumbs ? '✓ ' : ''}Upload thumbnails for fast previews</button>
+                          {r.d.thumbs && thumbDir === null && <button role="menuitem" onClick={() => setThumbDir(r.d.thumbsDir || DEFAULT_THUMBS_DIR)}>Thumbnail folder…</button>}
+                          {r.d.thumbs && thumbDir !== null && (() => {
+                            const v = thumbDir.trim().replace(/^\/+|\/+$/g, '')
+                            const ok = !v || (v.startsWith('.') && !v.split('/').includes('..') && !/[\\:]/.test(v))
+                            return (
+                              <form className="sx-thumbdir" onSubmit={(e) => { e.preventDefault(); if (!ok) return; setMenu(null); setThumbDir(null); void m.thumbsDir(r, v === DEFAULT_THUMBS_DIR ? '' : v) }}>
+                                <input value={thumbDir} onChange={(e) => setThumbDir(e.target.value)} placeholder={DEFAULT_THUMBS_DIR} aria-label="Thumbnail folder" spellCheck={false} autoFocus />
+                                <span className={ok ? '' : 'bad'}>{ok ? `From the top of ${r.d.name}. Existing thumbnails aren't moved.` : 'Must start with a dot, so it stays hidden from browsing.'}</span>
+                                <span className="sx-thumbdir-btns"><button type="button" onClick={() => setThumbDir(null)}>Cancel</button><button type="submit" disabled={!ok}>Save</button></span>
+                              </form>
+                            )
+                          })()}
                           {r.kind === 'folder' && desktop && <button role="menuitem" onClick={() => { setMenu(null); void desktop!.openPath(r.path) }}>Show folder</button>}
                           <button role="menuitem" className="danger" onClick={() => { setMenu(null); void m.remove(r) }}>{r.account ? 'Disconnect' : 'Remove'}</button>
                         </motion.div>

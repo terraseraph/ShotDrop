@@ -7,6 +7,8 @@ import type { RemoteFs } from './remote'
 import { kindOfName } from './remote'
 
 const MAX_IN_FLIGHT = 4
+/** Bump when make() changes, so files cached as "no preview" by an older version get another try. */
+const VERSION = 2
 
 /** Tiny per-destination concurrency gate so a screen of tiles can't open dozens of provider connections. */
 class Gate {
@@ -35,10 +37,14 @@ export class RemoteThumbs {
   constructor(private dir: string) {}
 
   private key(path: string, size: number, mtime: number): string {
-    return createHash('sha1').update(`${path}|${size}|${mtime}`).digest('hex')
+    return createHash('sha1').update(`${VERSION}|${path}|${size}|${mtime}`).digest('hex')
   }
 
-  async get(destId: string, fs: RemoteFs, path: string, size: number, mtime: number): Promise<Buffer | null> {
+  /**
+   * `hosted`: an uploaded thumbnail to read instead of the photo. `onBuilt` runs with a thumbnail made from the photo
+   * itself (not a hosted or cached one), so the caller can upload it.
+   */
+  async get(destId: string, fs: RemoteFs, path: string, size: number, mtime: number, hosted?: string, onBuilt?: (jpg: Buffer) => void): Promise<Buffer | null> {
     const file = join(this.dir, destId.replace(/[^\w-]/g, '_'), `${this.key(path, size, mtime)}.jpg`)
     const cached = await readFile(file).catch(() => null)
     if (cached) return cached.length ? cached : null
@@ -48,10 +54,12 @@ export class RemoteThumbs {
     if (!gate) this.gates.set(destId, (gate = new Gate()))
     const job = gate
       .run(async () => {
-        const jpg = await this.make(fs, path, size).catch((e: Error) => {
+        const up = hosted ? await this.hosted(fs, hosted) : null
+        const jpg = up ?? (await this.make(fs, path, size).catch((e: Error) => {
           if (/ENOENT|not found/i.test(e.message)) return null
           throw e // unreachable or provider errors are not cached as "no preview"
-        })
+        }))
+        if (jpg && !up) onBuilt?.(jpg)
         await mkdir(join(file, '..'), { recursive: true })
         await writeFile(file, jpg ?? Buffer.alloc(0)).catch(() => undefined)
         return jpg
@@ -61,10 +69,18 @@ export class RemoteThumbs {
     return job
   }
 
+  /** An uploaded thumbnail, if it is there and decodes; anything else falls back to the photo. */
+  private async hosted(fs: RemoteFs, path: string): Promise<Buffer | null> {
+    const buf = await fs.readRange(path, 0, 4 * 1024 * 1024).catch(() => null)
+    return buf?.length ? this.resize(buf).catch(() => null) : null
+  }
+
   private async make(fs: RemoteFs, path: string, size: number): Promise<Buffer | null> {
     const kind = kindOfName(path)
     if (kind !== 'jpeg' && kind !== 'raw' && kind !== 'heif') return null
-    const want = kind === 'raw' ? 512 * 1024 : 64 * 1024
+    // 128 KB, not 64: an EXIF APP1 segment can be up to 64 KB on its own (a Nikon Z50II's is 65,534 bytes), and exiftool
+    // can't find the thumbnail inside a segment that is cut short.
+    const want = kind === 'raw' ? 512 * 1024 : 128 * 1024
     const head = await fs.readRange(path, 0, want)
     if (!head.length) return null
     const whole = size > 0 && size <= head.length
@@ -93,7 +109,7 @@ export class RemoteThumbs {
           /* try the next source */
         }
       }
-      // A JPEG with no embedded thumbnail inside the first 64 KB: sharp can often decode the truncated start.
+      // A JPEG with no embedded thumbnail inside the first 128 KB: sharp can often decode the truncated start.
       if (kind === 'jpeg') return await this.resize(head).catch(() => null)
       return null
     } finally {

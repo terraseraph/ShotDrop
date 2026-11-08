@@ -5,7 +5,7 @@ import type { Destination } from '@shared/types'
 import type { RemoteOp } from '@shared/remote'
 import type { Core } from './index'
 import type { RemoteOpRow } from './library'
-import { remoteFor } from './remote'
+import { isPhotoKind, kindOfName, remoteFor, thumbRel, thumbsDirOf, type RemoteFs } from './remote'
 import { isUnreachable, type SyncError } from './retry'
 import { folderDate, folderName } from './sessions'
 
@@ -106,6 +106,7 @@ export class RemoteOpsService {
       sync.markOnline(dest.id)
       sync.forgetDirs(dest, job.src)
       sync.forgetDirs(dest, job.dst)
+      await this.moveThumbs(dest, fs, job.src, job.dst)
       const last = this.core.lib.remoteOp(job.id)
       this.core.db.prepare(`DELETE FROM remote_ops WHERE id = ?`).run(job.id)
       this.emit(last)
@@ -126,6 +127,18 @@ export class RemoteOpsService {
       this.running.delete(dest.id)
       sync.pump()
     }
+  }
+
+  /**
+   * Uploaded thumbnails follow their photo (a file move) or session (a folder move). Best effort: one left behind is
+   * pruned the next time someone browses that folder, and the moved photo gets a fresh one then.
+   */
+  private async moveThumbs(dest: Destination, fs: RemoteFs, src: string, dst: string): Promise<void> {
+    const dir = thumbsDirOf(dest)
+    if (!dir) return
+    const isFile = !!this.core.db.prepare(`SELECT 1 FROM files WHERE rel_path = ?`).get(dst)
+    if (isFile && !isPhotoKind(kindOfName(dst))) return
+    await fs.move(isFile ? thumbRel(dir, src) : `${dir}/${src}`, isFile ? thumbRel(dir, dst) : `${dir}/${dst}`).catch(() => undefined)
   }
 
   private queueMoves(src: string, dst: string): void {

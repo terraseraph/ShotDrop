@@ -61,6 +61,12 @@
 .sx-menu button { text-align: left; padding: 8px 10px; border-radius: 6px; color: var(--text-2); }
 .sx-menu button:hover, .sx-menu button:focus-visible { background: var(--panel-3); color: #fff; outline: none; }
 .sx-menu .danger { color: var(--reject-text); }
+.sx-thumbdir { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px 8px; width: 260px; font-size: 11px; color: var(--faint); }
+.sx-thumbdir input { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+.sx-thumbdir .bad { color: var(--reject-text); }
+.sx-thumbdir-btns { display: flex; justify-content: flex-end; gap: 4px; }
+.sx-thumbdir-btns button { padding: 4px 10px; }
+.sx-thumbdir-btns button[type='submit'] { color: var(--text); }
 
 .sx-queue { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; color: var(--faint); font-size: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
 .sx-jobs { overflow: hidden; display: flex; flex-direction: column; gap: 6px; font-size: 12px; margin-top: -12px; }
