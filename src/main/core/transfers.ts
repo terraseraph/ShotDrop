@@ -305,8 +305,12 @@ export class TransferService {
     if (fileId !== null) {
       for (const d of core.settings.destinations) {
         if (!d.enabled) continue
-        if (d.id === dest.id && copied) continue // already there
-        if (d.id === dest.id) continue // import never writes to the remote it read from
+        if (d.id === dest.id) {
+          // Import never writes to the remote it read from: record the anchor as already sent so the session reconcile's enqueueSync is a no-op.
+          core.lib.enqueueSync(fileId, d.id)
+          this.markSent(fileId, d.id)
+          continue
+        }
         core.lib.enqueueSync(fileId, d.id)
       }
       core.sync.pump()

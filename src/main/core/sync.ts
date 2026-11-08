@@ -94,6 +94,13 @@ export class SyncService {
     this.pump()
   }
 
+  /** Would this destination's filter take this file (used by "Send missing" so it follows the same rule as sync)? */
+  wanted(dest: Destination, fileId: number): boolean {
+    const file = this.lib.file(fileId)
+    const shot = file && this.lib.get(file.shot_id)
+    return !!file && !!shot && wants(dest, file, shot.flag === 1, this.kinds(file.shot_id))
+  }
+
   private kinds(shotId: number): Set<FileKind> {
     return new Set(this.lib.files(shotId).map((f) => f.kind))
   }

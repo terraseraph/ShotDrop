@@ -80,7 +80,8 @@ export function queueSessionSend(
   requeue: (fileId: number, destId: string) => void,
   destId: string,
   session: string,
-  resendDiffers: boolean
+  resendDiffers: boolean,
+  wanted: (fileId: number) => boolean
 ): number {
   const rows = db
     .prepare(
@@ -94,7 +95,8 @@ export function queueSessionSend(
   const listed = cached.size > 0
   let queued = 0
   for (const r of rows) {
-    const anchor = r.shot_name.startsWith('.')
+    if (r.shot_name.startsWith('.') || !wanted(r.id)) continue // anchors are never sent from here; filtered files stay out
+    const anchor = false
     const remoteSize = cached.get(r.rel_path)
     const missing = r.status === null || r.status !== 'done' || (listed && remoteSize === undefined)
     const differs = resendDiffers && remoteSize !== undefined && remoteSize !== r.size

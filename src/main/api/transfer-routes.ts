@@ -63,7 +63,7 @@ export function registerTransfers(app: FastifyInstance, core: Core): void {
     if (!d) return reply.code(404).send({ error: 'Unknown destination' })
     const b = (req.body ?? {}) as { session?: string; onlyMissing?: boolean; resendDiffers?: boolean }
     if (!b.session || !safeFolder(core.settings.libraryDir, b.session)) return reply.code(400).send({ error: 'Bad session folder' })
-    const queued = queueSessionSend(core.db, (f, id) => core.lib.enqueueSync(f, id), (f, id) => core.lib.requeueSync(f, id), d.id, b.session, b.resendDiffers === true && b.onlyMissing !== true)
+    const queued = queueSessionSend(core.db, (f, id) => core.lib.enqueueSync(f, id), (f, id) => core.lib.requeueSync(f, id), d.id, b.session, b.resendDiffers === true && b.onlyMissing !== true, (id) => core.sync.wanted(d, id))
     core.sync.pump()
     return { queued }
   })
