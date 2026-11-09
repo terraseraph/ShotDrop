@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { Shot, Status } from '@shared/types'
-import { isRemote } from '../api'
+import { api, isRemote } from '../api'
 import { popIn } from '../motion'
 import { fmtDay, type SessionNames } from '../sessions'
 import { Icon } from './Icon'
+import { NewSessionSheet, useCurrentSession } from './NewSessionSheet'
 
 export type Filter = 'all' | 'unrejected' | 'picks' | 'rated' | 'rejects' | 'best' | 'soft' | 'blink'
 export type View = 'loupe' | 'grid' | 'compare'
 
-const VIEWS: { id: View; label: string; key: string }[] = [
-  { id: 'loupe', label: 'Loupe', key: 'L' },
-  { id: 'grid', label: 'Grid', key: 'G' },
-  { id: 'compare', label: 'Compare', key: 'C' }
+const VIEWS: { id: View; label: string; key: string; icon: string }[] = [
+  { id: 'loupe', label: 'Loupe', key: 'L', icon: 'loupe' },
+  { id: 'grid', label: 'Grid', key: 'G', icon: 'grid' },
+  { id: 'compare', label: 'Compare', key: 'C', icon: 'compare' }
 ]
 
 interface Props {
@@ -52,7 +53,7 @@ export function TopBar(p: Props) {
       <div className="seg views" role="tablist" aria-label="View">
         {VIEWS.map((v) => (
           <button key={v.id} role="tab" aria-selected={p.view === v.id} className={p.view === v.id ? 'on' : ''} onClick={() => p.onView(v.id)}>
-            {v.label} <span className="key">{v.key}</span>
+            <Icon name={v.icon} size={15} />{v.label} <span className="key">{v.key}</span>
           </button>
         ))}
       </div>
@@ -99,23 +100,31 @@ export function SessionChooser(p: ChooserProps) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [rowEdit, setRowEdit] = useState<string | null>(null)
+  const [rowDraft, setRowDraft] = useState('')
+  const [newOpen, setNewOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createErr, setCreateErr] = useState('')
+  const current = useCurrentSession()
   const root = useRef<HTMLDivElement>(null)
 
   const sessions = useMemo(() => {
     const m = new Map<string, number>()
     for (const s of p.shots) m.set(s.session, (m.get(s.session) ?? 0) + 1)
+    for (const f of Object.keys(p.sessionNames.all)) if (!m.has(f)) m.set(f, 0) // named sessions with no photos yet (e.g. just created)
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
-  }, [p.shots])
+  }, [p.shots, p.sessionNames.all])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) { setRowEdit(null); return }
     const down = (e: MouseEvent): void => {
       if (!root.current?.contains(e.target as Node)) setOpen(false)
     }
     const key = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         e.stopPropagation()
-        setOpen(false)
+        if (rowEdit !== null) setRowEdit(null)
+        else setOpen(false)
       }
     }
     document.addEventListener('mousedown', down)
@@ -124,7 +133,12 @@ export function SessionChooser(p: ChooserProps) {
       document.removeEventListener('mousedown', down)
       window.removeEventListener('keydown', key, true)
     }
-  }, [open])
+  }, [open, rowEdit])
+
+  const commitRow = (): void => {
+    if (rowEdit) p.sessionNames.rename(rowEdit, rowDraft)
+    setRowEdit(null)
+  }
 
   const startRename = (): void => {
     if (!p.session) return
@@ -133,8 +147,26 @@ export function SessionChooser(p: ChooserProps) {
     setEditing(true)
   }
   const commit = (): void => {
-    p.sessionNames.rename(p.session, draft)
+    if (draft.trim() !== p.sessionNames.custom(p.session)) p.sessionNames.rename(p.session, draft)
     setEditing(false)
+  }
+  /** One click: the server picks a free "Session N" for today, it becomes current, and its name opens for editing. */
+  const quickNew = async (): Promise<void> => {
+    if (creating) return
+    setCreating(true)
+    setCreateErr('')
+    try {
+      const row = await api.createSession({ makeCurrent: true })
+      p.sessionNames.reload()
+      p.onSession(row.folder)
+      setOpen(false)
+      setDraft(row.meta?.name ?? '')
+      setEditing(true)
+    } catch (e) {
+      setCreateErr(e instanceof Error ? e.message : 'Could not create a session')
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -168,18 +200,54 @@ export function SessionChooser(p: ChooserProps) {
           <path d="m6 9 6 6 6-6" />
         </svg>
       </div>
+      <div className="sess-acts">
+        <button className="tb icon" onClick={startRename} disabled={!p.session || editing} aria-label="Rename this session" title={p.session ? 'Rename this session' : 'Pick a session to rename it'}>
+          <Icon name="edit" />
+        </button>
+        <button className={`tb icon ${createErr ? 'err' : ''}`} onClick={() => void quickNew()} disabled={creating} aria-label="New session" title={createErr || 'New session: named automatically, becomes the current session'}>
+          <Icon name="plus" />
+        </button>
+      </div>
       <AnimatePresence>
         {open && (
           <motion.div className="sess-pop sheet" role="listbox" aria-label="Sessions" {...popIn}>
-            {[['', p.shots.length] as [string, number], ...sessions].map(([s, n]) => (
-              <button key={s || 'all'} role="option" aria-selected={p.session === s} className={p.session === s ? 'on' : ''} onClick={() => { p.onSession(s); setOpen(false) }}>
-                <span>{p.sessionNames.title(s)}</span>
-                <span className="mono">{n}</span>
-              </button>
-            ))}
+            {[['', p.shots.length] as [string, number], ...sessions].map(([s, n]) =>
+              rowEdit === s && s ? (
+                <div key={s} className="sess-row editing">
+                  <input
+                    className="sess-input"
+                    autoFocus
+                    value={rowDraft}
+                    placeholder={fmtDay(s)}
+                    maxLength={40}
+                    aria-label={`Name for ${fmtDay(s)}`}
+                    onChange={(e) => setRowDraft(e.target.value)}
+                    onBlur={commitRow}
+                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') commitRow(); if (e.key === 'Escape') setRowEdit(null) }}
+                  />
+                </div>
+              ) : (
+                <div key={s || 'all'} className={`sess-row ${p.session === s ? 'on' : ''}`}>
+                  <button role="option" aria-selected={p.session === s} className="sess-pick" onClick={() => { p.onSession(s); setOpen(false) }}>
+                    {current.folder && current.folder === s && <span className="dot live" title="New photos are filed into this session" />}
+                    <span className="sess-name">{p.sessionNames.title(s)}</span>
+                    <span className="mono">{n}</span>
+                  </button>
+                  {s && (
+                    <button className="sess-edit" aria-label={`Rename ${p.sessionNames.title(s)}`} title="Rename" onClick={() => { setRowDraft(p.sessionNames.custom(s)); setRowEdit(s) }}>
+                      <Icon name="edit" />
+                    </button>
+                  )}
+                </div>
+              )
+            )}
+            <button className="sess-new" onClick={() => { setOpen(false); setNewOpen(true) }}>
+              <Icon name="plus" /> New session
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
+      {newOpen && <NewSessionSheet onClose={() => setNewOpen(false)} onCreated={(f) => { p.sessionNames.reload(); p.onSession(f) }} />}
     </div>
   )
 }

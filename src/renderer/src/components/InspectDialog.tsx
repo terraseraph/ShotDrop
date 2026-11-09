@@ -7,6 +7,7 @@ import { fmtAperture, fmtFocal, fmtIso, fmtShutter, fmtTime } from '../format'
 import { fade, popIn } from '../motion'
 import { RatingButtons, keyRating, useRatingSystem } from '../rating'
 import { FramePicker } from './BeforeAfter'
+import { FlagButtons } from './FlagButtons'
 import { dims, useViewport, ZoomImage } from './Viewport'
 
 interface Props {
@@ -211,8 +212,7 @@ export function InspectDialog({ shots, index, cull, maxSharp, onIndex, onPick, o
             <section>
               <h4>Cull</h4>
               <div className="ins-cull">
-                <button className={`cmp-flag pick ${shot.flag === 1 ? 'on' : ''}`} aria-pressed={shot.flag === 1} title="Pick (P)" onClick={() => (shot.flag === 1 ? onUnflag(shot.id) : onPick(shot.id))}>P</button>
-                <button className={`cmp-flag rej ${shot.flag === -1 ? 'on' : ''}`} aria-pressed={shot.flag === -1} title="Reject (X)" onClick={() => (shot.flag === -1 ? onUnflag(shot.id) : onReject(shot.id))}>X</button>
+                <FlagButtons shot={shot} onPick={onPick} onReject={onReject} onUnflag={onUnflag} />
                 <RatingButtons shot={shot} onPatch={(p) => { if (p.rating !== undefined) onRate(shot.id, p.rating) }} className="ins-rate" size={16} />
               </div>
               <p className="ins-hint"><span className="key">P</span> <span className="key">X</span> <span className="key">⇧1</span>–<span className="key">⇧{system === 'stars' ? 5 : 3}</span></p>

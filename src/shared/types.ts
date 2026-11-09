@@ -127,6 +127,8 @@ export interface Settings {
   destinations: Destination[]
   rclonePath: string
   xmpSidecars: boolean // write <name>.xmp next to each shot with rating/flag/label
+  /** Destination browsing lists only photos, RAW and video. On shows every file, sidecars like .xmp included. */
+  showAllRemoteFiles: boolean
   /** How ratings are shown and set. Thumbs are stored on the star scale (down 1, up 4, love 5); see shared/rating.ts. */
   ratingSystem: RatingSystem
   tunnel: { autoStart: boolean; cloudflaredPath: string }

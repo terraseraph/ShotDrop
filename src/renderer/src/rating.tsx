@@ -58,7 +58,7 @@ export const THUMB_COLOR: Record<Thumb, string> = { down: 'var(--thumb-down)', u
 
 export function ThumbIcon({ t, size = 16, on = true }: { t: Thumb; size?: number; on?: boolean }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={on ? THUMB_COLOR[t] : 'none'} stroke={on ? THUMB_COLOR[t] : '#777'} strokeWidth="2" strokeLinejoin="round" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={on ? THUMB_COLOR[t] : 'none'} stroke={THUMB_COLOR[t]} strokeOpacity={on ? 1 : 0.7} strokeWidth="2" strokeLinejoin="round" aria-hidden>
       <path d={THUMB_PATH[t]} />
     </svg>
   )
@@ -87,7 +87,7 @@ export function RatingButtons({ shot, onPatch, size = 16, className, keys = fals
     <div className={className} role="radiogroup" aria-label={`Rating ${shot.rating} of 5`}>
       {[1, 2, 3, 4, 5].map((n) => (
         <button key={n} role="radio" aria-checked={shot.rating === n} aria-label={`${n} star${n > 1 ? 's' : ''}`} className={n <= shot.rating ? 'on' : ''} onClick={() => onPatch({ rating: shot.rating === n ? 0 : n })}>
-          <svg width={size} height={size} viewBox="0 0 24 24" fill={n <= shot.rating ? 'var(--star)' : 'none'} stroke={n <= shot.rating ? 'none' : '#555'} strokeWidth="2" aria-hidden>
+          <svg width={size} height={size} viewBox="0 0 24 24" fill={n <= shot.rating ? 'var(--star)' : 'none'} stroke={n <= shot.rating ? 'none' : 'var(--star)'} strokeOpacity={0.6} strokeWidth="2" aria-hidden>
             <path d={STAR} />
           </svg>
         </button>

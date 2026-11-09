@@ -280,6 +280,7 @@ export function SettingsDrawer({ status, tab, onClose, toast, onSetup, onOpenSyn
             <Sec id="sync" title="Sync" i={4}>
               {s.destinations.length === 0 && <p className="st-muted">No destinations yet. Photos stay on this PC.</p>}
               {s.destinations.map((d) => <div key={d.id} className="st-dest"><span className="st-cam-n">{d.name}</span><span className="mono st-muted st-ell">{d.target}</span></div>)}
+              <Row label="Show all files in destinations" hint="Off: Browse lists photos, RAW and video only. On: sidecars such as .xmp show too."><Switch on={s.showAllRemoteFiles} onChange={(v) => void apply({ showAllRemoteFiles: v })} label="Show all files in destinations" /></Row>
               {onOpenSync && <div><button className="tb" onClick={onOpenSync}>Open Sync</button></div>}
             </Sec>
 
@@ -388,6 +389,9 @@ export function MobileSettings({ status, toast }: { status: Status | null; toast
             <MGroup title="PHONE AND REMOTE">
               <div className="mrow"><div className="t"><div>Remote gallery</div><div className="s">PIN <span className="mono st-pin-s">{rememberedPin() || (s.remote.enabled ? 'not needed here' : 'off')}</span></div></div><Switch className="m" on={s.remote.enabled} onChange={(v) => void apply({ remote: { ...s.remote, enabled: v } })} label="Remote gallery" /></div>
               <div className="mrow"><div className="t"><div>Public link</div><div className="s">{t?.status === 'running' ? 'On' : 'One click, no account'}</div></div><Switch className="m" on={t?.status === 'running'} onChange={(v) => void (v ? api.tunnelStart() : api.tunnelStop()).catch(() => toast('Change this on the PC.', 'error'))} label="Public link" /></div>
+            </MGroup>
+            <MGroup title="SYNC">
+              <div className="mrow"><div className="t"><div>Show all files in destinations</div><div className="s">Off: photos, RAW and video only</div></div><Switch className="m" on={s.showAllRemoteFiles} onChange={(v) => void apply({ showAllRemoteFiles: v })} label="Show all files in destinations" /></div>
             </MGroup>
           </>
         )}

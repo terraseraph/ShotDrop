@@ -313,10 +313,9 @@ export function Grid(p: Props) {
   const burst = (run: Shot[]): ReactElement => {
     const ids = run.map((s) => s.id)
     const best = run.find((s) => cull.get(s.id)?.best)
-    const span = Math.min(run.length, 3)
     const secs = (run[run.length - 1].capturedAt - run[0].capturedAt) / 1000
     return (
-      <section key={`b${run[0].id}`} className="gx-burst" style={{ ['--span' as string]: span }} aria-label={`Burst of ${run.length} frames`}>
+      <section key={`b${run[0].id}`} className="gx-burst" aria-label={`Burst of ${run.length} frames`}>
         <header>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="7" width="12" height="12" rx="2" /><path d="M8 3h11a2 2 0 0 1 2 2v11" /></svg>
           Burst · {run.length} frames · {secs.toFixed(1)} s
@@ -330,7 +329,7 @@ export function Grid(p: Props) {
             </button>
           )}
         </header>
-        <div className="gx-grid grid inner" style={{ ['--cols' as string]: span }}>{run.map((s) => cell(s, true))}</div>
+        {run.map((s) => cell(s, true))}
       </section>
     )
   }
@@ -343,7 +342,7 @@ export function Grid(p: Props) {
         <div key={sec.label + sec.runs[0][0].id}>
           <div className="gx-minute">{sec.label}<span /></div>
           <div className="gx-grid grid" style={{ ['--cols' as string]: mobile ? 3 : COLS[size] }}>
-            {sec.runs.map((r) => (r.length < 2 || mobile ? r.map((s) => cell(s, r.length > 1)) : burst(r)))}
+            {sec.runs.map((r) => (r.length < 2 ? cell(r[0], false) : burst(r)))}
           </div>
         </div>
       ))}

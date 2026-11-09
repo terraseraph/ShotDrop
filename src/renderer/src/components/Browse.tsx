@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowseResult, RemoteEntry } from '@shared/remote'
-import { api } from '../api'
+import { api, isRemote } from '../api'
 import { fmtSize } from '../format'
-import { BrowseActions, STATE_LABEL } from './BrowseActions'
+import { BrowseActions } from './BrowseActions'
+import { BrowseBody, isMedia, StateChips, useBrowseView, useShowAll, viewsFor, VIEW_LABEL, type StateFilter } from './BrowseViews'
+import { DeleteFromDest } from './DeleteFromDest'
+import { FolderTree } from './FolderTree'
+import { useBrowseMenu } from './useBrowseMenu'
 import './Browse.css'
+import './BrowseViews.css'
 
 export interface BrowseDest { id: string; name: string }
 
@@ -57,6 +62,35 @@ export const crumbsOf = (path: string): { name: string; path: string }[] => {
   return parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join('/') }))
 }
 
+export const parentOf = (path: string): string => path.split('/').filter(Boolean).slice(0, -1).join('/')
+
+/** Back / forward / up over the folders you have visited, like a file manager. `go` is for every deliberate move; back and forward replay. */
+export function useNav(path: string, setPath: (p: string) => void) {
+  const [past, setPast] = useState<string[]>([])
+  const [future, setFuture] = useState<string[]>([])
+  const go = (p: string): void => {
+    if (p === path) return
+    setPast((h) => [...h, path])
+    setFuture([])
+    setPath(p)
+  }
+  const back = (): void => {
+    const p = past[past.length - 1]
+    if (p === undefined) return
+    setPast(past.slice(0, -1))
+    setFuture([path, ...future])
+    setPath(p)
+  }
+  const forward = (): void => {
+    const p = future[0]
+    if (p === undefined) return
+    setFuture(future.slice(1))
+    setPast([...past, path])
+    setPath(p)
+  }
+  return { go, back, forward, up: () => path && go(parentOf(path)), canBack: past.length > 0, canForward: future.length > 0, canUp: !!path }
+}
+
 export const hasThumb = (e: RemoteEntry): boolean => e.kind === 'jpeg' || e.kind === 'raw' || e.kind === 'heif'
 
 /** A thumbnail that falls back to a generic tile while loading, on 204 (no preview) and on errors. */
@@ -99,61 +133,106 @@ export function Viewer({ destId, e, onClose }: { destId: string; e: RemoteEntry;
 /** Look inside a destination. Browsing never changes what is stored there; the action bar does only what you click. */
 export function Browse({ dest, onClose, initialPath = '', diff = false }: { dest: BrowseDest; onClose: () => void; initialPath?: string; diff?: boolean }) {
   const b = useBrowse(dest.id, initialPath, diff)
+  const nav = useNav(b.path, b.setPath)
+  const [view, setView] = useBrowseView(diff)
+  const [showAll, setShowAll] = useShowAll()
   const [open, setOpen] = useState<RemoteEntry | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [note, setNote] = useState('')
+  const [filter, setFilter] = useState<StateFilter>('all')
+  const [copyReq, setCopyReq] = useState({ n: 0 })
+  const [treeKey, setTreeKey] = useState(0)
+  const [deleting, setDeleting] = useState<RemoteEntry[] | null>(null)
+  const anchor = useRef<string | null>(null)
+
+  useEffect(() => { setSel(new Set()); setFilter('all'); anchor.current = null }, [b.path])
+
+  const all = b.res?.entries ?? []
+  const entries = all.filter((e) => showAll || isMedia(e))
+  const hidden = all.length - entries.length
+  const files = entries.filter((e) => !e.dir)
+  const shown = files.filter((f) => filter === 'all' || f.state === filter)
+  const picked = all.filter((e) => sel.has(e.path))
+  const nDirs = entries.length - files.length
+
+  const toggle = (path: string): void => { anchor.current = path; setSel((s) => { const n = new Set(s); if (n.has(path)) n.delete(path); else n.add(path); return n }) }
+  const onFile = (f: RemoteEntry, ev: React.MouseEvent): void => {
+    if (f.state === 'waiting') return // it is only on this PC; there is nothing at the destination to pick
+    if (ev.shiftKey && anchor.current) {
+      const ps = shown.map((x) => x.path)
+      const a = ps.indexOf(anchor.current)
+      const z = ps.indexOf(f.path)
+      if (a >= 0 && z >= 0) return setSel((s) => new Set([...s, ...ps.slice(Math.min(a, z), Math.max(a, z) + 1)]))
+    }
+    toggle(f.path)
+  }
+  const selectAll = (): void => setSel(new Set(shown.filter((f) => f.state !== 'waiting').map((f) => f.path)))
+
+  const menu = useBrowseMenu({
+    dest, diff, path: b.path, views: viewsFor(diff), view, setView, showAll, setShowAll: (v) => void setShowAll(v), selected: sel,
+    onOpen: (e) => (e.dir ? nav.go(e.path) : setOpen(e)),
+    onSelectOnly: (p) => { anchor.current = p; setSel(new Set([p])) },
+    onToggle: toggle, onSelectAll: selectAll, onCopy: () => setCopyReq((r) => ({ n: r.n + 1 })), onRefresh: () => void b.reload(), onNote: setNote,
+    entries: all, onDelete: isRemote ? undefined : setDeleting
+  })
+
   useEffect(() => {
-    const k = (ev: KeyboardEvent): void => { if (ev.key === 'Escape' && !open) onClose() }
+    const k = (ev: KeyboardEvent): void => {
+      const typing = /INPUT|SELECT|TEXTAREA/.test((ev.target as HTMLElement).tagName)
+      if (ev.key === 'Escape') { if (!open) onClose() }
+      else if (typing || open) return
+      else if (ev.altKey && ev.key === 'ArrowLeft') nav.back()
+      else if (ev.altKey && ev.key === 'ArrowRight') nav.forward()
+      else if ((ev.altKey && ev.key === 'ArrowUp') || ev.key === 'Backspace') nav.up()
+      else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'a') { ev.preventDefault(); selectAll() }
+      else if (ev.key === 'F5') { ev.preventDefault(); void b.reload() }
+    }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [onClose, open])
-  useEffect(() => setSel(new Set()), [b.path])
-  const entries = b.res?.entries ?? []
-  const dirs = entries.filter((e) => e.dir)
-  const files = entries.filter((e) => !e.dir)
-  const toggle = (e: RemoteEntry): void => setSel((s) => { const n = new Set(s); if (n.has(e.path)) n.delete(e.path); else n.add(e.path); return n })
-  const picked = entries.filter((e) => sel.has(e.path))
+  })
+
+  const thumb = (e: RemoteEntry) => <RemoteThumb destId={dest.id} e={e} />
+  const viewButton = (
+    <button className="tb" aria-haspopup="menu" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); menu.openView(r.right - 230, r.bottom + 4) }}>
+      <span aria-hidden>{VIEW_LABEL[view].glyph}</span> View: {VIEW_LABEL[view].label.split(' ')[0]} ▾
+    </button>
+  )
+
   return (
     <div className="bw" role="dialog" aria-label={`Browse ${dest.name}`}>
       <div className="bw-head">
-        <button className="tb" onClick={onClose}>← Back</button>
+        <span className="bw-nav">
+          <button className="bw-ib" aria-label="Back" title="Back (Alt+←)" disabled={!nav.canBack} onClick={nav.back}>←</button>
+          <button className="bw-ib" aria-label="Forward" title="Forward (Alt+→)" disabled={!nav.canForward} onClick={nav.forward}>→</button>
+          <button className="bw-ib" aria-label="Up one folder" title="Up (Alt+↑)" disabled={!nav.canUp} onClick={nav.up}>↑</button>
+        </span>
         <nav className="bw-crumbs" aria-label="Path">
-          <button onClick={() => b.setPath('')} className={b.path ? '' : 'on'}>{dest.name}</button>
-          {crumbsOf(b.path).map((c) => <span key={c.path}>/<button onClick={() => b.setPath(c.path)}>{c.name}</button></span>)}
+          <button onClick={() => nav.go('')} aria-current={b.path ? undefined : 'page'} className={b.path ? '' : 'on'}>{dest.name}</button>
+          {crumbsOf(b.path).map((c, i, a) => <span key={c.path}><i aria-hidden>›</i><button onClick={() => nav.go(c.path)} aria-current={i === a.length - 1 ? 'page' : undefined} className={i === a.length - 1 ? 'on' : ''}>{c.name}</button></span>)}
         </nav>
         <span className="bw-meta">{b.res?.meta ? b.res.meta.name : ''}{b.res && !b.res.fresh ? ' · updating…' : ''}</span>
-        <button className="tb" onClick={() => void b.reload()}>Refresh</button>
+        <button className="tb" onClick={() => void b.reload()} title="Refresh (F5)">Refresh</button>
+        <button className="tb" onClick={onClose}>Close</button>
       </div>
       {b.error && <div className="bw-banner">{b.error.offline ? `Can't reach ${dest.name} right now.${b.res ? ' Showing what was there last time.' : ''}` : b.error.message}</div>}
-      <div className="bw-body">
-        {b.loading && !b.res && <div className="bw-empty">Loading…</div>}
-        {!b.loading && !b.res && b.error && <div className="bw-empty">{b.error.offline ? 'Offline, and nothing was saved from before.' : 'Could not list this folder.'}</div>}
-        {b.res && !entries.length && <div className="bw-empty">This folder is empty.</div>}
-        {dirs.length > 0 && (
-          <div className="bw-dirs">
-            {dirs.map((d) => (
-              <span key={d.path} className={`bw-dir-wrap ${sel.has(d.path) ? 'sel' : ''}`}>
-                <input type="checkbox" aria-label={`Select ${d.name}`} checked={sel.has(d.path)} onChange={() => toggle(d)} />
-                <button className="bw-dir" onClick={() => b.setPath(d.path)}><span aria-hidden>📁</span>{d.name}</button>
-              </span>
-            ))}
-          </div>
-        )}
-        {files.length > 0 && (
-          <div className="bw-grid">
-            {files.map((f) => (
-              <button key={f.path} className={`bw-tile ${f.inLibrary ? 'in' : ''} ${sel.has(f.path) ? 'sel' : ''}`} title={`${f.name} · ${fmtSize(f.size)}`} onClick={() => f.state !== 'waiting' && toggle(f)} onDoubleClick={() => f.state !== 'waiting' && setOpen(f)} onKeyDown={(ev) => ev.key === 'Enter' && f.state !== 'waiting' && setOpen(f)}>
-                <RemoteThumb destId={dest.id} e={f} />
-                <span className="bw-cap">{f.name}</span>
-                {f.state ? <span className={`bw-st ${f.state}`}>{STATE_LABEL[f.state]}</span> : f.inLibrary && <span className="bw-in">On this PC</span>}
-                {sel.has(f.path) && <span className="bw-check" aria-hidden>✓</span>}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <BrowseActions dest={dest} path={b.path} picked={picked} entries={all} meta={b.res?.meta} diff={diff} trailing={viewButton} panelRequest={copyReq} onNote={setNote} onReload={() => void b.reload()} />
+      {diff && files.some((f) => f.state) && view !== 'groups' && <StateChips files={files} value={filter} onChange={setFilter} />}
       {note && <div className="bw-note-bar">{note}</div>}
-      <BrowseActions dest={dest} path={b.path} picked={picked} entries={entries} meta={b.res?.meta} diff={diff} onNote={setNote} onReload={() => void b.reload()} />
+      <div className="bw-split">
+        <aside className="bw-side"><FolderTree key={treeKey} destId={dest.id} rootName={dest.name} current={b.path} diff={diff} onGo={nav.go} /></aside>
+        <div className="bw-body">
+          {b.loading && !b.res && <div className="bw-empty">Loading…</div>}
+          {!b.loading && !b.res && b.error && <div className="bw-empty">{b.error.offline ? 'Offline, and nothing was saved from before.' : 'Could not list this folder.'}</div>}
+          {b.res && !entries.length && <div className="bw-empty">{hidden ? 'No photos or videos here. Show all files to see the rest.' : 'This folder is empty.'}</div>}
+          {entries.length > 0 && <BrowseBody destName={dest.name} entries={entries} view={view} filter={filter} sel={sel} thumb={thumb} onFile={onFile} onFileOpen={setOpen} onDir={(d, ev) => (ev.ctrlKey || ev.metaKey ? toggle(d.path) : nav.go(d.path))} onSelect={(d) => toggle(d.path)} onMenu={menu.openAt} />}
+        </div>
+      </div>
+      <div className="bw-foot">
+        <span>{hidden > 0 ? <>{hidden} other file{hidden === 1 ? '' : 's'} hidden · <button className="bw-lnk" onClick={() => void setShowAll(true)}>Show all</button></> : showAll ? <>Showing all files · <button className="bw-lnk" onClick={() => void setShowAll(false)}>Media only</button></> : null}</span>
+        <span>{nDirs ? `${nDirs} folder${nDirs === 1 ? '' : 's'} · ` : ''}{files.length} {showAll ? 'files' : 'media files'}{sel.size ? ` · ${sel.size} selected` : ''}</span>
+      </div>
+      {menu.node}
+      {deleting && <DeleteFromDest dest={dest} targets={deleting} onClose={() => setDeleting(null)} onDone={(n) => { setDeleting(null); setSel(new Set()); setTreeKey((k) => k + 1); setNote(`Deleted ${n} item${n === 1 ? '' : 's'} from ${dest.name}`); void b.reload() }} />}
       {open && <Viewer destId={dest.id} e={open} onClose={() => setOpen(null)} />}
     </div>
   )

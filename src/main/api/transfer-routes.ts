@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest, RouteShorthandOptions } from 'fastify'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
@@ -13,7 +13,7 @@ import { META_FILE, NAME_MAX, folderDate, localToday, newSessionId, safeFolder }
 import { TransferService } from '../core/transfers'
 
 /** Import, copy, send, adopt and the transfer list. Import writes locally only; the rest are explicit user actions. */
-export function registerTransfers(app: FastifyInstance, core: Core): void {
+export function registerTransfers(app: FastifyInstance, core: Core, local: RouteShorthandOptions): void {
   const transfers = new TransferService(core)
   const dest = (id: string | undefined): Destination | undefined => core.settings.destinations.find((d) => d.id === id)
   const paramDest = (req: FastifyRequest): Destination | undefined => dest((req.params as { id: string }).id)
@@ -108,6 +108,35 @@ export function registerTransfers(app: FastifyInstance, core: Core): void {
       return fail(reply, e)
     } finally {
       await rm(tmp, { recursive: true, force: true }).catch(() => undefined)
+    }
+  })
+
+  /**
+   * Delete files or whole folders on a destination (the provider's trash where it has one). Only from the ShotDrop PC.
+   * Needs the item to have been listed (we must know if it is a folder), and never touches this PC's library.
+   */
+  app.post('/api/destinations/:id/delete', local, async (req, reply) => {
+    const d = paramDest(req)
+    if (!d) return reply.code(404).send({ error: 'Unknown destination' })
+    try {
+      const paths = pathList((req.body as { paths?: unknown } | undefined)?.paths)
+      if (paths.some((p) => !p)) throw new BadPath('Cannot delete the destination root')
+      const fs = transfers.fsFor(d)
+      let deleted = 0
+      const parents = new Set<string>()
+      for (const p of paths) {
+        const row = core.db.prepare(`SELECT dir FROM remote_entries WHERE dest_id = ? AND path = ?`).get(d.id, p) as { dir: number } | undefined
+        if (!row) throw new BadPath(`${p} has not been listed yet. Open its folder first.`)
+        if (row.dir) await fs.removeDir(p)
+        else await fs.remove(p)
+        core.db.prepare(`DELETE FROM remote_entries WHERE dest_id = ? AND (path = ? OR substr(path, 1, ?) = ?)`).run(d.id, p, p.length + 1, `${p}/`)
+        parents.add(p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+        deleted++
+      }
+      for (const path of parents) core.bus.emit({ type: 'browse:updated', destId: d.id, path })
+      return { deleted }
+    } catch (e) {
+      return fail(reply, e)
     }
   })
 

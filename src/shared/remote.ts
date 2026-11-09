@@ -1,7 +1,9 @@
 // Remote browse / sessions contract types (Wave 0). Kept out of types.ts until the rating work lands.
 
 export type RemoteState = 'synced' | 'waiting' | 'missingHere' | 'differs'
-export interface RemoteEntry { name: string; path: string; dir: boolean; size: number; mtime: number; kind: 'jpeg'|'raw'|'heif'|'video'|'sidecar'|'other'; inLibrary: boolean; state?: RemoteState }
+/** Sync state of everything under a folder (diff mode only). `missingHere` only counts what has been listed on the destination so far. */
+export interface RemoteRollup { total: number; waiting: number; differs: number; missingHere: number }
+export interface RemoteEntry { name: string; path: string; dir: boolean; size: number; mtime: number; kind: 'jpeg'|'raw'|'heif'|'video'|'sidecar'|'other'; inLibrary: boolean; state?: RemoteState; rollup?: RemoteRollup }
 export interface SessionMeta { schema: 1; id: string; name: string; date: string; client?: string; notes?: string; createdBy: string; createdAt: number; updatedAt: number }
 export interface LibraryMeta { schema: 1; libraryId: string; name: string; writers: { host: string; lastSync: number }[] }
 export interface SessionRow { folder: string; count: number; meta: SessionMeta | null; current: boolean }

@@ -1,4 +1,4 @@
-import type { DestProgress, RemoteEntry, RemoteState } from '@shared/remote'
+import type { DestProgress, RemoteEntry, RemoteRollup, RemoteState } from '@shared/remote'
 import type { DB } from './db'
 import { kindOfName } from './remote'
 
@@ -26,13 +26,13 @@ export function localFolderFiles(db: DB, destId: string, path: string): LocalRow
  * Folders get no state. At the destination root nothing is compared.
  */
 export function diffEntries(db: DB, destId: string, path: string, entries: RemoteEntry[]): RemoteEntry[] {
-  if (!path) return entries
+  if (!path) return entries.map((e) => (e.dir ? { ...e, rollup: folderRollup(db, destId, e.path) } : e))
   const local = new Map(localFolderFiles(db, destId, path).map((r) => [r.rel_path, r]))
   const out: RemoteEntry[] = []
   const seen = new Set<string>()
   for (const e of entries) {
     if (e.dir) {
-      out.push(e)
+      out.push({ ...e, rollup: folderRollup(db, destId, e.path) })
       continue
     }
     seen.add(e.path)
@@ -45,6 +45,36 @@ export function diffEntries(db: DB, destId: string, path: string, entries: Remot
     out.push({ name: l.name, path: l.rel_path, dir: false, size: l.size, mtime: 0, kind: kindOfName(l.name), inLibrary: true, state: 'waiting' })
   }
   return out
+}
+
+/**
+ * Sync state of everything under the folder `dir` (any depth), sidecars not counted. Local files with a finished job count as
+ * synced unless the cached remote size differs; no job (or an unfinished one) counts as waiting; files only in the cached
+ * remote listing count as missingHere. Folders never listed on the destination have no cache, so their missingHere is 0.
+ */
+export function folderRollup(db: DB, destId: string, dir: string): RemoteRollup {
+  const prefix = `${dir}/`
+  const local = db
+    .prepare(
+      `SELECT f.rel_path, f.size, j.status FROM files f JOIN shots s ON s.id = f.shot_id
+       LEFT JOIN sync_jobs j ON j.file_id = f.id AND j.dest_id = ?
+       WHERE s.name NOT LIKE '.%' AND f.kind != 'sidecar' AND substr(f.rel_path, 1, ?) = ?`
+    )
+    .all(destId, prefix.length, prefix) as { rel_path: string; size: number; status: string | null }[]
+  const remote = new Map(
+    (db.prepare(`SELECT path, size FROM remote_entries WHERE dest_id = ? AND dir = 0 AND kind != 'sidecar' AND substr(path, 1, ?) = ?`).all(destId, prefix.length, prefix) as { path: string; size: number }[]).map((r) => [r.path, r.size])
+  )
+  const r: RemoteRollup = { total: 0, waiting: 0, differs: 0, missingHere: 0 }
+  for (const l of local) {
+    r.total++
+    const size = remote.get(l.rel_path)
+    if (size !== undefined) { if (size !== l.size) r.differs++ }
+    else if (l.status !== 'done') r.waiting++
+    remote.delete(l.rel_path)
+  }
+  r.missingHere = remote.size
+  r.total += remote.size
+  return r
 }
 
 /** sent/total per session folder x destination from sync_jobs alone, anchors and sidecars not counted. */

@@ -168,6 +168,14 @@ export function freeFolder(libDir: string, folder: string): string {
 
 export type SessionListRow = SessionRow & { session: string }
 
+/** "Session 1", "Session 2"…: the first one not already used by a session on `date` (folder or name). */
+export function autoSessionName(date: string, rows: { folder: string; meta: { name?: string } | null }[]): string {
+  const taken = new Set(rows.filter((r) => r.folder.startsWith(date)).flatMap((r) => [r.meta?.name ?? '', r.folder.slice(date.length + 1)]))
+  let n = 1
+  while (taken.has(`Session ${n}`)) n++
+  return `Session ${n}`
+}
+
 /** Session list and edits behind /api/sessions. Disk is the truth; the `sessions` table is its cache. */
 export class SessionService {
   private lastReconcile = 0
@@ -197,12 +205,13 @@ export class SessionService {
   }
 
   /** `makeCurrent` is accepted but not acted on until wave 2 adds the current-session setting. */
-  async create(input: { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean }): Promise<SessionListRow> {
+  async create(input: { name?: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean }): Promise<SessionListRow> {
     const libDir = this.libDir()
     const date = input.date ?? localToday()
-    const folder = freeFolder(libDir, folderName(date, input.name))
+    const name = input.name?.trim() || autoSessionName(date, this.list())
+    const folder = freeFolder(libDir, folderName(date, name))
     mkdirSync(join(libDir, folder), { recursive: true })
-    const meta = await writeMeta(libDir, folder, { name: input.name, client: input.client, notes: input.notes }, { date })
+    const meta = await writeMeta(libDir, folder, { name, client: input.client, notes: input.notes }, { date })
     // wave 2: if (input.makeCurrent) set ingest.currentSession = folder
     await this.afterWrite(folder, meta)
     return this.row(folder)

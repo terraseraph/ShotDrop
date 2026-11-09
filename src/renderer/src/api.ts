@@ -93,7 +93,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 export const api = {
   status: () => req<Status>('GET', '/api/status'),
   sessions: () => req<(Session & SessionRow)[]>('GET', '/api/sessions'),
-  createSession: (b: { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean; endAfterMin?: number }) => req<Session & SessionRow>('POST', '/api/sessions', b),
+  createSession: (b: { name?: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean; endAfterMin?: number }) => req<Session & SessionRow>('POST', '/api/sessions', b),
   currentSession: () => req<{ folder: string | null; endsAt: number | null }>('GET', '/api/ingest/current-session'),
   setCurrentSession: (folder: string | null, endAfterMin?: number) => req<{ folder: string | null; endsAt: number | null }>('PUT', '/api/ingest/current-session', { folder, endAfterMin }),
   /** Calls back when the current session (or any session's details) changed, on this or another device. Returns an unsubscribe. */
@@ -173,6 +173,8 @@ export const api = {
   importFrom: (destId: string, b: { paths: string[]; recursive?: boolean; session?: string }) => req<TransferJob>('POST', `/api/destinations/${destId}/import`, b),
   copyFrom: (destId: string, b: { paths: string[]; toDestId: string; toPath: string }) => req<TransferJob>('POST', `/api/destinations/${destId}/copy`, b),
   sendSession: (destId: string, b: { session: string; onlyMissing?: boolean; resendDiffers?: boolean }) => req<{ queued: number }>('POST', `/api/destinations/${destId}/send`, b),
+  /** Deletes files or folders on the destination (its trash where it has one). PC only; this PC's library is not touched. */
+  deleteFrom: (destId: string, b: { paths: string[] }) => req<{ deleted: number }>('POST', `/api/destinations/${destId}/delete`, b),
   adoptFolder: (destId: string, b: { path: string; name: string; client?: string }) => req<SessionMeta>('POST', `/api/destinations/${destId}/adopt`, b),
   onTransfer(fn: (j: TransferJob) => void): () => void {
     const es = new EventSource(withKey(`${base}/api/events`))

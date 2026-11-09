@@ -145,10 +145,10 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   app.get('/api/sessions', async () => sessions.list())
   app.post(
     '/api/sessions',
-    { schema: { body: { ...sessionBody, required: ['name'], properties: { ...sessionBody.properties, date: { type: 'string' }, makeCurrent: { type: 'boolean' }, endAfterMin: { type: 'number', minimum: 0 } } } } },
+    { schema: { body: { ...sessionBody, properties: { ...sessionBody.properties, date: { type: 'string' }, makeCurrent: { type: 'boolean' }, endAfterMin: { type: 'number', minimum: 0 } } } } },
     async (req, reply) => {
-      const b = req.body as { name: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean; endAfterMin?: number }
-      if (!sanitizeName(b.name)) return reply.code(400).send({ error: 'Session name is required' })
+      const b = req.body as { name?: string; client?: string; notes?: string; date?: string; makeCurrent?: boolean; endAfterMin?: number }
+      if (b.name !== undefined && b.name.trim() && !sanitizeName(b.name)) return reply.code(400).send({ error: 'Session name has no usable characters' }) // empty = auto-named
       if (b.date !== undefined && !DATE_RE.test(b.date)) return reply.code(400).send({ error: 'date must be YYYY-MM-DD' })
       const created = await sessions.create(b)
       if (!b.makeCurrent) return created
@@ -578,7 +578,7 @@ export async function createApi(core: Core, opts: ApiOptions = {}, restart: () =
   // ---- browse destinations (read-only; no `local` guard, so the phone can use them with the PIN) ----
   registerRemoteBrowse(app, core)
   registerCurrentSession(app, core)
-  registerTransfers(app, core)
+  registerTransfers(app, core, local)
   registerRemoteOps(app, core, remoteOps)
 
   // ---- remote web UI ----

@@ -392,6 +392,7 @@ export default function App() {
                   onUnflag={(id) => void lib.patch([id], { flag: 0 })}
                   onRate={(id, n) => void lib.patch([id], { rating: n })}
                   onClear={() => setCompareIds([])}
+                  onDelete={(s) => setDeleting({ shots: [s], advance: false })}
                   onKeep={setCompareIds}
                   onAdd={() => { setCompareIds(compareShots.map((s) => s.id)); setView('grid') }}
                   onClose={() => setView('grid')}
