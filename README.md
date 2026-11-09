@@ -70,6 +70,26 @@ No account, no telemetry. One portable folder. Ratings go to XMP sidecars for Li
 
 </td>
 </tr>
+<tr>
+<td valign="top">
+
+**🔍 Compare**<br>
+Before/after slider, side by side or grid, with per-frame histograms. One key keeps the best of a burst.
+
+</td>
+<td valign="top">
+
+**🗂️ Named sessions**<br>
+Name each shoot and its client. New frames go into the current session; renames follow through to your storage.
+
+</td>
+<td valign="top">
+
+**🗄️ Browse your storage**<br>
+Explore any destination with thumbnails, import from it or copy between destinations. S3, B2, R2, Wasabi, SFTP, WebDAV.
+
+</td>
+</tr>
 </table>
 
 ## Screenshots
@@ -79,7 +99,11 @@ No account, no telemetry. One portable folder. Ratings go to XMP sidecars for Li
 | ![Loupe](docs/media/01-loupe.png) | ![Grid grouped by minute](docs/media/02-grid-culling.png) |
 | **Loupe** with camera data, histogram and filmstrip | **Grid** grouped by minute, bursts stacked with the best marked, culling panel |
 | ![Compare](docs/media/03-compare.png) | ![Sync route board](docs/media/04-sync.png) |
-| **Compare** a burst side by side and keep the sharpest | **Sync** route board: camera → this PC → destinations |
+| **Compare** a burst with a before/after slider, per-frame histograms and one-key keep | **Sync** route board: camera → this PC → each destination, with live progress |
+| ![Named sessions](docs/media/07-sessions.png) | ![New session](docs/media/08-new-session.png) |
+| **Sessions** in the rail and top bar, with each destination's sync state per session | **New session:** name it, set the client, and new frames land in it |
+| ![Add destination](docs/media/09-add-destination.png) | ![Destination browser](docs/media/10-browse.png) |
+| **Add destination:** Drive, Dropbox, NAS, or guided S3, B2, R2, Wasabi, SFTP, FTP and WebDAV | **Browse a destination** with thumbnails, a folder tree, and import or copy |
 | ![View on phone](docs/media/05-phone-link.png) | <img src="docs/media/06-phone.png" alt="The phone layout" width="300"> |
 | **View on phone:** QR code + PIN, optional public link | **Phone layout** |
 
@@ -112,6 +136,7 @@ No account, no telemetry. One portable folder. Ratings go to XMP sidecars for Li
 - **Built-in FTP server** for camera uploads. Toggle it on, no FileZilla or port setup.
 - **Full-screen camera setup:** big connection card, ftp:// QR code, guides per camera brand, and a live "listening" log that shows the test shot arriving.
 - **Pick the right network address.** Every address on the PC is listed with its adapter and type (Wi-Fi, Ethernet, VPN). Choose the one the camera should use; VPNs such as Tailscale and WireGuard sort last.
+- **Anonymous login** for cameras that can't take a password: leave the login blank and the camera signs in as `anonymous`.
 - **Several cameras at once,** each with its own login, so every frame is tagged by camera or shooter, with per-camera filters.
 - **JPEG, HEIF and RAW** (ARW, CR3, NEF, RAF, DNG and more). RAW+JPEG pairs are grouped as one shot.
 - **Video files** (MP4, MOV, MXF, MTS): thumbnails, plus a browser-playable copy for codecs that won't play directly (HEVC, ProRes, 10-bit).
@@ -133,17 +158,29 @@ No account, no telemetry. One portable folder. Ratings go to XMP sidecars for Li
 - **Loupe, grid and filmstrip,** with **100% zoom and pan** for focus checks.
 - **Grid grouped by minute,** with bursts stacked and the best frame marked.
 - **Histogram and highlight-clipping** overlay (`H`).
-- **Compare up to 4 shots** side by side (`C`, `Shift+C` clears).
+- **Compare** (`C`, `Shift+C` clears) in three modes, cycled with `M`:
+  - **Slider:** a before/after wipe across two frames, with linked 100% zoom.
+  - **Side by side** and **Grid** for a whole burst.
+  - Per-side panels with their own filmstrip (`1`–`9` puts a frame on the active side, `Tab` switches, `S` swaps), per-frame **histograms** (`H`), sharpness scores, and **Inspect** (`I`) for a larger look.
+  - **Keep this** (`Enter`) picks that frame and rejects the rest of the burst.
 - **EXIF at a glance:** shutter, aperture, ISO, focal length, lens, camera, time.
-- **Sessions and filters:** shoot days grouped as sessions, plus filters by camera, pick, rating and reject.
+- **Filters** by session, camera, pick, rating and reject.
 - **Status dock** showing cameras connected, frames received, sync progress and disk space.
 
 ### ⭐ Culling
-- **Keyboard-first:** `1`–`5` stars, `P` pick, `X` reject, `U` clear, `6`–`9` colour labels. Add `Shift` to rate and move to the next shot.
+- **Keyboard-first:** `1` thumbs down, `2` thumbs up, `3` love (or `1`–`5` stars if you prefer, in Settings), `P` pick, `X` reject, `U` clear, `6`–`9` colour labels. Add `Shift` to rate and move to the next shot. Both systems write the same rating, so Lightroom sees it either way.
 - **Automatic burst grouping:** bursts and near-duplicates are stacked and the best frame is marked. **Compare** puts a burst side by side; one key keeps the best and rejects the rest.
 - **Flags:** **similar**, **soft/blurred**, **eyes closed** and **bad exposure** (blown highlights or crushed shadows). One-click filter chips: *All*, *Picks*, *★4+*, *Unrated*, *Rejects*, *Similar*, *Blur*, *Eyes*, *Exposure*. The culling panel adjusts each detector's threshold. Flags only mark frames; nothing is deleted.
 - **XMP sidecars:** ratings, picks/rejects and labels are written to `<name>.xmp` next to each photo, so Lightroom and Capture One see your culling. Sidecars sync with the photos and are read back on import.
+- **Delete N rejects** in the grid clears every reject in the current view in one go, after a confirmation.
 - **Delete really deletes:** the recycle bin first, then a permanent delete if needed. If a file is locked by another program, you get a warning naming it, and the photo stays in the gallery so nothing is left orphaned on disk.
+
+### 🗂️ Sessions
+- **Named sessions** instead of plain shoot days. **New session** (top bar or rail) takes a name, an optional client and a date; quick-new names it "Session N" for you.
+- **A current session:** new frames from every camera go into it whatever their date, and it can end on its own after a set number of hours.
+- **Rename** inline from the top bar or rail, and **Move to session** for shots that landed in the wrong one. Renames and moves are carried through to your destinations.
+- Each session shows **every destination's sync state** under it in the rail, and **Found on destinations** lists sessions that exist in your storage but not on this PC.
+- Session details travel with the photos in a small `.shotdrop.json`, so ShotDrop on another PC that reads the same destination sees the same names.
 
 ### 🎞️ RAW and metadata
 - **Previews from the largest JPEG embedded in the RAW,** with its true size shown.
@@ -164,7 +201,11 @@ No account, no telemetry. One portable folder. Ratings go to XMP sidecars for Li
 ### ☁️ Sync and backup
 - **Route board** (Settings → Sync) shows where photos travel: camera → this PC → each destination, with live progress and health on every card: Up to date, Syncing, Paused, Can't reach, Failed or Sign-in expired.
 - **One-click Google Drive and Dropbox.** Sign in in your browser, then pick or create the folder. By default Drive access is limited to folders ShotDrop creates. Accounts are kept in ShotDrop's own config, and your own app credentials are supported.
-- **Folder / NAS** destinations (local drives or network shares), plus **any rclone remote** (S3, B2, SFTP, OneDrive…) for advanced setups.
+- **Folder / NAS** destinations (local drives or network shares).
+- **Guided setup for more services** under **Add destination → More…**: Amazon S3, Backblaze B2, Cloudflare R2, Wasabi and other S3-compatible storage (MinIO, Storj, IDrive) with an access key, or your own **SFTP**, **FTP/FTPS** or **WebDAV** server (Nextcloud, ownCloud) with a host and login. Any other rclone remote can still be typed in as `remote:path`.
+- **Browse any destination** like a file explorer: path bar, folder tree, thumbnails, multi-select and right-click menus. Each file shows whether it's also on this PC. **Import** photos from a destination into the library, **Copy to** another destination, or delete from the destination.
+- **Uploaded thumbnails:** ShotDrop can put small previews in a hidden folder on each destination, so browsing is fast from any device.
+- **Delete follows you if you want:** per destination, keep the copy as a backup or delete it there too when you delete in ShotDrop.
 - **Choose what each destination gets:** everything, JPEGs only, RAW only, or **picks only**, which are sent the moment you press `P`. The sheet shows how many files and how much data that is right now.
 - **A background queue that survives anything:** offline periods, unplugged drives and restarts. It retries, then catches up. Pause and resume per destination, errors in plain English, and **Reconnect** when a sign-in expires.
 
@@ -174,7 +215,7 @@ No account, no telemetry. One portable folder. Ratings go to XMP sidecars for Li
 - **REST API with live events** for scripting and integrations. The app's own UI uses the same API (see [REST API](#rest-api)).
 
 ### 🚧 Not yet
-FTPS for cameras, drag-and-drop import, rename/folder rules, batch delete of rejects, rsync/SSH destinations, bandwidth limits, tray icon and notifications, auto-update, macOS/Linux builds, a named Cloudflare tunnel with a fixed URL, uploads from cameras outside your network, and client proofing galleries.
+FTPS for cameras, drag-and-drop import, rename/folder rules, rsync destinations, bandwidth limits, tray icon and notifications, auto-update, macOS/Linux builds, a named Cloudflare tunnel with a fixed URL, uploads from cameras outside your network, and client proofing galleries.
 
 ## Quick start
 
@@ -244,7 +285,8 @@ Entry-level bodies usually only support the maker's phone app, which ShotDrop ca
 ## Settings
 
 - **Camera:** FTP on/off, network address, port, logins (one per camera or shooter), **Connection check**, watched folders, and the library folder (default `Pictures\ShotDrop`).
-- **Sync:** destinations (Google Drive, Dropbox, folder/NAS, any rclone remote), what each one receives, pause/resume and reconnect.
+- **Sync:** destinations (Google Drive, Dropbox, folder/NAS, S3-compatible storage, SFTP, FTP, WebDAV, any rclone remote), what each one receives, what happens there when you delete, uploaded thumbnails, browse, pause/resume and reconnect.
+- **Rating:** thumbs and heart (default) or 5 stars.
 - **Phone and remote:** remote access, the PIN, the **View on phone** QR code and the optional public link.
 - **Culling:** burst grouping and the thresholds for similar, soft, eyes-closed and exposure flags.
 - Changes to FTP, library, watch folders and remote access apply live, with no restart.
@@ -332,7 +374,9 @@ The desktop window uses the same HTTP API a phone or script would. It listens on
 |---|---|---|
 | GET | `/api/status` | FTP, cameras, API, library, sync, tunnel and per-destination state |
 | GET | `/api/events` · `/api/changes?after=<seq>` | Live events (SSE), or the polling equivalent used through tunnels |
-| GET | `/api/sessions` · `/api/library/counts` | Shoot days; file counts and sizes per sync filter |
+| GET | `/api/sessions` · `/api/library/counts` | Sessions; file counts and sizes per sync filter |
+| PATCH | `/api/sessions/:folder` | Rename a session (carried through to destinations) |
+| GET | `/api/ingest/current-session` · `/api/remote/sessions` | The session new frames go into; sessions found on destinations |
 | GET | `/api/shots` | `?session=&source=&minRating=&flag=-1\|0\|1\|notRejected&label=&order=&limit=&offset=` |
 | GET / PATCH | `/api/shots/:id` | One shot; `{ rating?, flag?, label? }`. `PATCH /api/shots` does bulk updates |
 | DELETE | `/api/shots/:id` | Deletes from disk; `409` with the files that couldn't be removed |
@@ -341,6 +385,9 @@ The desktop window uses the same HTTP API a phone or script would. It listens on
 | GET | `/api/shots/:id/link` (local) | Share link to one preview |
 | GET / PATCH | `/api/settings` (local) | Changes apply live (FTP, library, watch folders, remote) |
 | GET / POST / PATCH / DELETE | `/api/destinations[/:id]` (local) | `{ name, type: folder\|rclone, target, filter: all\|jpeg\|raw\|picks, enabled }`; `POST …/resync` |
+| GET | `/api/destinations/:id/browse` · `/thumb` · `/file` · `/info` | Browse a destination's folders and files (`info` is local) |
+| POST | `/api/destinations/:id/import` · `/copy` · `/send` · `/adopt` · `/delete` | Import into the library, copy between destinations, delete there (`delete` is local) |
+| GET / DELETE | `/api/transfers[/:id]` · `/api/remote-ops` | Import/copy jobs and pending remote renames and moves |
 | GET / POST | `/api/sync/jobs` · `/api/sync/retry` (local) | Queue inspection, retry failed |
 | * | `/api/cloud/…` (local) | Link/cancel/disconnect accounts, browse/create folders, account info |
 | * | `/api/tunnel[/install\|start\|stop]` | Public link state and control (control is local) |
@@ -363,7 +410,7 @@ More detail:
 
 ## Roadmap
 
-- **Next:** FTPS for cameras, rename/folder rules, batch actions on rejects, tray icon and notifications, auto-update.
+- **Next:** FTPS for cameras, rename/folder rules, tray icon and notifications, auto-update.
 - **Remote ingest:** a phone-hotspot field kit today; port-forwarded FTPS or a relay later.
 - **Android:** the phone as the server (camera → phone hotspot → ShotDrop on Android), reusing the same React UI.
 - **Client proofing:** guest galleries with picks and comments, built on photos already in the photographer's own cloud.
