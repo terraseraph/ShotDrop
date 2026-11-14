@@ -63,7 +63,7 @@ export function TopBar(p: Props) {
           <span className={`dot ${p.follow ? 'live' : ''}`} style={{ width: 8, height: 8, background: p.follow ? 'var(--live)' : '#555' }} />
           Follow <span className="key">F</span>
         </button>
-        {!isRemote && p.status && p.status.ptp.status !== 'off' && (
+        {!isRemote && (
           <button className="tb" onClick={p.onLive} aria-label="Live view" title="Live view (Wi-Fi camera)">
             <Icon name="camera" />
           </button>
