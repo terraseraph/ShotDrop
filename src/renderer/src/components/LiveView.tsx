@@ -14,7 +14,8 @@ export function LiveView({ status, onClose }: { status: Status | null; onClose: 
   const ptp = status?.ptp
   const save = async (enabled: boolean): Promise<void> => {
     try {
-      setS(await api.patchSettings({ ptp: { ...s!.ptp, host: host.trim(), enabled } }))
+      // Main merges the patch into the saved ptp settings, so the GUID survives without preloading them.
+      setS(await api.patchSettings({ ptp: { host: host.trim(), enabled } as Settings['ptp'] }))
       setErr('')
     } catch (e) {
       setErr((e as Error).message)
@@ -45,14 +46,14 @@ export function LiveView({ status, onClose }: { status: Status | null; onClose: 
             <div className="row tight">
               <input className="input mono" value={host} placeholder="192.168.1.1" aria-label="Camera address" onChange={(e) => setHost(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && host.trim() && void save(true)} />
-              <button className="btn primary" disabled={!s || !host.trim()} onClick={() => void save(true)}>Connect</button>
+              <button className="btn primary" disabled={!host.trim()} onClick={() => void save(true)}>Connect</button>
             </div>
           </>
         )}
 
         {(err || ptp?.error) && <p className="warn-box small">{err || ptp?.error}</p>}
         <div className="row between">
-          {s?.ptp.enabled ? <button className="btn" onClick={() => void save(false)}>Disconnect</button> : <span />}
+          {s?.ptp.enabled || ptp?.status !== 'off' ? <button className="btn" onClick={() => void save(false)}>Disconnect</button> : <span />}
           <button className="btn" onClick={onClose}>Close</button>
         </div>
       </div>
