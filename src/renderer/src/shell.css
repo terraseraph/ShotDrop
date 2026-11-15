@@ -191,7 +191,10 @@ button.chipx.lit { color: var(--accent); }
 .tstrip.m .tx-dest { gap: 5px; margin-right: 2px; }
 .m-photo { position: relative; flex: 1 1 auto; min-height: 0; margin-top: 8px; background: var(--stage); }
 .m-canvas { position: absolute; inset: 0; overflow: hidden; touch-action: none; display: grid; place-items: center; }
+.m-canvas:has(.m-video) { touch-action: auto; }
 .m-img { width: 100%; height: 100%; object-fit: contain; will-change: transform; -webkit-touch-callout: none; pointer-events: none; }
+.m-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.m-canvas .video-note { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.72); font-size: 13px; }
 .m-photo .badge { height: 20px; padding: 0 7px; }
 .m-tl, .m-tr, .m-br { position: absolute; display: flex; gap: 6px; }
 .m-tl { left: 12px; top: 12px; }

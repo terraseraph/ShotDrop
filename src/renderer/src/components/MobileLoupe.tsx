@@ -4,6 +4,7 @@ import { api } from '../api'
 import { fmtAperture, fmtFocal, fmtIso, fmtShutter, fmtTime } from '../format'
 import { Icon } from './Icon'
 import { SessionChooser, type ChooserProps } from './TopBar'
+import { OpenExternal } from './OpenExternal'
 import type { Burst } from './Loupe'
 
 interface Props {
@@ -52,6 +53,7 @@ const MAX = 5
 export function MobileLoupe({ shot, neighbours, position, burst, onPrev, onNext }: Props) {
   const [v, setV] = useState<View>({ s: 1, x: 0, y: 0 })
   const [dx, setDx] = useState(0) // live swipe offset
+  const [fallback, setFallback] = useState<'off' | 'working' | 'ready' | 'failed'>('off')
   const box = useRef<HTMLDivElement>(null)
   const pts = useRef(new Map<number, { x: number; y: number }>())
   const g = useRef({ dist: 0, s0: 1, start: { x: 0, y: 0 }, v0: { s: 1, x: 0, y: 0 }, moved: false, lastTap: 0, tapX: 0, tapY: 0 })
@@ -59,7 +61,31 @@ export function MobileLoupe({ shot, neighbours, position, burst, onPrev, onNext 
   useEffect(() => {
     setV({ s: 1, x: 0, y: 0 })
     setDx(0)
+    setFallback('off')
   }, [shot?.id])
+
+  const shotId = shot?.id
+  useEffect(() => {
+    if (fallback !== 'working' || shotId === undefined) return
+    let stop = false
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async (): Promise<void> => {
+      try {
+        const r = await api.proxy(shotId)
+        if (stop) return
+        if (r.ready) setFallback('ready')
+        else if (r.error) setFallback('failed')
+        else timer = setTimeout(() => void poll(), 2000)
+      } catch {
+        if (!stop) setFallback('failed')
+      }
+    }
+    void poll()
+    return () => {
+      stop = true
+      clearTimeout(timer)
+    }
+  }, [fallback, shotId])
 
   // Keep the image from being panned off-screen.
   const clamp = (n: View): View => {
@@ -133,6 +159,7 @@ export function MobileLoupe({ shot, neighbours, position, burst, onPrev, onNext 
   }
 
   if (!shot) return <div className="m-photo" />
+  const video = shot.files.find((f) => f.kind === 'video')
   const jpeg = shot.files.find((f) => f.kind === 'jpeg')
   // Sharper source once zoomed in (camera JPEG), the 2560px preview otherwise.
   const src = v.s > 1.5 && jpeg ? api.originalUrl(shot, jpeg.id) : api.previewUrl(shot)
@@ -142,8 +169,26 @@ export function MobileLoupe({ shot, neighbours, position, burst, onPrev, onNext 
   return (
     <>
       <div className="m-photo">
-        <div ref={box} className="m-canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-          {shot.hasPreview ? (
+        <div ref={box} className="m-canvas" onPointerDown={video ? undefined : down} onPointerMove={video ? undefined : move} onPointerUp={video ? undefined : up} onPointerCancel={video ? undefined : up}>
+          {video ? (
+            <>
+              <video
+                key={`${shot.id}-${fallback === 'ready'}`}
+                className="m-video"
+                src={fallback === 'ready' ? api.proxyUrl(shot) : api.originalUrl(shot, video.id)}
+                poster={shot.hasPreview ? api.previewUrl(shot) : undefined}
+                controls
+                preload="metadata"
+                onError={() => setFallback((f) => (f === 'off' ? 'working' : f))}
+              />
+              {(fallback === 'working' || fallback === 'failed') && (
+                <div className="video-note">
+                  <span>{fallback === 'working' ? 'Preparing a playable copy…' : "Can't play this format here."}</span>
+                  <OpenExternal shot={shot} file={video} />
+                </div>
+              )}
+            </>
+          ) : shot.hasPreview ? (
             <img
               key={shot.id}
               className="m-img"
